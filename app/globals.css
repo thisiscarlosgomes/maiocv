@@ -407,6 +407,18 @@ h2 {
   padding: 13px 15px;
   margin: 26px 0 23px 34px;
 }
+.mini-question-typed { position: relative; }
+.mini-question-reserve { visibility: hidden; }
+.mini-question-progress { position: absolute; inset: 13px 15px; }
+.mini-question-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: typing-blink 1s steps(1) infinite;
+}
 .mini-answer {
   display: flex;
   align-items: flex-start;
@@ -1220,7 +1232,7 @@ button.headline-icon:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .typing-caret {
+  .typing-caret, .mini-question-caret {
     animation: none;
   }
 }

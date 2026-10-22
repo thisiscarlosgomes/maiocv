@@ -71,7 +71,7 @@ export default async function Home() {
             </div>
             <MaioSlideshow locale={locale} />
             <div className="showcase-side">
-              <McpPreview locale={locale} />
+              <McpPreview locale={locale} animatedQuestion />
             </div>
           </Reveal>
           <div className="ecosystem-label">

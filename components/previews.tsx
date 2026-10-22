@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { t, type MessageKey } from "../lib/i18n";
 import type { Locale } from "../lib/locale";
+import { TypedPreviewQuestion } from "./typed-preview-question";
 
 export function PortalPreview({ locale = "pt" }: { locale?: Locale }) {
   const copy = (key: MessageKey) => t(key, undefined, locale);
@@ -67,7 +68,7 @@ export function VisitPreview({ locale = "pt" }: { locale?: Locale }) {
     </div>
   );
 }
-export function McpPreview({ locale = "pt" }: { locale?: Locale }) {
+export function McpPreview({ locale = "pt", animatedQuestion = false }: { locale?: Locale; animatedQuestion?: boolean }) {
   const copy = (key: MessageKey) => t(key, undefined, locale);
   return (
     <div className="mcp-preview" aria-hidden="true">
@@ -75,7 +76,9 @@ export function McpPreview({ locale = "pt" }: { locale?: Locale }) {
         <strong>Maio × ChatGPT</strong>
         <span className="tiny-badge">MCP</span>
       </div>
-      <div className="mini-question">{copy("preview.mcp.question")}</div>
+      {animatedQuestion
+        ? <TypedPreviewQuestion text={copy("preview.mcp.question")} />
+        : <div className="mini-question">{copy("preview.mcp.question")}</div>}
       <div className="mini-answer">
         <div>
           <p>{copy("preview.mcp.answer")}</p>
