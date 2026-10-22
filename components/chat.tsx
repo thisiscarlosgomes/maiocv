@@ -85,7 +85,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     scrollToQuestion.current = messages.length;
     const conversation: Message[] = [...messages, { role: "user", content: text }];
     setMessages(conversation); setDraft(""); setError(""); setBusy(true);
-    const timeout = window.setTimeout(() => controller.abort(), 60000);
+    const timeout = window.setTimeout(() => controller.abort(), 90000);
     try {
       if (isPopulationTotalQuestion(text)) {
         const source = await fetch(POPULATION_DATA_URL, { signal: controller.signal });
