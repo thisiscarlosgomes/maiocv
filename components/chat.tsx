@@ -23,13 +23,31 @@ type Message = {
   uncited?: boolean;
   example?: boolean;
 };
+
+const suggestionKeys = [
+  [
+    ["chat.suggest.beaches", "chat.suggest.beaches.prompt"],
+    ["chat.suggest.business", "chat.suggest.business.prompt"],
+    ["chat.suggest.tourism", "chat.suggest.tourism.prompt"],
+  ],
+  [
+    ["chat.suggest.beaches2", "chat.suggest.beaches2.prompt"],
+    ["chat.suggest.business2", "chat.suggest.business2.prompt"],
+    ["chat.suggest.tourism2", "chat.suggest.tourism2.prompt"],
+  ],
+  [
+    ["chat.suggest.beaches3", "chat.suggest.beaches3.prompt"],
+    ["chat.suggest.business3", "chat.suggest.business3.prompt"],
+    ["chat.suggest.tourism3", "chat.suggest.tourism3.prompt"],
+  ],
+] as const;
+
+const suggestionStorageKey = "maiocv-chat-suggestions-v1";
+
 export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const copy = (key: MessageKey, values?: Record<string, string | number>) => t(key, values, locale);
-  const suggestions = [
-    { label: copy("chat.suggest.beaches"), prompt: copy("chat.suggest.beaches.prompt") },
-    { label: copy("chat.suggest.business"), prompt: copy("chat.suggest.business.prompt") },
-    { label: copy("chat.suggest.tourism"), prompt: copy("chat.suggest.tourism.prompt") },
-  ];
+  const [suggestionVariant, setSuggestionVariant] = useState(0);
+  const suggestions = suggestionKeys[suggestionVariant].map(([label, prompt]) => ({ label: copy(label), prompt: copy(prompt) }));
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,7 +70,23 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const latestQuestion = useRef<HTMLElement>(null);
   const scrollToQuestion = useRef<number | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const suggestionsInitialized = useRef(false);
   const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (suggestionsInitialized.current) return;
+    suggestionsInitialized.current = true;
+    // Pick a random starting set, then cycle so reopening the chat shows new ideas.
+    try {
+      const stored = window.sessionStorage.getItem(suggestionStorageKey);
+      const next = stored === null ? Math.floor(Math.random() * suggestionKeys.length) : Number(stored);
+      const variant = Number.isInteger(next) && next >= 0 && next < suggestionKeys.length ? next : 0;
+      setSuggestionVariant(variant);
+      window.sessionStorage.setItem(suggestionStorageKey, String((variant + 1) % suggestionKeys.length));
+    } catch {
+      setSuggestionVariant(Math.floor(Math.random() * suggestionKeys.length));
+    }
+  }, []);
 
   useEffect(() => {
     const screen = conversationPane.current?.closest<HTMLElement>(".chat-screen");
@@ -275,6 +309,9 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     setPdfError(null);
     setSavingPdf(null);
     setBusy(false);
+    const nextVariant = (suggestionVariant + 1) % suggestionKeys.length;
+    setSuggestionVariant(nextVariant);
+    try { window.sessionStorage.setItem(suggestionStorageKey, String((nextVariant + 1) % suggestionKeys.length)); } catch {}
     input.current?.focus({ preventScroll: true });
   }
 
