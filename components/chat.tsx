@@ -68,7 +68,9 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const audioInput = useRef<HTMLInputElement>(null);
   const conversationPane = useRef<HTMLDivElement>(null);
   const latestQuestion = useRef<HTMLElement>(null);
+  const scrollTail = useRef<HTMLDivElement>(null);
   const scrollToQuestion = useRef<number | null>(null);
+  const pendingQuestionScroll = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const suggestionsInitialized = useRef(false);
   const reduced = useReducedMotion();
@@ -131,7 +133,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   useEffect(() => {
     const pane = conversationPane.current;
     if (!pane) return;
-    const observer = new ResizeObserver(() => updateBottom());
+    const observer = new ResizeObserver(() => { updateQuestionSpace(); updateBottom(); });
     observer.observe(pane);
     const log = pane.querySelector('[role="log"]');
     if (log) observer.observe(log);
@@ -146,16 +148,26 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   }, [draft]);
   useLayoutEffect(() => {
     const pane = conversationPane.current;
-    if (!pane) return;
-    const behavior = reduced ? "instant" : "smooth";
-    if (scrollToQuestion.current !== null && latestQuestion.current) {
-      const questionTop = latestQuestion.current.getBoundingClientRect().top;
-      const paneTop = pane.getBoundingClientRect().top;
-      pane.scrollTo({ top: pane.scrollTop + questionTop - paneTop, behavior });
-      return;
+    if (!pane || scrollToQuestion.current === null || !latestQuestion.current) return;
+    const questionTop = updateQuestionSpace();
+    if (pendingQuestionScroll.current && questionTop !== null) {
+      pendingQuestionScroll.current = false;
+      pane.scrollTo({ top: questionTop - 12, behavior: reduced ? "instant" : "smooth" });
     }
-    pane.scrollTo({ top: pane.scrollHeight, behavior });
   }, [messages, busy, error, reduced]);
+
+  function updateQuestionSpace(): number | null {
+    const pane = conversationPane.current;
+    const question = latestQuestion.current;
+    const tail = scrollTail.current;
+    if (!pane || !tail) return null;
+    tail.style.height = "0px";
+    if (!question || scrollToQuestion.current === null) return null;
+    const questionTop = pane.scrollTop + question.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+    const spaceBelow = pane.scrollHeight - questionTop;
+    tail.style.height = `${Math.max(0, pane.clientHeight + 12 - spaceBelow)}px`;
+    return questionTop;
+  }
 
   function updateBottom() {
     const pane = conversationPane.current;
@@ -168,6 +180,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     const greeting = publicChatGreeting(text, locale);
     if (greeting) {
       scrollToQuestion.current = messages.length;
+      pendingQuestionScroll.current = true;
       setMessages([...messages, { role: "user", content: text }, { role: "assistant", content: greeting, example: true, uncited: true }]);
       setDraft(""); setError("");
       return;
@@ -175,6 +188,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     const controller = new AbortController();
     active.current = controller;
     scrollToQuestion.current = messages.length;
+    pendingQuestionScroll.current = true;
     const conversation: Message[] = [...messages, { role: "user", content: text }];
     setMessages(conversation); setDraft(""); setError(""); setBusy(true);
     const timeout = window.setTimeout(() => controller.abort(), 90000);
@@ -271,6 +285,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     } catch (cause) {
       if (active.current === controller) {
         scrollToQuestion.current = null;
+        pendingQuestionScroll.current = false;
         setMessages(messages);
         setDraft(text);
         setError(controller.signal.aborted
@@ -303,6 +318,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     active.current = null;
     controller?.abort();
     scrollToQuestion.current = null;
+    pendingQuestionScroll.current = false;
     setMessages([]);
     setDraft("");
     setError("");
@@ -467,7 +483,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
           {messages.map((message, index) => (
             <motion.article key={index} ref={message.role === "user" && index === scrollToQuestion.current ? latestQuestion : null}
               className={`chat-message chat-message-${message.role}`}
-              initial={reduced ? false : { opacity: 0, y: 10 }}
+              initial={reduced ? false : message.role === "user" ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
               {message.visual?.kind === "business" && <OpenUIBusiness program={message.visual.program} />}
               {message.visual?.kind === "places" && <OpenUIPlaces program={message.visual.program} locale={locale} />}
@@ -504,6 +520,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
           <span className="thinking-label">{copy("chat.thinking")}</span>
         </div>}
         {error && <p role="alert" className="chat-error">{error}</p>}
+        <div ref={scrollTail} aria-hidden="true" />
       </div>
       <div className="chat-composer-wrap">
         {messages.some(message => message.role === "assistant") && (
