@@ -10,7 +10,7 @@ import { publicChatResponse, publicChatGreeting } from "../lib/chat-answer";
 import { isPopulationTotalQuestion, populationAnswer, POPULATION_DATA_URL } from "../lib/population-answer";
 import { declaredCitations, type Citation } from "../lib/chat-citations";
 import { t, type MessageKey } from "../lib/i18n";
-import { localize, type Locale } from "../lib/locale";
+import type { Locale } from "../lib/locale";
 
 const OpenUIBusiness = dynamic(() => import("./openui-business").then(module => module.OpenUIBusiness));
 const OpenUIPlaces = dynamic(() => import("./openui-places").then(module => module.OpenUIPlaces));
@@ -54,7 +54,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const [error, setError] = useState("");
   const [savingPdf, setSavingPdf] = useState<number | null>(null);
   const [pdfError, setPdfError] = useState<number | null>(null);
-  const [atBottom, setAtBottom] = useState(true);
   const [canRecord, setCanRecord] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -133,11 +132,10 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   useEffect(() => {
     const pane = conversationPane.current;
     if (!pane) return;
-    const observer = new ResizeObserver(() => { updateQuestionSpace(); updateBottom(); });
+    const observer = new ResizeObserver(() => updateQuestionSpace());
     observer.observe(pane);
     const log = pane.querySelector('[role="log"]');
     if (log) observer.observe(log);
-    updateBottom();
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
@@ -167,11 +165,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     const spaceBelow = pane.scrollHeight - questionTop;
     tail.style.height = `${Math.max(0, pane.clientHeight + 12 - spaceBelow)}px`;
     return questionTop;
-  }
-
-  function updateBottom() {
-    const pane = conversationPane.current;
-    if (pane) setAtBottom(pane.scrollHeight - pane.scrollTop - pane.clientHeight < 36);
   }
 
   async function send(question = draft, suggestedPrompt?: string) {
@@ -465,7 +458,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
 
   return (
     <main className="chat-page" id="conteudo">
-      <div ref={conversationPane} onScroll={updateBottom} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
+      <div ref={conversationPane} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
         {messages.length || busy ? <h1 className="sr-only">{copy("chat.welcome")}</h1> : null}
         {!messages.length && !busy && (
           <div className="chat-welcome">
@@ -523,13 +516,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         <div ref={scrollTail} aria-hidden="true" />
       </div>
       <div className="chat-composer-wrap">
-        {messages.some(message => message.role === "assistant") && (
-          <nav className="chat-help-links" data-visible={atBottom && !busy} aria-hidden={!atBottom || busy} aria-label={copy("footer.how")}>
-            <a href={`${localize(locale, "/faq")}#como-funciona`}>{copy("footer.how")}</a>
-            <span aria-hidden="true">·</span>
-            <a href={localize(locale, "/sources")}>{copy("chat.help.sources")}</a>
-          </nav>
-        )}
         {recording && <p role="status" className="chat-voice-status">{copy("chat.voice.listening")}</p>}
         {transcribing && <p role="status" className="chat-voice-status">{copy("chat.voice.transcribing")}</p>}
         <form className="chat-composer" onSubmit={event => { event.preventDefault(); if (!recording && !transcribing) void send(); }}>

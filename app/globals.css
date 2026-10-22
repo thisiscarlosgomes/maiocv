@@ -1334,9 +1334,6 @@ body:has(.chat-screen) { overflow: hidden; }
 .chat-error, .search-error { color: var(--maio-error); border-left: 3px solid var(--maio-error); padding-left: 12px; }
 .chat-message .chat-no-source, .chat-message .chat-example { font-size: 13px; color: var(--maio-text-data); margin-top: 8px; }
 .chat-composer-wrap { flex: none; background: var(--background); padding: 16px 0 max(16px, env(safe-area-inset-bottom)); }
-.chat-help-links { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 0 12px; color: var(--maio-muted); font-size: 13px; }
-.chat-help-links a { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 4px; }
-.chat-help-links a:hover { color: var(--blue); }
 .chat-voice-status, .chat-voice-error { text-align: center; font-size: 13px; padding: 0 0 10px; }
 .chat-voice-status { color: #a14235; }
 .chat-voice-error { color: var(--maio-error); padding: 9px 0 0; }
@@ -1588,8 +1585,6 @@ body:has(.chat-screen) { overflow: hidden; }
 /* Mobile controls and safe areas, including installed iOS web apps. */
 .question-suggestions { flex-wrap: wrap; }
 .question-suggestions button, .chat-pdf-button { min-height: 44px; }
-.chat-help-links { padding-bottom: 4px; }
-.chat-help-links a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 6px; }
 .chat-suggestions button { max-width: 100%; overflow-wrap: anywhere; }
 .chat-suggestions button:disabled { opacity: .55; cursor: default; }
 .source-item > div { min-width: 0; overflow-wrap: anywhere; }
@@ -1627,9 +1622,7 @@ body:has(.chat-screen) { overflow: hidden; }
 .install-app-help[hidden] { display: none; }
 .install-app-error { color: var(--maio-error); margin-bottom: 10px; }
 
-.chat-help-links[data-visible="false"] { visibility: hidden; pointer-events: none; }
-.chat-screen:is([data-compact="true"], [data-compact="tiny"]) .chat-note,
-.chat-screen:is([data-compact="true"], [data-compact="tiny"]) .chat-help-links { display: none; }
+.chat-screen:is([data-compact="true"], [data-compact="tiny"]) .chat-note { display: none; }
 .chat-screen:is([data-compact="true"], [data-compact="tiny"]) .maio-header { --header-h: 56px; }
 .chat-screen:is([data-compact="true"], [data-compact="tiny"]) .chat-composer-wrap { padding-block: 6px; }
 .chat-screen:is([data-compact="true"], [data-compact="tiny"]) .chat-conversation { padding-block: 10px; }
