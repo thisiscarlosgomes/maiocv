@@ -407,7 +407,9 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
               {message.visual?.kind === "business" && <OpenUIBusiness program={message.visual.program} />}
               {message.visual?.kind === "places" && <OpenUIPlaces program={message.visual.program} locale={locale} />}
               {!message.visual && (message.role === "assistant"
-                ? <ChatMarkdown content={message.content} />
+                ? <ChatMarkdown content={message.content}
+                    onFollowUp={index === messages.length - 1 ? question => { void send(question); } : undefined}
+                    disabled={busy || recording || transcribing} />
                 : <p>{message.content}</p>)}
               {message.example ? <p className="chat-example">{copy("chat.example")}</p> : null}
               {message.uncited ? <p className="chat-no-source">{copy("chat.noSource")}</p> : null}
