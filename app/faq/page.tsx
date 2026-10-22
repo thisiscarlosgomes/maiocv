@@ -1,6 +1,6 @@
 import { Button, Section, SkipLink } from "maio-ui";
 import { HeadlineIcon } from "../../components/headline-icon";
-import { pageMetadata } from "../../lib/seo";
+import { faqSchema, pageMetadata } from "../../lib/seo";
 import { Header, Footer } from "../../components/site-shell";
 import { Reveal } from "../../components/motion";
 import { McpDemo } from "../../components/mcp-demo";
@@ -24,8 +24,15 @@ export default async function FaqPage() {
   const steps = [1, 2, 3] as const;
   const tips = [1, 2, 3] as const;
   const faqs = [1, 2, 3, 4, 5, 6] as const;
+  const questions = faqs.map((item) => ({
+    question: copy(`mcp.faq.${item}.q` as MessageKey),
+    answer: item === 5
+      ? t("faq.start", { cta: copy("cta.ask") }, locale)
+      : copy(`mcp.faq.${item}.a` as MessageKey),
+  }));
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema(locale, questions)).replace(/</g, "\\u003c") }} />
       <SkipLink href="#conteudo">{copy("skip.content")}</SkipLink>
       <Header active="faq" />
       <main id="conteudo">
@@ -95,21 +102,15 @@ export default async function FaqPage() {
           <Reveal>
             <h2>{copy("mcp.faq.title")}</h2>
             <div className="faq-list">
-              {faqs.map((item) => {
-                const question = copy(`mcp.faq.${item}.q` as MessageKey);
-                const answer = item === 5
-                  ? t("faq.start", { cta: copy("cta.ask") }, locale)
-                  : copy(`mcp.faq.${item}.a` as MessageKey);
-                return (
-                  <details key={question}>
-                    <summary>
-                      {question}
-                      <span>+</span>
-                    </summary>
-                    <p>{answer}</p>
-                  </details>
-                );
-              })}
+              {questions.map(({ question, answer }) => (
+                <details key={question}>
+                  <summary>
+                    {question}
+                    <span>+</span>
+                  </summary>
+                  <p>{answer}</p>
+                </details>
+              ))}
             </div>
           </Reveal>
         </Section>

@@ -1,9 +1,19 @@
 {
-  "name": "MaioCV",
-  "short_name": "MaioCV",
-  "start_url": "/pt",
+  "id": "/",
+  "name": "maio.cv — Maio ao alcance de todos",
+  "short_name": "maio.cv",
+  "description": "Explore a ilha do Maio, conheça os seus lugares e faça perguntas sobre os seus dados.",
+  "lang": "pt",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#243fb8",
+  "theme_color": "#fbfbf8",
   "background_color": "#fbfbf8",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+  "categories": ["education", "travel"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
 }

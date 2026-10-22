@@ -1,14 +1,26 @@
 import type { Metadata } from "next";
-import { essentialsPath, LOCALES, localize, localeHreflang, localeOpenGraph, type Locale } from "./locale.ts";
+import { t } from "./i18n.ts";
+import { essentialsPath, essentialsSlug, LOCALES, localize, localeHreflang, localeOpenGraph, routeAlias, stripLocale, type Locale } from "./locale.ts";
 
 export const SITE_URL = "https://www.maio.cv";
 export const description = "Iniciativas digitais para a ilha do Maio, Cabo Verde: inteligência artificial, dados abertos, turismo e ferramentas para conhecer, investigar e aprender.";
 
-const pagePaths = ["/", "/faq", "/chat", "/essentials", "/search", "/sources"] as const;
+// Keep search results crawlable for noindex, but omit them from the sitemap.
+const pagePaths = ["/", "/faq", "/chat", "/essentials", "/sources"] as const;
+
+function basePath(path: string): string {
+  const bare = stripLocale(path.split(/[?#]/)[0] || "/").replace(/\/+$/, "") || "/";
+  const slug = bare.slice(1);
+  if (Object.values(essentialsSlug).includes(slug)) return "/essentials";
+  if (slug === "mcp") return "/faq";
+  if (Object.prototype.hasOwnProperty.call(routeAlias, slug)) return `/${routeAlias[slug]}`;
+  return bare;
+}
 
 function localizedPath(locale: Locale, path: string): string {
-  if (path === "/essentials") return essentialsPath(locale);
-  return localize(locale, path);
+  const canonicalPath = basePath(path);
+  if (canonicalPath === "/essentials") return essentialsPath(locale);
+  return localize(locale, canonicalPath);
 }
 
 export const publicRoutes = LOCALES.flatMap((lang) =>
@@ -35,25 +47,38 @@ export function sitemapEntries() {
 }
 
 export function pageMetadata(title: string, summary: string, path: string, lang: Locale = "pt"): Metadata {
-  const url = new URL(path, SITE_URL).href;
+  const url = new URL(localizedPath(lang, path), SITE_URL).href;
+  const index = basePath(path) !== "/search";
+  const image = {
+    url: `${SITE_URL}/social/maio-${lang}.png`,
+    width: 1200,
+    height: 630,
+    alt: t("meta.image.alt", undefined, lang),
+  };
   return {
     title,
     description: summary,
     alternates: { canonical: url, languages: languageAlternates(path) },
+    robots: {
+      index,
+      follow: true,
+      googleBot: { index, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
+    },
     openGraph: {
       title,
       description: summary,
       url,
       siteName: "MaioCV",
       locale: localeOpenGraph(lang),
+      alternateLocale: LOCALES.filter((locale) => locale !== lang).map(localeOpenGraph),
       type: "website",
-      images: [{ url: `${SITE_URL}/slideshow/rotcha.png`, alt: "Praia da Bitxe Rotcha na ilha do Maio, Cabo Verde" }],
+      images: [image],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description: summary,
-      images: [`${SITE_URL}/slideshow/rotcha.png`],
+      images: [image],
     },
   };
 }
@@ -61,8 +86,27 @@ export function pageMetadata(title: string, summary: string, path: string, lang:
 export function siteSchemaFor(locale: Locale) {
   const schema = structuredClone(siteSchema);
   const website = schema["@graph"].find((node) => node["@type"] === "WebSite");
-  if (website) website.inLanguage = locale;
+  if (website) {
+    website.inLanguage = locale;
+    website.description = t("meta.description.home", undefined, locale);
+  }
   return schema;
+}
+
+export function faqSchema(locale: Locale, items: { question: string; answer: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${SITE_URL}${localize(locale, "/faq")}#questions`,
+    url: `${SITE_URL}${localize(locale, "/faq")}`,
+    inLanguage: locale,
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntity: items.map(({ question, answer }) => ({
+      "@type": "Question",
+      name: question,
+      acceptedAnswer: { "@type": "Answer", text: answer },
+    })),
+  };
 }
 
 export const siteSchema = {
@@ -78,6 +122,7 @@ export const siteSchema = {
       "@type": "WebSite",
       "@id": `${SITE_URL}/#website`,
       name: "MaioCV",
+      alternateName: "maio.cv",
       url: SITE_URL,
       description,
       inLanguage: htmlLang,

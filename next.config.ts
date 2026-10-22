@@ -8,7 +8,17 @@ const config: NextConfig = {
       },
     ];
   },
-  images: { unoptimized: true },
+  images: { formats: ["image/webp"] },
+  async headers() {
+    return [{
+      source: "/sw.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    }];
+  },
   transpilePackages: ["maio-ui"],
 };
 export default config;

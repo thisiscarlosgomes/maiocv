@@ -8,7 +8,7 @@ import { searchFeatures, sourceName } from "../../lib/search";
 
 export async function generateMetadata() {
   const locale = await currentLocale();
-  return pageMetadata(t("search.title", undefined, locale), t("search.placeholder", undefined, locale), localize(locale, "/search"), locale);
+  return pageMetadata(t("meta.title.search", undefined, locale), t("meta.description.search", undefined, locale), localize(locale, "/search"), locale);
 }
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {

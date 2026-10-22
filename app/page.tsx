@@ -74,7 +74,7 @@ export default async function Home() {
                 src="/maioCover.png"
                 alt={copy("home.cover.alt")}
                 fill
-                sizes="(max-width: 700px) calc(100vw - 44px), 45vw"
+                sizes="(max-width: 700px) calc(100vw - 44px), (max-width: 1450px) 40vw, 540px"
                 priority
               />
             </div>

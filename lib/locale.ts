@@ -4,7 +4,7 @@ export const LANG_COOKIE = "maio-lang";
 
 const htmlLang: Record<Locale, string> = { pt: "pt", en: "en", fr: "fr" };
 const ogLocale: Record<Locale, string> = { pt: "pt_PT", en: "en_GB", fr: "fr_FR" };
-const hreflang: Record<Locale, string> = { pt: "pt-PT", en: "en-GB", fr: "fr-FR" };
+const hreflang: Record<Locale, string> = { pt: "pt", en: "en", fr: "fr" };
 
 export function isLocale(value: string | null | undefined): value is Locale {
   return value === "pt" || value === "en" || value === "fr";

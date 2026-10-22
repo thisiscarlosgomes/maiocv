@@ -15,7 +15,7 @@ const emergencyLabel: Record<(typeof EMERGENCY)[number]["id"], MessageKey> = {
 
 export async function generateMetadata() {
   const locale = await currentLocale();
-  return pageMetadata(t("ess.title", undefined, locale), t("ess.title", undefined, locale), essentialsPath(locale), locale);
+  return pageMetadata(t("meta.title.essentials", undefined, locale), t("meta.description.essentials", undefined, locale), essentialsPath(locale), locale);
 }
 
 export default async function EssentialsPage() {

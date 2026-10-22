@@ -350,5 +350,11 @@
   "openui.places.placesMapped": "{n} locais mapeados",
   "openui.places.mapped": "Locais mapeados",
   "openui.places.source": "Maio Open Data",
-  "chat.businessSource": "A fonte é o Inquérito Anual às Empresas do INE Cabo Verde. O número de empresas no Maio é uma estimativa estatística arredondada, não uma contagem administrativa."
+  "chat.businessSource": "A fonte é o Inquérito Anual às Empresas do INE Cabo Verde. O número de empresas no Maio é uma estimativa estatística arredondada, não uma contagem administrativa.",
+  "nav.menu": "Menu de navegação",
+  "meta.title.essentials": "Visitar o Maio: transportes e contactos úteis | MaioCV",
+  "meta.description.essentials": "Consulte contactos de emergência, informação sobre barcos e voos, e opções de pagamento para preparar a sua visita à ilha do Maio, Cabo Verde.",
+  "meta.title.search": "Pesquisar lugares no Maio | MaioCV",
+  "meta.description.search": "Encontre praias e lugares da ilha do Maio nos dados públicos e consulte a fonte de cada resultado.",
+  "meta.image.alt": "MaioCV — Maio no digital ao alcance de todos. Ilha do Maio, Cabo Verde."
 }

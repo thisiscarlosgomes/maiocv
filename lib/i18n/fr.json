@@ -350,5 +350,11 @@
   "openui.places.placesMapped": "{n} lieux cartographiés",
   "openui.places.mapped": "Lieux cartographiés",
   "openui.places.source": "Maio Open Data",
-  "chat.businessSource": "La source est l'enquête annuelle auprès des entreprises de l'INE Cabo Verde. Le nombre d'entreprises à Maio est une estimation statistique arrondie, pas un décompte administratif."
+  "chat.businessSource": "La source est l'enquête annuelle auprès des entreprises de l'INE Cabo Verde. Le nombre d'entreprises à Maio est une estimation statistique arrondie, pas un décompte administratif.",
+  "nav.menu": "Menu de navigation",
+  "meta.title.essentials": "Visiter Maio : transports et contacts utiles | MaioCV",
+  "meta.description.essentials": "Consultez les contacts d’urgence, les informations sur les ferries et les vols, et les moyens de paiement pour préparer votre visite à Maio, au Cap-Vert.",
+  "meta.title.search": "Rechercher des lieux à Maio | MaioCV",
+  "meta.description.search": "Trouvez des plages et des lieux de l’île de Maio dans les données publiques et consultez la source de chaque résultat.",
+  "meta.image.alt": "MaioCV — Maio numérique à la portée de tous. Île de Maio, Cap-Vert."
 }

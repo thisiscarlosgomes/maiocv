@@ -55,6 +55,34 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const reduced = useReducedMotion();
 
   useEffect(() => {
+    const screen = conversationPane.current?.closest<HTMLElement>(".chat-screen");
+    const viewport = window.visualViewport;
+    if (!screen || !viewport) return;
+    let frame = 0;
+    const syncViewport = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // iOS keyboards resize the visual viewport. Preserve normal pinch zoom.
+        if (viewport.scale !== 1) return;
+        screen.style.setProperty("--chat-height", `${viewport.height}px`);
+        screen.style.setProperty("--chat-offset-top", `${viewport.offsetTop}px`);
+        screen.dataset.compact = viewport.height < 320 ? "tiny" : viewport.height < 440 ? "true" : "false";
+      });
+    };
+    syncViewport();
+    viewport.addEventListener("resize", syncViewport);
+    viewport.addEventListener("scroll", syncViewport);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("resize", syncViewport);
+      viewport.removeEventListener("scroll", syncViewport);
+      screen.style.removeProperty("--chat-height");
+      screen.style.removeProperty("--chat-offset-top");
+      delete screen.dataset.compact;
+    };
+  }, []);
+
+  useEffect(() => {
     setCanRecord(Boolean(navigator.mediaDevices && "getUserMedia" in navigator.mediaDevices && "MediaRecorder" in window));
     return () => {
       active.current?.abort();
@@ -391,7 +419,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
             <h1>{copy("chat.welcome")}</h1>
             <div className="chat-suggestions">
               {suggestions.map(({ label, prompt }) => (
-                <button key={label} type="button" onClick={() => { void send(label, prompt); }}>
+                <button key={label} type="button" disabled={recording || transcribing} onClick={() => { void send(label, prompt); }}>
                   {label}
                 </button>
               ))}
@@ -441,8 +469,8 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         {error && <p role="alert" className="chat-error">{error}</p>}
       </div>
       <div className="chat-composer-wrap">
-        {messages.some(message => message.role === "assistant") && atBottom && !busy && (
-          <nav className="chat-help-links" aria-label={copy("footer.how")}>
+        {messages.some(message => message.role === "assistant") && (
+          <nav className="chat-help-links" data-visible={atBottom && !busy} aria-hidden={!atBottom || busy} aria-label={copy("footer.how")}>
             <a href={`${localize(locale, "/faq")}#como-funciona`}>{copy("footer.how")}</a>
             <span aria-hidden="true">·</span>
             <a href={localize(locale, "/sources")}>{copy("chat.help.sources")}</a>
@@ -450,20 +478,20 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         )}
         {recording && <p role="status" className="chat-voice-status">{copy("chat.voice.listening")}</p>}
         {transcribing && <p role="status" className="chat-voice-status">{copy("chat.voice.transcribing")}</p>}
-        <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
-          <input ref={audioInput} className="sr-only" type="file" accept="audio/*" capture="user" tabIndex={-1}
+        <form className="chat-composer" onSubmit={event => { event.preventDefault(); if (!recording && !transcribing) void send(); }}>
+          <input ref={audioInput} hidden type="file" accept="audio/*" capture="user" tabIndex={-1}
             onChange={event => {
               const file = event.target.files?.[0];
               event.target.value = "";
               if (file) void submitAudio(file, ++voiceSession.current, draft.trim());
             }} />
           <label className="sr-only" htmlFor="chat-question">{copy("chat.label")}</label>
-          <textarea id="chat-question" ref={input} value={draft} maxLength={2000}
+          <textarea id="chat-question" ref={input} value={draft} maxLength={2000} enterKeyHint="send"
             placeholder={copy("chat.placeholder")} rows={1} readOnly={busy || recording || transcribing}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault(); void send();
+                event.preventDefault(); if (!recording && !transcribing) void send();
               }
             }} />
           <button type="button" className="chat-clear" onClick={clearChat}

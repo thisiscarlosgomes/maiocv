@@ -12,12 +12,14 @@ export type HeaderLink = {
 export function SiteHeader({
   brand,
   label,
+  menuLabel,
   links,
   tools,
   action,
 }: {
   brand: ReactNode;
   label: string;
+  menuLabel?: string;
   links: HeaderLink[];
   tools?: ReactNode;
   action?: { href: string; label: string; shortLabel: string };
@@ -41,7 +43,7 @@ export function SiteHeader({
           </Button>
         ) : null}
       </div>
-      <MobileNav label={label} links={links} />
+      <MobileNav label={label} menuLabel={menuLabel} links={links} />
     </header>
   );
 }

@@ -180,6 +180,7 @@ export function McpDemo({ locale = "pt" }: { locale?: Locale }) {
             className={!editing && !reduced ? "typing-covered" : undefined}
             onFocus={() => setEditing(true)}
             id="maio-question"
+            enterKeyHint="send"
             rows={1}
             value={question}
             maxLength={500}

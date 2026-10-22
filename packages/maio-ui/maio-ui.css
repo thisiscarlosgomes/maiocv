@@ -273,3 +273,22 @@
   .maio-header-actions { gap: 4px; }
   .maio-header-actions > .maio-button { padding-left: 10px; padding-right: 10px; }
 }
+
+/* Keep navigation clear of iPhone notches and standalone status bars. */
+.maio-header {
+  --header-inline: max(48px, calc((100vw - 1184px) / 2));
+  height: calc(var(--header-h) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(var(--header-inline), env(safe-area-inset-left));
+  padding-right: max(var(--header-inline), env(safe-area-inset-right));
+}
+.maio-header > a { flex-shrink: 0; }
+.maio-header-nav a, .maio-button { min-height: 44px; }
+.maio-footer { padding-bottom: max(30px, calc(env(safe-area-inset-bottom) + 16px)); }
+@media (max-width: 1050px) { .maio-header { --header-inline: 32px; } }
+@media (max-width: 700px) {
+  .maio-header { --header-inline: 16px; }
+  .maio-mobile-nav nav { max-height: calc(100dvh - var(--header-h) - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .maio-footer { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+}
+@media (max-width: 400px) { .maio-header { --header-inline: 12px; } }

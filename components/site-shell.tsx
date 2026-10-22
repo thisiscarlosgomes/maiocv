@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SiteFooter, SiteHeader } from "maio-ui";
 import { Reveal } from "./motion";
 import { LangSwitch } from "./lang-switch";
+import { InstallApp } from "./install-app";
 import { CHATGPT_URL } from "../lib/content";
 import { t } from "../lib/i18n";
 import { localize } from "../lib/locale";
@@ -27,6 +28,7 @@ export async function Header({ active = "home" }: { active?: "home" | "faq" | "e
         </Link>
       }
       label={copy("nav.primary")}
+      menuLabel={copy("nav.menu")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives"), compact: "hide" },
         { href: localize(locale, "/faq"), label: copy("footer.faq"), current: active === "faq" },
@@ -57,6 +59,7 @@ export async function Footer() {
         </Reveal>
       }
       meta={[copy("footer.place"), copy("footer.copyright", { year: new Date().getFullYear() })]}
+      tools={<InstallApp locale={locale} />}
       credit={
         <>
           {copy("footer.credit")}

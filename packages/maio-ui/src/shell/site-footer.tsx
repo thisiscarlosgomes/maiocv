@@ -8,12 +8,14 @@ export function SiteFooter({
   wordmark,
   meta,
   credit,
+  tools,
 }: {
   label: string;
   links: FooterLink[];
   wordmark: ReactNode;
   meta: ReactNode[];
   credit: ReactNode;
+  tools?: ReactNode;
 }) {
   return (
     <footer className="maio-footer">
@@ -32,6 +34,7 @@ export function SiteFooter({
           <span key={index}>{item}</span>
         ))}
       </div>
+      {tools}
       <p className="maio-footer-credit">{credit}</p>
     </footer>
   );

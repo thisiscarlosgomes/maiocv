@@ -19,10 +19,22 @@ export function LangSwitch({ locale, path }: { locale: Locale; path: string }) {
   }, [path]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") menu.current?.removeAttribute("open");
+      if (event.key === "Escape" && menu.current?.open) {
+        menu.current.removeAttribute("open");
+        menu.current.querySelector("summary")?.focus();
+      }
+    };
+    const onOutside = (event: Event) => {
+      if (event.target instanceof Node && !menu.current?.contains(event.target)) menu.current?.removeAttribute("open");
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onOutside);
+    document.addEventListener("focusin", onOutside);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onOutside);
+      document.removeEventListener("focusin", onOutside);
+    };
   }, []);
 
   const links = LOCALES.map((code) => ({
