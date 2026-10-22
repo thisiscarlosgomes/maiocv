@@ -1343,6 +1343,9 @@ body:has(.chat-screen) { overflow: hidden; }
 .demo-chat-actions { justify-content: center; margin-top: 24px; flex-wrap: wrap; }
 
 .chat-composer .chat-send { width: 48px; height: 48px; padding: 0; flex-shrink: 0; display: grid; place-items: center; }
+.chat-composer .chat-clear { width: 48px; height: 48px; padding: 0; flex-shrink: 0; display: grid; place-items: center; background: transparent; color: #5d6659; }
+.chat-composer .chat-clear:hover:not(:disabled) { background: #e7ebe1; }
+.chat-composer .chat-clear:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
 .chat-spinner { display: inline-block; width: 22px; height: 22px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: chat-spin .8s linear infinite; }
 @keyframes chat-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat-spinner { animation: none; } }

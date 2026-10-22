@@ -182,6 +182,18 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     }
   }
 
+  function clearChat() {
+    const controller = active.current;
+    active.current = null;
+    controller?.abort();
+    scrollToQuestion.current = null;
+    setMessages([]);
+    setDraft("");
+    setError("");
+    setBusy(false);
+    input.current?.focus({ preventScroll: true });
+  }
+
   return (
     <main className="chat-page" id="conteudo">
       <div ref={conversationPane} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
@@ -191,7 +203,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
             <h1>{copy("chat.welcome")}</h1>
             <div className="chat-suggestions">
               {suggestions.map(question => (
-                <button key={question} type="button" onClick={() => { setDraft(question); input.current?.focus(); }}>
+                <button key={question} type="button" onClick={() => { void send(question); }}>
                   {question}
                 </button>
               ))}
@@ -237,6 +249,13 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
                 event.preventDefault(); void send();
               }
             }} />
+          <button type="button" className="chat-clear" onClick={clearChat}
+            disabled={!messages.length && !draft && !busy && !error}
+            aria-label={copy("chat.clear")} title={copy("chat.clear")}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6" />
+            </svg>
+          </button>
           <button type="submit" className="chat-send" disabled={busy || !draft.trim()} aria-label={busy ? copy("chat.sending") : copy("chat.send")}>
             {busy ? <span className="chat-spinner" aria-hidden="true" /> : (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
