@@ -43,3 +43,10 @@ export function publicChatAnswer(answer: string, question = "", locale: Locale =
     return line;
   }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+
+/** A usable answer can still be returned when one upstream tool reports a failure. */
+export function publicChatResponse(payload: unknown, question = "", locale: Locale = "pt"): string {
+  if (!payload || typeof payload !== "object") return "";
+  const message = (payload as { message?: unknown }).message;
+  return typeof message === "string" ? publicChatAnswer(message, question, locale) : "";
+}

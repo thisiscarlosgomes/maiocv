@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "framer-motion";
 import { BUSINESS_DATA_URL, businessMetricProgram } from "../lib/business-visual";
 import { PLACE_COLLECTIONS, placeDataUrl, placeVisualProgram } from "../lib/place-visual";
-import { publicChatAnswer, publicChatGreeting } from "../lib/chat-answer";
+import { publicChatResponse, publicChatGreeting } from "../lib/chat-answer";
 import { isPopulationTotalQuestion, populationAnswer, POPULATION_DATA_URL } from "../lib/population-answer";
 import { declaredCitations, type Citation } from "../lib/chat-citations";
 import { t, type MessageKey } from "../lib/i18n";
@@ -116,11 +116,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
       if (!response.ok) throw new Error(response.status === 429
         ? copy("chat.error.busy")
         : copy("chat.error.answer"));
-      if (Array.isArray(data.toolEvents) && data.toolEvents.some((event: { ok?: boolean }) => event.ok === false))
-        throw new Error(copy("chat.error.source"));
-      if (typeof data.message !== "string" || !data.message.trim())
-        throw new Error(copy("chat.error.empty"));
-      const publicAnswer = publicChatAnswer(data.message, text, locale);
+      const publicAnswer = publicChatResponse(data, text, locale);
       if (!publicAnswer) throw new Error(copy("chat.error.empty"));
       let visual: Message["visual"];
       const pilotEnabled = new URLSearchParams(window.location.search).get("openui") === "1";

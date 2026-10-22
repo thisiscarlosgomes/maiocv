@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { publicChatAnswer, publicChatGreeting } from "../lib/chat-answer.ts";
+import { publicChatAnswer, publicChatGreeting, publicChatResponse } from "../lib/chat-answer.ts";
 
 test("greets visitors with supported MaioCV topics only", () => {
   const greeting = publicChatGreeting("hi");
@@ -48,4 +48,14 @@ test("answers a business source question without exposing tools or catalog keys"
   const french = publicChatAnswer(answer, "Quelle est la source des entreprises à Maio ?", "fr");
   assert.match(french, /enquête annuelle auprès des entreprises de l'INE Cabo Verde/);
   assert.equal(publicChatAnswer(answer, "Where are the businesses on Maio?", "en"), publicChatAnswer(answer));
+});
+
+test("shows the backend answer when an optional data tool fails", () => {
+  const payload = {
+    message: "Não consigo confirmar a lista de praias porque a fonte está indisponível.",
+    toolEvents: [{ name: "get_open_data_collection", ok: false }],
+  };
+  assert.match(publicChatResponse(payload, "Que praias existem no Maio?"), /fonte está indisponível/);
+  assert.equal(publicChatResponse({ toolEvents: payload.toolEvents }), "");
+  assert.equal(publicChatResponse({ message: "   " }), "");
 });

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { Button } from "maio-ui";
 import { CHATGPT_URL } from "../lib/content";
-import { publicChatAnswer } from "../lib/chat-answer";
+import { publicChatResponse } from "../lib/chat-answer";
 import { t, type MessageKey } from "../lib/i18n";
 import { localize, type Locale } from "../lib/locale";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -120,15 +120,7 @@ export function McpDemo({ locale = "pt" }: { locale?: Locale }) {
             ? copy("demo.error.busy")
             : copy("chat.error.answer"));
       }
-      if (
-        Array.isArray(data.toolEvents) &&
-        data.toolEvents.some((event: { ok?: boolean }) => event.ok === false)
-      ) {
-        throw new Error(copy("demo.error.source"));
-      }
-      if (typeof data.message !== "string" || !data.message.trim())
-        throw new Error(copy("chat.error.empty"));
-      const publicAnswer = publicChatAnswer(data.message, question.trim(), locale);
+      const publicAnswer = publicChatResponse(data, question.trim(), locale);
       if (!publicAnswer) throw new Error(copy("chat.error.empty"));
       if (pending.current === controller) {
         setReply(publicAnswer.replace(/\*\*/g, ""));
