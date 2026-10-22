@@ -33,9 +33,8 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [scrollPad, setScrollPad] = useState(0);
   const active = useRef<AbortController | null>(null);
-  const bottom = useRef<HTMLDivElement>(null);
+  const conversationPane = useRef<HTMLDivElement>(null);
   const latestQuestion = useRef<HTMLElement>(null);
   const scrollToQuestion = useRef<number | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -49,26 +48,17 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     field.style.height = `${Math.min(field.scrollHeight, 150)}px`;
   }, [draft]);
   useLayoutEffect(() => {
+    const pane = conversationPane.current;
+    if (!pane) return;
+    const behavior = reduced ? "instant" : "smooth";
     if (scrollToQuestion.current !== null && latestQuestion.current) {
-      const question = latestQuestion.current;
-      const headerOffset = Number.parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
-      const targetScroll = question.getBoundingClientRect().top + window.scrollY - headerOffset;
-      const heightWithoutSpacer = document.documentElement.scrollHeight - scrollPad;
-      const neededPad = scrollToQuestion.current === 0 ? 0
-        : Math.max(0, Math.ceil(targetScroll + window.innerHeight - heightWithoutSpacer));
-      if (Math.abs(neededPad - scrollPad) > 2) {
-        setScrollPad(neededPad);
-        return;
-      }
-      question.scrollIntoView({ behavior: reduced ? "instant" : "smooth", block: "start" });
+      const questionTop = latestQuestion.current.getBoundingClientRect().top;
+      const paneTop = pane.getBoundingClientRect().top;
+      pane.scrollTo({ top: pane.scrollTop + questionTop - paneTop, behavior });
       return;
     }
-    if (scrollPad) {
-      setScrollPad(0);
-      return;
-    }
-    bottom.current?.scrollIntoView({ behavior: reduced ? "instant" : "smooth", block: "end" });
-  }, [messages, busy, error, reduced, scrollPad]);
+    pane.scrollTo({ top: pane.scrollHeight, behavior });
+  }, [messages, busy, error, reduced]);
 
   async function send(question = draft) {
     const text = question.trim();
@@ -193,8 +183,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
 
   return (
     <main className="chat-page" id="conteudo">
-      <div className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}
-        style={scrollPad ? { paddingBottom: `${24 + scrollPad}px` } : undefined}>
+      <div ref={conversationPane} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
         {messages.length || busy ? <h1 className="sr-only">{copy("chat.welcome")}</h1> : null}
         {!messages.length && !busy && (
           <div className="chat-welcome">
@@ -233,7 +222,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
           <span className="thinking-label">{copy("chat.thinking")}</span>
         </div>}
         {error && <p role="alert" className="chat-error">{error}</p>}
-        <div ref={bottom} />
       </div>
       <div className="chat-composer-wrap">
         <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}>

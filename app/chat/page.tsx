@@ -1,6 +1,6 @@
 import { SkipLink } from "maio-ui";
 import { Chat } from "../../components/chat";
-import { Header, Footer } from "../../components/site-shell";
+import { Header } from "../../components/site-shell";
 import { t } from "../../lib/i18n";
 import { localize } from "../../lib/locale";
 import { currentLocale } from "../../lib/request-locale";
@@ -21,9 +21,10 @@ export default async function ChatPage() {
   return (
     <>
       <SkipLink href="#conteudo">{t("skip.content", undefined, locale)}</SkipLink>
-      <Header active="chat" />
-      <Chat locale={locale} />
-      <Footer />
+      <div className="chat-screen">
+        <Header active="chat" />
+        <Chat locale={locale} />
+      </div>
     </>
   );
 }

@@ -1286,8 +1286,11 @@ h1, h2, h3, h4 { letter-spacing: -0.025em; }
   line-height: 1.12;
   letter-spacing: -0.025em;
 }
-.chat-page { max-width: 900px; margin: 0 auto; padding: 0 24px; min-height: calc(100dvh - var(--header-h)); display: flex; flex-direction: column; }
-.chat-conversation { flex: 1; padding: 24px 0; }
+body:has(.chat-screen) { overflow: hidden; }
+.chat-screen { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.chat-screen .maio-header { flex: none; }
+.chat-page { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 24px; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chat-conversation { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px 0; }
 .chat-conversation-empty { display: flex; flex-direction: column; justify-content: center; }
 .chat-conversation-empty .chat-welcome { padding: 0 0 20px; }
 .chat-welcome { text-align: center; padding: 7vh 0 40px; }
@@ -1320,7 +1323,7 @@ h1, h2, h3, h4 { letter-spacing: -0.025em; }
 .chat-status { color: var(--maio-muted); padding: 12px 0; }
 .chat-error, .search-error { color: var(--maio-error); border-left: 3px solid var(--maio-error); padding-left: 12px; }
 .chat-message .chat-no-source, .chat-message .chat-example { font-size: 13px; color: var(--maio-text-data); margin-top: 8px; }
-.chat-composer-wrap { position: sticky; bottom: 0; background: var(--background); padding: 16px 0 max(16px, env(safe-area-inset-bottom)); }
+.chat-composer-wrap { flex: none; background: var(--background); padding: 16px 0 max(16px, env(safe-area-inset-bottom)); }
 .chat-composer { display: flex; align-items: flex-end; gap: 12px; padding: 18px; border: 1px solid #dce2d3; border-radius: 26px; background: #f6f7f2; }
 .chat-composer:focus-within { outline: 3px solid var(--maio-focus); outline-offset: 3px; border-color: var(--ink); }
 .chat-composer textarea { flex: 1; min-width: 0; border: 0; background: transparent; resize: vertical; max-height: 220px; font: inherit; font-size: 19px; line-height: 1.5; outline: none; }
