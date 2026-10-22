@@ -5,8 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = join(appRoot, "../..");
-const uiRoot = join(repoRoot, "packages/maio-ui");
+const uiRoot = join(appRoot, "packages/maio-ui");
 const css = readFileSync(join(uiRoot, "maio-ui.css"), "utf8");
 
 function sourceFiles(dir: string): string[] {

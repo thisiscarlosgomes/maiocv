@@ -1,38 +1,38 @@
 # MaioCV
 
-A Portuguese landing page and dedicated `/mcp` experience for Maio's digital initiatives. Self-contained Next.js server build, local photography and fonts. Chat is proxied to the portal.
+A Portuguese landing page and dedicated `/mcp` experience for Maio's digital initiatives. Standalone Next.js server build with local photography, fonts, and vendored Maio UI packages. Chat is proxied to the portal.
 
-Use Node.js 20.9 or newer (the app includes `.nvmrc` for Node 20). From the repository root:
+Use Node.js 20.9 or newer (the app includes `.nvmrc` for Node 20). From this repository root:
 
 ```sh
-npm --workspace apps/maiocv run dev
-npm --workspace apps/maiocv run build
-npm --workspace apps/maiocv run typecheck
+npm run dev
+npm run build
+npm run typecheck
 ```
 
-Development: http://localhost:3007. Production output: `apps/maiocv/.next`.
+Development: http://localhost:3007. Production output: `.next`.
 
 ## Hosting
 
-Set the project's root directory to `apps/maiocv`. `vercel.json` installs with `npm ci`, builds with `npm run build`, and publishes `.next`. Serve it with `next start`.
+Set the Vercel project's root directory to the repository root. `vercel.json` installs with `npm ci` and builds with `npm run build`. Run `npm run build && npm run start` for a self-hosted production server.
 
 Initiative URLs live in `app/page.tsx`: API at https://api.maio.cv, Portal de Dados at https://portal.maio.cv, and VisitMaio at https://visitmaio.com. These are the initiative destinations specified for MaioCV.
 
-Images are copied into `apps/maiocv/public/slideshow/`; the font is reused from the repository's `public/fonts`. No external assets are fetched at runtime.
+Images are copied into `public/slideshow/`; fonts are vendored in `packages/maio-tokens/fonts`. No external assets are fetched at runtime.
 
 ## Vercel production deployments
 
 Production: https://maiocv.vercel.app
 
-Project: `maiocv`, team: `forkctokcs-projects`. Production is a Next server build. `npm run vercel:prepare` checks that `next.config.ts` is not a static export. It does not publish files.
+Project: `maiocv`, team: `forkctokcs-projects`. The project is linked to this GitHub repository. Pushing `main` deploys production. `npm run vercel:prepare` checks that `next.config.ts` is not a static export.
 
-For a prebuilt deploy, run from `apps/maiocv` with Node 20.9+ and an authenticated Vercel CLI:
+To verify locally with Node 20.9+:
 
 ```sh
-vercel link --yes --project maiocv --scope forkctokcs-projects
-npm run vercel:prepare
+npm ci
+npm run typecheck
+node --test tests/*.test.ts
 npm run build
-vercel deploy --prebuilt --archive=tgz --scope forkctokcs-projects
 ```
 
 ## UI and MCP demo
@@ -47,4 +47,4 @@ The opt-in OpenUI pilot is at `/chat?openui=1`. When the assistant uses the `bus
 
 Framer Motion powers viewport section reveals, initiative card interactions and demo transitions. Reduced-motion preferences skip movement. Content remains visible in the server-rendered HTML.
 
-Run on port 3001 from this app directory with `../../node_modules/.bin/next dev --port 3001`.
+For a local development server on port 3001, run `npm run dev -- --port 3001`.

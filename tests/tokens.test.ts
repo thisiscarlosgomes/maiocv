@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const css = readFileSync(join(root, "packages/maio-tokens/tokens.css"), "utf8");
 const fonts = readFileSync(join(root, "packages/maio-tokens/fonts.css"), "utf8");
 const tokens = JSON.parse(readFileSync(join(root, "packages/maio-tokens/tokens.json"), "utf8"));

@@ -1,14 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import "../../../packages/maio-ui/maio-ui.css";
+import "../packages/maio-ui/maio-ui.css";
 import { currentLocale } from "../lib/request-locale";
 import { localeHtmlLang } from "../lib/locale";
 import { SITE_URL, siteSchemaFor } from "../lib/seo";
 const sans = localFont({
   src: [
-    { path: "../../../packages/maio-tokens/fonts/PPNeueMontreal-Regular.woff2", weight: "400", style: "normal" },
-    { path: "../../../packages/maio-tokens/fonts/PPNeueMontreal-Medium.woff2", weight: "500", style: "normal" },
+    { path: "../packages/maio-tokens/fonts/PPNeueMontreal-Regular.woff2", weight: "400", style: "normal" },
+    { path: "../packages/maio-tokens/fonts/PPNeueMontreal-Medium.woff2", weight: "500", style: "normal" },
   ],
   variable: "--font-pp",
   display: "swap",
