@@ -1346,6 +1346,12 @@ body:has(.chat-screen) { overflow: hidden; }
 .chat-composer .chat-clear { width: 48px; height: 48px; padding: 0; flex-shrink: 0; display: grid; place-items: center; background: transparent; color: #5d6659; }
 .chat-composer .chat-clear:hover:not(:disabled) { background: #e7ebe1; }
 .chat-composer .chat-clear:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.chat-answer-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.chat-pdf-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid #dce2d3; border-radius: 999px; background: transparent; color: #495d45; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.chat-pdf-button:hover:not(:disabled) { background: #edf0e7; }
+.chat-pdf-button:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.chat-pdf-button:disabled { opacity: .55; cursor: default; }
+.chat-pdf-error { color: var(--maio-error); font-size: 12px; }
 .chat-spinner { display: inline-block; width: 22px; height: 22px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: chat-spin .8s linear infinite; }
 @keyframes chat-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat-spinner { animation: none; } }

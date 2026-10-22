@@ -34,6 +34,8 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [savingPdf, setSavingPdf] = useState<number | null>(null);
+  const [pdfError, setPdfError] = useState<number | null>(null);
   const active = useRef<AbortController | null>(null);
   const conversationPane = useRef<HTMLDivElement>(null);
   const latestQuestion = useRef<HTMLElement>(null);
@@ -193,8 +195,40 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     setMessages([]);
     setDraft("");
     setError("");
+    setPdfError(null);
+    setSavingPdf(null);
     setBusy(false);
     input.current?.focus({ preventScroll: true });
+  }
+
+  async function downloadAnswer(index: number) {
+    const answer = messages[index];
+    const question = messages.slice(0, index).reverse().find(message => message.role === "user");
+    if (!answer || !question || savingPdf !== null) return;
+    setSavingPdf(index);
+    setPdfError(null);
+    try {
+      const { saveChatAnswerPdf } = await import("../lib/chat-pdf");
+      await saveChatAnswerPdf({
+        question: question.content,
+        answer: answer.content,
+        citations: answer.citations,
+        example: answer.example,
+        uncited: answer.uncited,
+        locale,
+        labels: {
+          question: copy("chat.pdf.question"),
+          answer: copy("chat.pdf.answer"),
+          sources: copy("chat.pdf.sources"),
+          example: copy("chat.example"),
+          noSource: copy("chat.noSource"),
+        },
+      });
+    } catch {
+      setPdfError(index);
+    } finally {
+      setSavingPdf(null);
+    }
   }
 
   return (
@@ -232,6 +266,18 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
                   {citation.kind ? ` · ${citation.kind}` : ""}
                 </p>
               ))}
+              {message.role === "assistant" && (
+                <div className="chat-answer-actions">
+                  <button type="button" className="chat-pdf-button" onClick={() => { void downloadAnswer(index); }}
+                    disabled={savingPdf !== null} aria-label={copy("chat.savePdf")} title={copy("chat.savePdf")}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3" />
+                    </svg>
+                    <span>{savingPdf === index ? copy("chat.savingPdf") : "PDF"}</span>
+                  </button>
+                  {pdfError === index && <span role="alert" className="chat-pdf-error">{copy("chat.pdfError")}</span>}
+                </div>
+              )}
             </motion.article>
           ))}
         </div>
