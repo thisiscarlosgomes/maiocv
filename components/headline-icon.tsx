@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { t, type MessageKey } from "../lib/i18n";
 import type { Locale } from "../lib/locale";
@@ -8,18 +8,60 @@ import type { Locale } from "../lib/locale";
 type IconKind = "island" | "beach" | "data" | "people" | "tools" | "chat" | "map" | "book" | "research" | "ai";
 const placeIcons: IconKind[] = ["island", "beach", "map"];
 const communityIcons: IconKind[] = ["data", "book", "research", "people", "tools", "ai", "chat"];
-type HeadlineIconProps = { kind: IconKind; locale?: Locale };
+type HeadlineIconProps = { kind: IconKind; locale?: Locale; autoRotate?: boolean };
 
-export function HeadlineIcon({ kind, locale = "pt" }: HeadlineIconProps) {
+export function HeadlineIcon({ kind, locale = "pt", autoRotate = false }: HeadlineIconProps) {
   const id = useId().replace(/:/g, "");
   const paint = (name: string) => `url(#${id}-${name})`;
   const [current, setCurrent] = useState<IconKind>(kind);
+  const button = useRef<HTMLButtonElement>(null);
   const icons = placeIcons.includes(kind) ? placeIcons : communityIcons;
   const reducedMotion = useReducedMotion();
   const next = icons[(icons.indexOf(current) + 1) % icons.length];
   const iconLabel = (icon: IconKind) => t(`icon.${icon}` as MessageKey, undefined, locale);
+
+  useEffect(() => {
+    if (!autoRotate || reducedMotion || !button.current) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let inView = false;
+    const schedule = () => {
+      if (timer !== undefined) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        setCurrent((previous) => {
+          const alternatives = icons.filter((icon) => icon !== previous);
+          return alternatives[Math.floor(Math.random() * alternatives.length)];
+        });
+        schedule();
+      }, 3000 + Math.random() * 3000);
+    };
+    const pause = () => {
+      clearTimeout(timer);
+      timer = undefined;
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      if (inView && !document.hidden) schedule();
+      else pause();
+    });
+    observer.observe(button.current);
+    const onVisibilityChange = () => {
+      if (inView && !document.hidden) schedule();
+      else pause();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      pause();
+    };
+  }, [autoRotate, icons, reducedMotion]);
+
   return (
     <motion.button
+      ref={button}
       type="button"
       className={`headline-icon headline-icon-${current}`}
       onClick={() => setCurrent(next)}

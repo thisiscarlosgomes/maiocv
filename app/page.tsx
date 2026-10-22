@@ -49,10 +49,10 @@ export default async function Home() {
           <Reveal>
             <h1 className="context-headline">
               <span className="headline-line">
-                {copy("home.name")} <HeadlineIcon kind="island" locale={locale} /> {copy("home.h1.digital")}
+                {copy("home.name")} <HeadlineIcon kind="island" locale={locale} autoRotate /> {copy("home.h1.digital")}
               </span>
               <span className="headline-line">
-                {copy("home.h1.knowledge")} <HeadlineIcon kind="data" locale={locale} /> {copy("home.h1.forAll")}
+                {copy("home.h1.knowledge")} <HeadlineIcon kind="data" locale={locale} autoRotate /> {copy("home.h1.forAll")}
               </span>
             </h1>
             <p className="hero-description">{copy("home.hero")}</p>
@@ -91,9 +91,9 @@ export default async function Home() {
         <Section className="story-section mission-section wrap" id="sobre">
           <Reveal>
             <h2 className="mission-statement">
-              {copy("home.mission.a")} <HeadlineIcon kind="ai" locale={locale} /> {copy("home.mission.b")}{" "}
-              <HeadlineIcon kind="map" locale={locale} /> {copy("home.mission.c")}{" "}
-              <HeadlineIcon kind="book" locale={locale} /> {copy("home.mission.d")}
+              {copy("home.mission.a")} <HeadlineIcon kind="ai" locale={locale} autoRotate /> {copy("home.mission.b")}{" "}
+              <HeadlineIcon kind="map" locale={locale} autoRotate /> {copy("home.mission.c")}{" "}
+              <HeadlineIcon kind="book" locale={locale} autoRotate /> {copy("home.mission.d")}
             </h2>
           </Reveal>
         </Section>
