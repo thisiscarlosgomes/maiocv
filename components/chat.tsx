@@ -26,9 +26,9 @@ type Message = {
 export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const copy = (key: MessageKey, values?: Record<string, string | number>) => t(key, values, locale);
   const suggestions = [
-    copy("chat.suggest.beaches"),
-    copy("chat.suggest.business"),
-    copy("chat.suggest.tourism"),
+    { label: copy("chat.suggest.beaches"), prompt: copy("chat.suggest.beaches.prompt") },
+    { label: copy("chat.suggest.business"), prompt: copy("chat.suggest.business.prompt") },
+    { label: copy("chat.suggest.tourism"), prompt: copy("chat.suggest.tourism.prompt") },
   ];
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -61,7 +61,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     pane.scrollTo({ top: pane.scrollHeight, behavior });
   }, [messages, busy, error, reduced]);
 
-  async function send(question = draft) {
+  async function send(question = draft, suggestedPrompt?: string) {
     const text = question.trim();
     if (!text || active.current) return;
     const greeting = publicChatGreeting(text, locale);
@@ -88,6 +88,9 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         return;
       }
       const outbound = conversation.slice(-12).map(({ role, content }) => ({ role, content }));
+      if (suggestedPrompt && outbound.at(-1)?.role === "user") {
+        outbound[outbound.length - 1] = { role: "user", content: suggestedPrompt };
+      }
       const instruction = locale === "fr"
         ? "Reply in French. Keep source titles in their original language."
         : locale === "en"
@@ -202,9 +205,9 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
           <div className="chat-welcome">
             <h1>{copy("chat.welcome")}</h1>
             <div className="chat-suggestions">
-              {suggestions.map(question => (
-                <button key={question} type="button" onClick={() => { void send(question); }}>
-                  {question}
+              {suggestions.map(({ label, prompt }) => (
+                <button key={label} type="button" onClick={() => { void send(label, prompt); }}>
+                  {label}
                 </button>
               ))}
             </div>
