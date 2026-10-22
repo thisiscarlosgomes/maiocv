@@ -27,6 +27,7 @@
   "chat.note": "AI answers. Check the sources and dates.",
   "chat.error.population": "The population figures could not be loaded. Try again.",
   "chat.error.populationValue": "This source has no verifiable population total.",
+  "chat.error.quotaReset": "The limit of {limit} questions in {hours} hours has been reached. You can ask again after {reset}.",
   "chat.error.busy": "The service is busy. Try again.",
   "chat.error.answer": "An answer could not be loaded. Try again.",
   "chat.error.source": "One source did not respond. Try again.",

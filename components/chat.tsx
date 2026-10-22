@@ -113,9 +113,19 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         body: JSON.stringify({ messages: outbound, context: { surface: "mcp-guide", lang: locale } }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(response.status === 429
-        ? copy("chat.error.busy")
-        : copy("chat.error.answer"));
+      if (!response.ok) {
+        if (response.status === 429 && typeof data.limit === "number" && typeof data.windowHours === "number") {
+          const resetAt = typeof data.resetAt === "string" ? new Date(data.resetAt) : null;
+          const reset = resetAt && !Number.isNaN(resetAt.getTime())
+            ? new Intl.DateTimeFormat(locale === "pt" ? "pt-PT" : locale === "fr" ? "fr-FR" : "en-GB",
+              { dateStyle: "medium", timeStyle: "short" }).format(resetAt)
+            : null;
+          throw new Error(reset
+            ? copy("chat.error.quotaReset", { limit: data.limit, hours: data.windowHours, reset })
+            : copy("demo.quota", { limit: data.limit, hours: data.windowHours }));
+        }
+        throw new Error(response.status === 429 ? copy("chat.error.busy") : copy("chat.error.answer"));
+      }
       const publicAnswer = publicChatResponse(data, text, locale);
       if (!publicAnswer) throw new Error(copy("chat.error.empty"));
       let visual: Message["visual"];

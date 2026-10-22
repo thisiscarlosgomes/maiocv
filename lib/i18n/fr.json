@@ -27,6 +27,7 @@
   "chat.note": "Réponses générées par IA. Vérifiez les sources et les dates.",
   "chat.error.population": "Impossible de consulter la population. Réessayez.",
   "chat.error.populationValue": "Cette source n'a pas de total de population vérifiable.",
+  "chat.error.quotaReset": "La limite de {limit} questions en {hours} heures est atteinte. Vous pourrez poser une autre question après le {reset}.",
   "chat.error.busy": "Le service est occupé. Réessayez.",
   "chat.error.answer": "Impossible d'obtenir une réponse. Réessayez.",
   "chat.error.source": "Une source n'a pas répondu. Réessayez.",

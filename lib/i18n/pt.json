@@ -27,6 +27,7 @@
   "chat.note": "Respostas com IA. Confirme as fontes e as datas.",
   "chat.error.population": "Não foi possível consultar a população. Tente novamente.",
   "chat.error.populationValue": "Não há um valor de população verificável nesta fonte.",
+  "chat.error.quotaReset": "O limite de {limit} perguntas em {hours} horas foi atingido. Pode voltar a perguntar depois de {reset}.",
   "chat.error.busy": "O serviço está ocupado. Tente novamente.",
   "chat.error.answer": "Não foi possível obter uma resposta. Tente novamente.",
   "chat.error.source": "Uma das fontes não respondeu. Tente novamente.",
