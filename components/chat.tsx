@@ -10,7 +10,7 @@ import { publicChatResponse, publicChatGreeting } from "../lib/chat-answer";
 import { isPopulationTotalQuestion, populationAnswer, POPULATION_DATA_URL } from "../lib/population-answer";
 import { declaredCitations, type Citation } from "../lib/chat-citations";
 import { t, type MessageKey } from "../lib/i18n";
-import type { Locale } from "../lib/locale";
+import { localize, type Locale } from "../lib/locale";
 
 const OpenUIBusiness = dynamic(() => import("./openui-business").then(module => module.OpenUIBusiness));
 const OpenUIPlaces = dynamic(() => import("./openui-places").then(module => module.OpenUIPlaces));
@@ -36,14 +36,46 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const [error, setError] = useState("");
   const [savingPdf, setSavingPdf] = useState<number | null>(null);
   const [pdfError, setPdfError] = useState<number | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const [canRecord, setCanRecord] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
   const active = useRef<AbortController | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const audioStream = useRef<MediaStream | null>(null);
+  const audioUpload = useRef<AbortController | null>(null);
+  const voiceSession = useRef(0);
+  const voiceTimer = useRef<number | null>(null);
+  const audioInput = useRef<HTMLInputElement>(null);
   const conversationPane = useRef<HTMLDivElement>(null);
   const latestQuestion = useRef<HTMLElement>(null);
   const scrollToQuestion = useRef<number | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const reduced = useReducedMotion();
 
-  useEffect(() => () => active.current?.abort(), []);
+  useEffect(() => {
+    setCanRecord(Boolean(navigator.mediaDevices && "getUserMedia" in navigator.mediaDevices && "MediaRecorder" in window));
+    return () => {
+      active.current?.abort();
+      voiceSession.current += 1;
+      audioUpload.current?.abort();
+      if (voiceTimer.current !== null) window.clearTimeout(voiceTimer.current);
+      if (recorder.current) recorder.current.onstop = null;
+      if (recorder.current?.state === "recording") recorder.current.stop();
+      audioStream.current?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+  useEffect(() => {
+    const pane = conversationPane.current;
+    if (!pane) return;
+    const observer = new ResizeObserver(() => updateBottom());
+    observer.observe(pane);
+    const log = pane.querySelector('[role="log"]');
+    if (log) observer.observe(log);
+    updateBottom();
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const field = input.current;
     if (!field) return;
@@ -62,6 +94,11 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     }
     pane.scrollTo({ top: pane.scrollHeight, behavior });
   }, [messages, busy, error, reduced]);
+
+  function updateBottom() {
+    const pane = conversationPane.current;
+    if (pane) setAtBottom(pane.scrollHeight - pane.scrollTop - pane.clientHeight < 36);
+  }
 
   async function send(question = draft, suggestedPrompt?: string) {
     const text = question.trim();
@@ -188,6 +225,18 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   }
 
   function clearChat() {
+    voiceSession.current += 1;
+    audioUpload.current?.abort();
+    audioUpload.current = null;
+    if (voiceTimer.current !== null) window.clearTimeout(voiceTimer.current);
+    if (recorder.current) recorder.current.onstop = null;
+    if (recorder.current?.state === "recording") recorder.current.stop();
+    recorder.current = null;
+    audioStream.current?.getTracks().forEach(track => track.stop());
+    audioStream.current = null;
+    setRecording(false);
+    setTranscribing(false);
+    setVoiceError("");
     const controller = active.current;
     active.current = null;
     controller?.abort();
@@ -199,6 +248,108 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     setSavingPdf(null);
     setBusy(false);
     input.current?.focus({ preventScroll: true });
+  }
+
+  async function submitAudio(file: File, session: number, originalDraft: string) {
+    if (file.size === 0 || file.size > 2_000_000) {
+      setVoiceError(copy("chat.voice.size"));
+      return;
+    }
+    const controller = new AbortController();
+    audioUpload.current = controller;
+    setTranscribing(true);
+    setVoiceError("");
+    try {
+      const form = new FormData();
+      form.append("audio", file);
+      const response = await fetch("/api/transcribe", { method: "POST", body: form, signal: controller.signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(response.status === 422 ? copy("chat.voice.noSpeech") : copy("chat.voice.error"));
+      const transcript = typeof data.text === "string" ? data.text.trim() : "";
+      if (!transcript) throw new Error(copy("chat.voice.noSpeech"));
+      if (session === voiceSession.current) {
+        const question = [originalDraft, transcript].filter(Boolean).join(" ");
+        setTranscribing(false);
+        void send(question);
+      }
+    } catch (cause) {
+      if (session === voiceSession.current)
+        setVoiceError(cause instanceof Error ? cause.message : copy("chat.voice.error"));
+    } finally {
+      if (session === voiceSession.current) {
+        audioUpload.current = null;
+        setTranscribing(false);
+      }
+    }
+  }
+
+  async function toggleVoice() {
+    if (recording) {
+      if (recorder.current?.state === "recording") recorder.current.stop();
+      return;
+    }
+    if (!canRecord) {
+      audioInput.current?.click();
+      return;
+    }
+    if (active.current) return;
+    const session = ++voiceSession.current;
+    const originalDraft = draft.trim();
+    try {
+      const microphone = navigator.mediaDevices.getUserMedia({ audio: true });
+      let permissionTimer: number | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        permissionTimer = window.setTimeout(() => reject(new Error("Microphone request timed out")), 8000);
+      });
+      microphone.then(stream => {
+        if (session !== voiceSession.current) stream.getTracks().forEach(track => track.stop());
+      }).catch(() => {});
+      const stream = await Promise.race([microphone, timeout]).finally(() => window.clearTimeout(permissionTimer));
+      if (session !== voiceSession.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      audioStream.current = stream;
+      const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"]
+        .find(type => MediaRecorder.isTypeSupported(type));
+      const current = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const chunks: Blob[] = [];
+      let failed = false;
+      current.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      current.onerror = () => {
+        failed = true;
+        if (session === voiceSession.current) setVoiceError(copy("chat.voice.error"));
+      };
+      current.onstop = () => {
+        if (voiceTimer.current !== null) window.clearTimeout(voiceTimer.current);
+        stream.getTracks().forEach(track => track.stop());
+        audioStream.current = null;
+        recorder.current = null;
+        if (session !== voiceSession.current) return;
+        setRecording(false);
+        if (failed || chunks.length === 0) {
+          setVoiceError(copy("chat.voice.noSpeech"));
+          return;
+        }
+        const type = current.mimeType.split(";")[0] || "audio/webm";
+        const extension = type === "audio/mp4" ? "m4a" : "webm";
+        const file = new File(chunks, `maio-question.${extension}`, { type });
+        void submitAudio(file, session, originalDraft);
+      };
+      current.start(1000);
+      recorder.current = current;
+      voiceTimer.current = window.setTimeout(() => {
+        if (current.state === "recording") current.stop();
+      }, 30000);
+      setRecording(true);
+      setVoiceError("");
+    } catch {
+      voiceSession.current += 1;
+      audioStream.current?.getTracks().forEach(track => track.stop());
+      audioStream.current = null;
+      setCanRecord(false);
+      setVoiceError(copy("chat.voice.fallback"));
+    }
   }
 
   async function downloadAnswer(index: number) {
@@ -233,7 +384,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
 
   return (
     <main className="chat-page" id="conteudo">
-      <div ref={conversationPane} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
+      <div ref={conversationPane} onScroll={updateBottom} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
         {messages.length || busy ? <h1 className="sr-only">{copy("chat.welcome")}</h1> : null}
         {!messages.length && !busy && (
           <div className="chat-welcome">
@@ -288,10 +439,25 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         {error && <p role="alert" className="chat-error">{error}</p>}
       </div>
       <div className="chat-composer-wrap">
+        {messages.some(message => message.role === "assistant") && atBottom && !busy && (
+          <nav className="chat-help-links" aria-label={copy("footer.how")}>
+            <a href={`${localize(locale, "/faq")}#como-funciona`}>{copy("footer.how")}</a>
+            <span aria-hidden="true">·</span>
+            <a href={localize(locale, "/sources")}>{copy("chat.help.sources")}</a>
+          </nav>
+        )}
+        {recording && <p role="status" className="chat-voice-status">{copy("chat.voice.listening")}</p>}
+        {transcribing && <p role="status" className="chat-voice-status">{copy("chat.voice.transcribing")}</p>}
         <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
+          <input ref={audioInput} className="sr-only" type="file" accept="audio/*" capture="user" tabIndex={-1}
+            onChange={event => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void submitAudio(file, ++voiceSession.current, draft.trim());
+            }} />
           <label className="sr-only" htmlFor="chat-question">{copy("chat.label")}</label>
           <textarea id="chat-question" ref={input} value={draft} maxLength={2000}
-            placeholder={copy("chat.placeholder")} rows={1} readOnly={busy}
+            placeholder={copy("chat.placeholder")} rows={1} readOnly={busy || recording || transcribing}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -299,13 +465,23 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
               }
             }} />
           <button type="button" className="chat-clear" onClick={clearChat}
-            disabled={!messages.length && !draft && !busy && !error}
+            disabled={!messages.length && !draft && !busy && !error && !recording && !transcribing}
             aria-label={copy("chat.clear")} title={copy("chat.clear")}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6" />
             </svg>
           </button>
-          <button type="submit" className="chat-send" disabled={busy || !draft.trim()} aria-label={busy ? copy("chat.sending") : copy("chat.send")}>
+          <button type="button" className={`chat-voice${recording ? " chat-voice-active" : ""}`}
+            onClick={() => { void toggleVoice(); }} disabled={busy || transcribing}
+            aria-label={copy(recording ? "chat.voice.stop" : canRecord ? "chat.voice.start" : "chat.voice.upload")}
+            title={copy(recording ? "chat.voice.stop" : canRecord ? "chat.voice.start" : "chat.voice.upload")}
+            aria-pressed={recording}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" />
+            </svg>
+          </button>
+          <button type="submit" className="chat-send" disabled={busy || recording || transcribing || !draft.trim()} aria-label={busy ? copy("chat.sending") : copy("chat.send")}>
             {busy ? <span className="chat-spinner" aria-hidden="true" /> : (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 19V5m-6 6 6-6 6 6" />
@@ -313,6 +489,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
             )}
           </button>
         </form>
+        {voiceError && <p role="alert" className="chat-voice-error">{voiceError}</p>}
         <p className="chat-note">{copy("chat.note")}</p>
       </div>
     </main>

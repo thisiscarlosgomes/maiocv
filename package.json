@@ -10,8 +10,10 @@
     "vercel:prepare": "node scripts/prepare-vercel.mjs"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.122",
     "@openuidev/react-lang": "^0.3.1",
     "@tailwindcss/postcss": "^4",
+    "ai": "^7.0.149",
     "framer-motion": "^12.34.3",
     "jspdf": "^4.2.1",
     "maio-tokens": "file:./packages/maio-tokens",
