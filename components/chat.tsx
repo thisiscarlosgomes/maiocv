@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "framer-motion";
 import { BUSINESS_DATA_URL, businessMetricProgram } from "../lib/business-visual";
+import { ChatMarkdown } from "./chat-markdown";
 import { PLACE_COLLECTIONS, placeDataUrl, placeVisualProgram } from "../lib/place-visual";
 import { publicChatResponse, publicChatGreeting } from "../lib/chat-answer";
 import { isPopulationTotalQuestion, populationAnswer, POPULATION_DATA_URL } from "../lib/population-answer";
@@ -205,7 +206,9 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
               animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
               {message.visual?.kind === "business" && <OpenUIBusiness program={message.visual.program} />}
               {message.visual?.kind === "places" && <OpenUIPlaces program={message.visual.program} locale={locale} />}
-              {!message.visual && <p>{message.content.replace(/\*\*/g, "")}</p>}
+              {!message.visual && (message.role === "assistant"
+                ? <ChatMarkdown content={message.content} />
+                : <p>{message.content}</p>)}
               {message.example ? <p className="chat-example">{copy("chat.example")}</p> : null}
               {message.uncited ? <p className="chat-no-source">{copy("chat.noSource")}</p> : null}
               {message.citations?.map((citation) => (
