@@ -32,8 +32,17 @@ export function LangSwitch({ locale, path }: { locale: Locale; path: string }) {
   }));
 
   return (
-    <>
-      <nav className="lang-switch-segmented" aria-label={t("lang.switch.label", undefined, locale)}>
+    <details className="lang-switch-menu" ref={menu}>
+      <summary aria-label={t("lang.switch.label", undefined, locale)} title={t("lang.switch.label", undefined, locale)}>
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m5 8 6 6" />
+          <path d="m4 14 6-6 2-3H2" />
+          <path d="M7 2h1" />
+          <path d="m22 22-5-10-5 10" />
+          <path d="M14 18h6" />
+        </svg>
+      </summary>
+      <div role="group" aria-label={t("lang.switch.label", undefined, locale)}>
         {links.map((link) => (
           <a
             key={link.code}
@@ -45,25 +54,7 @@ export function LangSwitch({ locale, path }: { locale: Locale; path: string }) {
             {link.label}
           </a>
         ))}
-      </nav>
-      <details className="lang-switch-menu" ref={menu}>
-        <summary aria-label={`${locale.toUpperCase()}, ${t("lang.switch.label", undefined, locale)}`}>
-          {locale.toUpperCase()}
-        </summary>
-        <div role="group" aria-label={t("lang.switch.label", undefined, locale)}>
-          {links.map((link) => (
-            <a
-              key={link.code}
-              href={link.href}
-              hrefLang={link.code}
-              lang={link.code}
-              aria-current={link.code === locale ? "true" : undefined}
-            >
-              {link.label}
-            </a>
-          ))}
-        </div>
-      </details>
-    </>
+      </div>
+    </details>
   );
 }

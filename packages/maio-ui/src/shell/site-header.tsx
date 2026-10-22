@@ -31,12 +31,14 @@ export function SiteHeader({
           </a>
         ))}
       </nav>
-      {tools}
-      {action ? (
-        <Button href={action.href} size="small">
-          {action.label}
-        </Button>
-      ) : null}
+      <div className="maio-header-actions">
+        {tools}
+        {action ? (
+          <Button href={action.href} size="small">
+            {action.label}
+          </Button>
+        ) : null}
+      </div>
     </header>
   );
 }

@@ -39,11 +39,11 @@
 .maio-header nav [aria-current] {
   color: var(--blue);
 }
-.maio-header > .maio-button {
+.maio-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
-}
-.maio-header:has(.lang-switch-segmented) > .maio-button {
-  margin-left: 0;
 }
 
 .maio-button {
@@ -180,7 +180,7 @@
 }
 
 @media (min-width: 701px) and (max-width: 1100px) {
-  .maio-header > .maio-button {
+  .maio-header-actions > .maio-button {
     display: none;
   }
 }
@@ -209,7 +209,7 @@
     padding: 0 10px;
   }
   .maio-header [data-compact="hide"],
-  .maio-header > .maio-button {
+  .maio-header-actions > .maio-button {
     display: none;
   }
   .maio-button {

@@ -4,7 +4,7 @@ import { Reveal } from "./motion";
 import { LangSwitch } from "./lang-switch";
 import { CHATGPT_URL } from "../lib/content";
 import { t } from "../lib/i18n";
-import { essentialsPath, localize } from "../lib/locale";
+import { localize } from "../lib/locale";
 import { currentLocale, currentPath } from "../lib/request-locale";
 
 export function Logo() {
@@ -29,9 +29,6 @@ export async function Header({ active = "home" }: { active?: "home" | "mcp" | "e
       label={copy("nav.primary")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives"), compact: "hide" },
-        { href: essentialsPath(locale), label: copy("nav.visit"), current: active === "essentials" },
-        { href: localize(locale, "/search"), label: copy("nav.search"), current: active === "search" },
-        { href: localize(locale, "/mcp"), label: copy("nav.about"), current: active === "mcp" },
         { href: localize(locale, "/chat"), label: copy("nav.chat"), current: active === "chat" },
       ]}
       tools={<LangSwitch locale={locale} path={path} />}
@@ -48,7 +45,6 @@ export async function Footer() {
       label={copy("footer.nav")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives") },
-        { href: localize(locale, "/mcp"), label: copy("nav.about") },
         { href: `${localize(locale, "/mcp")}#como-funciona`, label: copy("footer.how") },
         { href: `${localize(locale, "/mcp")}#perguntas`, label: copy("footer.faq") },
         { href: CHATGPT_URL, label: copy("footer.chatgpt") },
