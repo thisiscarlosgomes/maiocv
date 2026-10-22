@@ -146,7 +146,7 @@ export default async function Home() {
                 <Button href={localize(locale, "/chat")} variant="white">
                   {copy("cta.ask")}
                 </Button>
-                <Link href={localize(locale, "/mcp")} className="feature-link">
+                <Link href={localize(locale, "/faq")} className="feature-link">
                   {copy("home.how")}
                 </Link>
               </div>

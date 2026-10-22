@@ -13,12 +13,12 @@ export async function generateMetadata() {
   return pageMetadata(
     t("meta.title.about", undefined, locale),
     t("meta.description.about", undefined, locale),
-    localize(locale, "/mcp"),
+    localize(locale, "/faq"),
     locale,
   );
 }
 
-export default async function McpPage() {
+export default async function FaqPage() {
   const locale = await currentLocale();
   const copy = (key: MessageKey) => t(key, undefined, locale);
   const steps = [1, 2, 3] as const;
@@ -27,7 +27,7 @@ export default async function McpPage() {
   return (
     <>
       <SkipLink href="#conteudo">{copy("skip.content")}</SkipLink>
-      <Header active="mcp" />
+      <Header active="faq" />
       <main id="conteudo">
         <Section className="mcp-hero wrap">
           <Reveal>

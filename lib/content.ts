@@ -5,7 +5,7 @@ export const initiatives = [
   { id: "visit", href: "https://visitmaio.com" },
   { id: "portal", href: "https://portal.maio.cv" },
   { id: "api", href: "https://api.maio.cv" },
-  { id: "mcp", href: "/mcp" },
+  { id: "mcp", href: "/faq" },
 ] as const;
 
 export type InitiativeId = (typeof initiatives)[number]["id"];

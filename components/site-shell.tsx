@@ -15,7 +15,7 @@ export function Logo() {
   );
 }
 
-export async function Header({ active = "home" }: { active?: "home" | "mcp" | "essentials" | "search" | "chat" }) {
+export async function Header({ active = "home" }: { active?: "home" | "faq" | "essentials" | "search" | "chat" }) {
   const locale = await currentLocale();
   const path = await currentPath();
   const copy = (key: Parameters<typeof t>[0]) => t(key, undefined, locale);
@@ -29,7 +29,7 @@ export async function Header({ active = "home" }: { active?: "home" | "mcp" | "e
       label={copy("nav.primary")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives"), compact: "hide" },
-        { href: `${localize(locale, "/mcp")}#perguntas`, label: copy("footer.faq") },
+        { href: localize(locale, "/faq"), label: copy("footer.faq"), current: active === "faq" },
         { href: localize(locale, "/chat"), label: copy("nav.chat"), current: active === "chat" },
       ]}
       tools={<LangSwitch locale={locale} path={path} />}
@@ -46,8 +46,8 @@ export async function Footer() {
       label={copy("footer.nav")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives") },
-        { href: `${localize(locale, "/mcp")}#como-funciona`, label: copy("footer.how") },
-        { href: `${localize(locale, "/mcp")}#perguntas`, label: copy("footer.faq") },
+        { href: `${localize(locale, "/faq")}#como-funciona`, label: copy("footer.how") },
+        { href: `${localize(locale, "/faq")}#perguntas`, label: copy("footer.faq") },
         { href: CHATGPT_URL, label: copy("footer.chatgpt") },
         { href: localize(locale, "/chat"), label: copy("nav.chat") },
       ]}

@@ -16,6 +16,11 @@ export function proxy(request: NextRequest) {
 
   if (prefixed) {
     const slug = stripLocale(pathname).replace(/^\/|\/$/g, "");
+    if (slug === "mcp") {
+      const to = request.nextUrl.clone();
+      to.pathname = localize(prefixed, "/faq");
+      return NextResponse.redirect(to, 308);
+    }
     const target = routeAlias[slug] ?? (essentialsPages.has(slug) && slug !== essentialsSlug[prefixed] ? "essentials" : null);
     if (target) {
       const to = request.nextUrl.clone();
