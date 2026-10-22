@@ -23,13 +23,13 @@
   backdrop-filter: blur(16px);
   border-bottom: 1px solid #17181708;
 }
-.maio-header nav {
+.maio-header > .maio-header-nav {
   display: flex;
   align-items: center;
   gap: 30px;
   font-size: 14px;
 }
-.maio-header nav a {
+.maio-header > .maio-header-nav a {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -45,6 +45,7 @@
   gap: 8px;
   margin-left: auto;
 }
+.maio-action-short, .maio-mobile-nav { display: none; }
 
 .maio-button {
   display: inline-flex;
@@ -170,7 +171,7 @@
     padding: 0 32px;
     gap: 32px;
   }
-  .maio-header nav {
+  .maio-header > .maio-header-nav {
     gap: 20px;
   }
   .maio-footer {
@@ -186,32 +187,60 @@
 }
 @media (max-width: 700px) {
   .maio-header {
-    height: auto;
-    min-height: var(--header-h);
-    flex-wrap: wrap;
-    row-gap: 0;
-    padding: 8px 22px 0;
-    gap: 20px;
-    justify-content: space-between;
+    height: var(--header-h);
+    min-height: 0;
+    flex-wrap: nowrap;
+    padding: 0 16px;
+    gap: 8px;
   }
-  .maio-header nav {
-    order: 3;
-    flex: 1 0 100%;
-    gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    margin: 0 -22px;
-    padding: 0 22px;
+  .maio-header > .maio-header-nav { display: none; }
+  .maio-header-actions { gap: 6px; }
+  .maio-header-actions > .maio-button {
+    display: inline-flex;
+    min-height: 44px;
+    padding: 10px 12px;
+    white-space: nowrap;
+  }
+  .maio-action-full { display: none; }
+  .maio-action-short { display: inline; }
+  .maio-mobile-nav { display: block; flex: none; }
+  .maio-mobile-nav summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    cursor: pointer;
+    list-style: none;
+  }
+  .maio-mobile-nav summary::-webkit-details-marker { display: none; }
+  .maio-mobile-nav[open] summary { color: var(--blue); border-color: var(--blue); }
+  .maio-mobile-nav nav {
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 16px 16px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 18px 24px #17181712;
+  }
+  .maio-mobile-nav:not([open]) nav { display: none; }
+  .maio-mobile-nav nav a {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 10px;
     font-size: 16px;
   }
-  .maio-header nav a {
-    min-height: 44px;
-    padding: 0 10px;
-  }
-  .maio-header [data-compact="hide"],
-  .maio-header-actions > .maio-button {
-    display: none;
-  }
+  .maio-mobile-nav nav a:hover { background: var(--maio-surface-data); }
+  .maio-mobile-nav nav a[aria-current="page"] { color: var(--blue); }
   .maio-button {
     font-size: 12px;
     padding: 14px 18px;
@@ -239,16 +268,8 @@
   }
 }
 @media (max-width: 400px) {
-  .maio-header {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-  .maio-header nav {
-    margin: 0 -12px;
-    padding: 0 12px;
-  }
-  .maio-header nav a {
-    padding: 0 8px;
-    font-size: 14px;
-  }
+  .maio-header { padding-left: 12px; padding-right: 12px; gap: 6px; }
+  .maio-header .logo { font-size: 27px; }
+  .maio-header-actions { gap: 4px; }
+  .maio-header-actions > .maio-button { padding-left: 10px; padding-right: 10px; }
 }

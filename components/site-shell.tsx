@@ -32,7 +32,7 @@ export async function Header({ active = "home" }: { active?: "home" | "mcp" | "e
         { href: localize(locale, "/chat"), label: copy("nav.chat"), current: active === "chat" },
       ]}
       tools={<LangSwitch locale={locale} path={path} />}
-      action={{ href: localize(locale, "/chat"), label: copy("cta.ask") }}
+      action={{ href: localize(locale, "/chat"), label: copy("cta.ask"), shortLabel: copy("cta.ask.short") }}
     />
   );
 }
