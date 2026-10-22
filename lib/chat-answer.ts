@@ -3,6 +3,24 @@ import type { Locale } from "./locale.ts";
 
 const internalLine = /^\s*(?:[-*•]\s*)?(?:dataset\s+(?:usado|utilizado|used)|fonte\s+t[eé]cnica|technical\s+source)\s*:/i;
 
+function formatNumberedSteps(answer: string): string {
+  // Some model responses put "1)" after an introduction and keep every step in one paragraph.
+  // Only rewrite a sequence that contains at least two steps, leaving incidental numbers alone.
+  return answer.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g).map(part => {
+    if (/^(?:```|~~~)/.test(part) || !/(?:^|\s)1\)\s+/.test(part) || !/(?:^|\s)2\)\s+/.test(part)) return part;
+    let first = true;
+    return part.replace(/(^|[ \t])([1-9]\d?)\)[ \t]+/gm, (match, leading: string, number: string, offset: number) => {
+      const before = part.slice(0, offset);
+      const inline = before.slice(before.lastIndexOf("\n") + 1).trim().length > 0;
+      const prefix = first
+        ? before.trim() && !before.endsWith("\n\n") ? "\n\n" : ""
+        : inline ? "\n" : "";
+      first = false;
+      return `${prefix}${number}. `;
+    });
+  }).join("");
+}
+
 function plain(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
@@ -34,14 +52,14 @@ export function publicChatAnswer(answer: string, question = "", locale: Locale =
   if (askedForBusinessSource && /business-demography|get_open_data_dataset|inqu[eé]rito anual|annual enterprise survey|enqu[eê]te annuelle|INE Cabo Verde/i.test(answer)) {
     return t("chat.businessSource", undefined, locale);
   }
-  return answer.split("\n").filter(line => !internalLine.test(line)).map(line => {
+  return formatNumberedSteps(answer.split("\n").filter(line => !internalLine.test(line)).map(line => {
     // Keep the public institution while removing the catalog key from a source line.
     const datasetSource = line.match(/^(\s*(?:[-*•]\s*)?Fonte:\s*)dataset\s+[`"']?[\w-]+[`"']?\s*\(([^)]*)\)(.*)$/i);
     if (datasetSource) return `${datasetSource[1]}${datasetSource[2]}${datasetSource[3]}`;
     if (/^\s*(?:[-*•]\s*)?Fonte:\s*dataset\s+[`"']?[\w-]+[`"']?\s*$/i.test(line)) return "";
     if (/`get_[\w]+`|`business-demography`|`iae-\d{4}-[\w-]+`|view=["']records["']|\.xls\b/i.test(line)) return "";
     return line;
-  }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }).join("\n").replace(/\n{3,}/g, "\n\n").trim());
 }
 
 /** A usable answer can still be returned when one upstream tool reports a failure. */

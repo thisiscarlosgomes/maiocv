@@ -59,3 +59,19 @@ test("shows the backend answer when an optional data tool fails", () => {
   assert.equal(publicChatResponse({ toolEvents: payload.toolEvents }), "");
   assert.equal(publicChatResponse({ message: "   " }), "");
 });
+
+test("turns inline numbered itinerary steps into a Markdown list", () => {
+  const answer = `Passeio a pé pela Vila do Maio: 1) Igreja de Nossa Senhora da Luz — no centro.
+2) Sobrado — ao lado da igreja.
+3) Farol — no extremo sul.
+
+Fonte: VisitMaio.`;
+  assert.equal(publicChatAnswer(answer), `Passeio a pé pela Vila do Maio:
+
+1. Igreja de Nossa Senhora da Luz — no centro.
+2. Sobrado — ao lado da igreja.
+3. Farol — no extremo sul.
+
+Fonte: VisitMaio.`);
+  assert.equal(publicChatAnswer("Em 2024, 1) houve uma visita."), "Em 2024, 1) houve uma visita.");
+});
