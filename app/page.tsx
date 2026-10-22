@@ -58,7 +58,7 @@ export default async function Home() {
             <p className="hero-description">{copy("home.hero")}</p>
             <div className="button-row">
               <Button href="#iniciativas">{copy("home.explore")}</Button>
-              <Button href={localize(locale, "/mcp")} variant="light">
+              <Button href={localize(locale, "/chat")} variant="light">
                 {copy("cta.ask")}
               </Button>
             </div>
