@@ -63,9 +63,6 @@ export default async function McpPage() {
             {steps.map((step, i) => (
               <Reveal key={step} delay={i * 0.08}>
                 <article className="how-card">
-                  <div>
-                    <span>0{step}</span>
-                  </div>
                   <h3>{copy(`mcp.step${step}.title` as MessageKey)}</h3>
                   <p>{copy(`mcp.step${step}.text` as MessageKey)}</p>
                 </article>
@@ -85,7 +82,6 @@ export default async function McpPage() {
             <div className="context-list">
               {tips.map((tip) => (
                 <article key={tip}>
-                  <span>0{tip}</span>
                   <div>
                     <h3>{copy(`mcp.tip${tip}.title` as MessageKey)}</h3>
                     <p>{copy(`mcp.tip${tip}.text` as MessageKey)}</p>

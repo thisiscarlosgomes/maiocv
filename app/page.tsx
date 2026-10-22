@@ -1,6 +1,6 @@
 import { Button, Card, Section, SkipLink } from "maio-ui";
 import { HeadlineIcon } from "../components/headline-icon";
-import { MaioSlideshow } from "../components/maio-slideshow";
+import Image from "next/image";
 import Link from "next/link";
 import { Header, Footer } from "../components/site-shell";
 import { Reveal, HoverCard } from "../components/motion";
@@ -69,9 +69,17 @@ export default async function Home() {
             <div className="showcase-side">
               <PortalPreview locale={locale} />
             </div>
-            <MaioSlideshow locale={locale} />
+            <div className="showcase-photo">
+              <Image
+                src="/maioCover.png"
+                alt={copy("home.cover.alt")}
+                fill
+                sizes="(max-width: 700px) calc(100vw - 44px), 45vw"
+                priority
+              />
+            </div>
             <div className="showcase-side">
-              <McpPreview locale={locale} animatedQuestion />
+              <McpPreview locale={locale} />
             </div>
           </Reveal>
           <div className="ecosystem-label">
@@ -144,7 +152,7 @@ export default async function Home() {
               </div>
             </Reveal>
             <Reveal delay={0.12}>
-              <McpPreview locale={locale} />
+              <McpPreview locale={locale} animatedQuestion />
             </Reveal>
           </div>
         </Section>
