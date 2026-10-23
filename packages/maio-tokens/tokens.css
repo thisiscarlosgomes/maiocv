@@ -1,19 +1,19 @@
 :root {
-  --maio-ink: #171817;
-  --maio-muted: #71736f;
-  --maio-paper: #fbfbf8;
-  --maio-line: #e6e7e1;
-  --maio-blue: #243fb8;
-  --maio-lime: #dff58a;
-  --maio-focus: #4969f2;
-  --maio-focus-on-blue: #dff58a;
-  --maio-surface-data: #f2f5ec;
-  --maio-border-data: #dce2d3;
-  --maio-text-data: #52614b;
-  --maio-chip-bg: #f1f5eb;
-  --maio-chip-fg: #637554;
-  --maio-estimate-bg: #e8eddf;
-  --maio-estimate-fg: #606f4d;
+  --maio-ink: #111111;
+  --maio-muted: #6e6e73;
+  --maio-paper: #ffffff;
+  --maio-line: #e5e5e7;
+  --maio-blue: #111111;
+  --maio-lime: #e5e5e7;
+  --maio-focus: #111111;
+  --maio-focus-on-blue: #ffffff;
+  --maio-surface-data: #f5f5f7;
+  --maio-border-data: #dedee1;
+  --maio-text-data: #56565b;
+  --maio-chip-bg: #f5f5f7;
+  --maio-chip-fg: #5c5c61;
+  --maio-estimate-bg: #ededf0;
+  --maio-estimate-fg: #4e4e53;
   --maio-error: #9d4c36;
 
   --ink: var(--maio-ink);

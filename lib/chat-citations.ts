@@ -19,7 +19,8 @@ function citationsFromList(raw: unknown[]): Citation[] {
     if (typeof record.name !== "string" || !record.name.trim()) return [];
     return [{
       name: record.name,
-      href: typeof record.href === "string" ? record.href : undefined,
+      href: typeof record.href === "string" ? record.href
+        : /\bvisit\s?maio\b/i.test(record.name) ? "https://visitmaio.com/" : undefined,
       kind: typeof record.kind === "string" ? record.kind : undefined,
     }];
   });

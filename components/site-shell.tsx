@@ -58,15 +58,18 @@ export async function Footer() {
           <span>maio.cv</span>
         </Reveal>
       }
-      meta={[copy("footer.place"), copy("footer.copyright", { year: new Date().getFullYear() })]}
+      meta={[
+        <span key="maintainer">{copy("footer.maintained")} <a href="https://maioazul.com">{copy("footer.studio")}</a></span>,
+        copy("footer.copyright", { year: new Date().getFullYear() }),
+      ]}
+      legal={{
+        label: copy("footer.legal"),
+        links: [
+          { href: localize(locale, "/privacy"), label: copy("footer.privacy") },
+          { href: localize(locale, "/terms"), label: copy("footer.terms") },
+        ],
+      }}
       tools={<InstallApp locale={locale} />}
-      credit={
-        <>
-          {copy("footer.credit")}
-          <br />
-          <a href="https://maioazul.com">{copy("footer.studio")}</a>
-        </>
-      }
     />
   );
 }

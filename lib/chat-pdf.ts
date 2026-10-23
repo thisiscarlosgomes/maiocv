@@ -50,7 +50,7 @@ export async function saveChatAnswerPdf({ question, answer, citations, example, 
   const newPage = () => { pdf.addPage(); y = 30; };
   const ensureSpace = (needed: number) => { if (y + needed > bottom) newPage(); };
   const write = (content: string, options: { size?: number; bold?: boolean; color?: [number, number, number]; indent?: number; gap?: number; href?: string } = {}) => {
-    const { size = 10, bold = false, color = [28, 31, 27], indent = 0, gap = 3, href } = options;
+    const { size = 10, bold = false, color = [28, 28, 30], indent = 0, gap = 3, href } = options;
     pdf.setFont("helvetica", bold ? "bold" : "normal");
     pdf.setFontSize(size);
     pdf.setTextColor(...color);
@@ -65,7 +65,7 @@ export async function saveChatAnswerPdf({ question, answer, citations, example, 
     y += gap;
   };
 
-  const muted: [number, number, number] = [92, 104, 92];
+  const muted: [number, number, number] = [110, 110, 115];
   const blue: [number, number, number] = [39, 68, 170];
   write(labels.question.toUpperCase(), { size: 8, bold: true, color: muted, gap: 4 });
   write(question, { size: 18, bold: true, gap: 10 });
@@ -104,7 +104,7 @@ export async function saveChatAnswerPdf({ question, answer, citations, example, 
         break;
       case "thematicBreak":
         ensureSpace(6);
-        pdf.setDrawColor(220, 225, 218);
+        pdf.setDrawColor(229, 229, 231);
         pdf.line(margin + indent, y, width - margin, y);
         y += 6;
         break;
@@ -133,10 +133,10 @@ export async function saveChatAnswerPdf({ question, answer, citations, example, 
     pdf.rect(0, 0, width, 4, "F");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12);
-    pdf.setTextColor(28, 31, 27);
+    pdf.setTextColor(28, 28, 30);
     pdf.text("maio.cv", margin, 19);
     pdf.link(margin, 10, 28, 12, { url: "https://www.maio.cv" });
-    pdf.setDrawColor(220, 225, 218);
+    pdf.setDrawColor(229, 229, 231);
     pdf.line(margin, height - 19, width - margin, height - 19);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);

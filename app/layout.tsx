@@ -32,7 +32,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
   colorScheme: "light",
-  themeColor: "#fbfbf8",
+  themeColor: "#ffffff",
 };
 export default async function RootLayout({
   children,

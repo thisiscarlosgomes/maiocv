@@ -10,13 +10,13 @@ const base = "https://www.maio.cv";
 test("the sitemap contains canonical indexable pages in all supported languages", () => {
   assert.equal(htmlLang, "pt");
   assert.deepEqual(publicRoutes.map((route) => route.path), [
-    "/pt", "/pt/faq", "/pt/chat", "/pt/essenciais", "/pt/sources",
-    "/en", "/en/faq", "/en/chat", "/en/essentials", "/en/sources",
-    "/fr", "/fr/faq", "/fr/chat", "/fr/essentiels", "/fr/sources",
+    "/pt", "/pt/faq", "/pt/chat", "/pt/essenciais", "/pt/sources", "/pt/privacy", "/pt/terms",
+    "/en", "/en/faq", "/en/chat", "/en/essentials", "/en/sources", "/en/privacy", "/en/terms",
+    "/fr", "/fr/faq", "/fr/chat", "/fr/essentiels", "/fr/sources", "/fr/privacy", "/fr/terms",
   ]);
   const entries = sitemapEntries();
-  assert.equal(entries.length, 15);
-  assert.equal(new Set(entries.map(({ url }) => url)).size, 15);
+  assert.equal(entries.length, 21);
+  assert.equal(new Set(entries.map(({ url }) => url)).size, 21);
   for (const [index, entry] of entries.entries()) {
     const route = publicRoutes[index];
     assert.equal(entry.url, `${base}${route.path}`);

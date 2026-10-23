@@ -4,9 +4,10 @@ import { isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { remarkChatFollowUps } from "../lib/chat-followups";
+import { remarkVisitMaioLinks } from "../lib/chat-visitmaio";
 
-const plugins = [remarkGfm];
-const interactivePlugins = [remarkGfm, remarkChatFollowUps];
+const plugins = [remarkGfm, remarkVisitMaioLinks];
+const interactivePlugins = [remarkGfm, remarkVisitMaioLinks, remarkChatFollowUps];
 
 function visibleText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -49,9 +50,12 @@ export function ChatMarkdown({ content, onFollowUp, disabled = false }: {
           ),
           a: ({ href, children }) => {
             const external = /^https?:\/\//i.test(href ?? "");
+            const visitMaio = /^https:\/\/(?:www\.)?visitmaio\.com\/?$/i.test(href ?? "");
             return (
-              <a href={href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}>
+              <a href={href} className={visitMaio ? "chat-visitmaio-link" : undefined}
+                target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}>
                 {children}
+                {visitMaio ? <><span aria-hidden="true"> ↗</span><span className="sr-only"> (opens in a new tab)</span></> : null}
               </a>
             );
           },

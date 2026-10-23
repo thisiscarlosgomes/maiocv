@@ -12,6 +12,9 @@ test("a live answer is uncited only when the response declares an empty citation
     { name: "CV Interilhas", href: "https://www.cvinterilhas.cv/routesschedules", kind: "published-schedule" },
   ]);
   assert.equal(isUncited({ citations: [{ name: "CV Interilhas" }] }), false);
+  assert.deepEqual(citationsFrom({ citations: [{ name: "VisitMaio heritage collection" }] }), [
+    { name: "VisitMaio heritage collection", href: "https://visitmaio.com/", kind: undefined },
+  ]);
 });
 
 test("an empty human contact URL hides the link", () => {

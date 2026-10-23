@@ -6,7 +6,7 @@ export const SITE_URL = "https://www.maio.cv";
 export const description = "Iniciativas digitais para a ilha do Maio, Cabo Verde: inteligência artificial, dados abertos, turismo e ferramentas para conhecer, investigar e aprender.";
 
 // Keep search results crawlable for noindex, but omit them from the sitemap.
-const pagePaths = ["/", "/faq", "/chat", "/essentials", "/sources"] as const;
+const pagePaths = ["/", "/faq", "/chat", "/essentials", "/sources", "/privacy", "/terms"] as const;
 
 function basePath(path: string): string {
   const bare = stripLocale(path.split(/[?#]/)[0] || "/").replace(/\/+$/, "") || "/";

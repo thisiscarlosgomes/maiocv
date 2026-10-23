@@ -7,6 +7,7 @@ export function SiteFooter({
   links,
   wordmark,
   meta,
+  legal,
   credit,
   tools,
 }: {
@@ -14,7 +15,8 @@ export function SiteFooter({
   links: FooterLink[];
   wordmark: ReactNode;
   meta: ReactNode[];
-  credit: ReactNode;
+  legal?: { label: string; links: FooterLink[] };
+  credit?: ReactNode;
   tools?: ReactNode;
 }) {
   return (
@@ -34,8 +36,13 @@ export function SiteFooter({
           <span key={index}>{item}</span>
         ))}
       </div>
+      {legal ? (
+        <nav className="maio-footer-legal" aria-label={legal.label}>
+          {legal.links.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
+        </nav>
+      ) : null}
       {tools}
-      <p className="maio-footer-credit">{credit}</p>
+      {credit ? <p className="maio-footer-credit">{credit}</p> : null}
     </footer>
   );
 }

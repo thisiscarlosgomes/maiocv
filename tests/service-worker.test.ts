@@ -21,7 +21,7 @@ function harness({ offline = false, status = 200, installFails = false } = {}) {
   };
   vm.runInNewContext(source, {
     self: { location: { origin: "https://www.maio.cv" }, addEventListener: (name: string, fn: (event: Record<string, unknown>) => void) => handlers.set(name, fn) },
-    caches: { open: async () => cache, keys: async () => ["maio-offline-v0", "maio-offline-v1", "other-app"], delete: async (key: string) => { deleted.push(key); return true; } },
+    caches: { open: async () => cache, keys: async () => ["maio-offline-v0", "maio-offline-v1", "maio-offline-v2", "other-app"], delete: async (key: string) => { deleted.push(key); return true; } },
     fetch: async (request: WorkerRequest) => { fetched.push(request); if (offline) throw new TypeError("Offline"); return new Response("Fresh response", { status }); },
     URL, Response,
   });
@@ -44,7 +44,7 @@ test("pre-caches only the offline shell and preserves unrelated origin caches", 
   await worker.lifecycle("install");
   assert.deepEqual(worker.added, ["/offline.html", "/offline.css", "/offline.js"]);
   await worker.lifecycle("activate");
-  assert.deepEqual(worker.deleted, ["maio-offline-v0"]);
+  assert.deepEqual(worker.deleted, ["maio-offline-v0", "maio-offline-v1"]);
 });
 
 test("failed offline assets prevent a broken worker from replacing the current one", async () => {

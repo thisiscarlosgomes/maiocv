@@ -1,10 +1,10 @@
-:root { color-scheme: light; font-family: system-ui, sans-serif; color: #171916; background: #fbfbf8; }
+:root { color-scheme: light; font-family: system-ui, sans-serif; color: #111111; background: #ffffff; }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
 main { max-width: 560px; }
 .brand { color: inherit; font-size: 32px; font-weight: 600; letter-spacing: -.06em; text-decoration: none; }
-.brand span { color: #243fb8; }
+.brand span { color: #111111; }
 h1 { margin: 48px 0 16px; font-size: clamp(32px, 7vw, 48px); font-weight: 500; line-height: 1.1; letter-spacing: -.04em; }
-p { color: #60665c; font-size: 18px; line-height: 1.6; }
-.button { display: inline-flex; align-items: center; min-height: 48px; margin-top: 16px; padding: 12px 24px; border-radius: 30px; background: #171916; color: white; text-decoration: none; }
-a:focus-visible { outline: 3px solid #4b63fa; outline-offset: 5px; }
+p { color: #666666; font-size: 18px; line-height: 1.6; }
+.button { display: inline-flex; align-items: center; min-height: 48px; margin-top: 16px; padding: 12px 24px; border-radius: 30px; background: #111111; color: white; text-decoration: none; }
+a:focus-visible { outline: 3px solid #111111; outline-offset: 5px; }
