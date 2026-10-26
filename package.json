@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "vercel:prepare": "node scripts/prepare-vercel.mjs"
+    "vercel:prepare": "node scripts/prepare-vercel.mjs",
+    "test": "node --test tests/*.test.ts",
+    "eval:plan": "node --test --test-reporter=spec tests/plan-evals.test.ts",
+    "eval:plan:live": "PLAN_EVAL_LIVE=1 node --test --test-reporter=spec tests/plan-evals.test.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.122",

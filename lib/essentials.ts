@@ -181,3 +181,18 @@ async function loadPayments(fetchImpl: typeof fetch, retrievedAt: string): Promi
     return unavailable("official-statistic", paymentsSource, retrievedAt);
   }
 }
+
+/** Every published sailing in the portal payload, any date (the source usually covers one day). */
+export async function loadSailings(fetchImpl: typeof fetch): Promise<Sailing[]> {
+  try {
+    const body = asRecord(await (await fetchImpl(`${portal}/api/schedules/boats`)).json());
+    const rows = Array.isArray(body.schedules) ? body.schedules : [];
+    return rows.flatMap((row) => {
+      const item = asRecord(row);
+      if (typeof item.date !== "string" || typeof item.departure !== "string" || typeof item.from !== "string" || typeof item.to !== "string") return [];
+      return [{ from: item.from, to: item.to, departure: item.departure, date: item.date }];
+    });
+  } catch {
+    return [];
+  }
+}
