@@ -1708,3 +1708,9 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-act select { min-height: 44px; border: 0; background: transparent; color: var(--pm-muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
 .plan-act:focus-visible, .plan-act select:focus-visible { outline: 2px solid var(--pm-ink); outline-offset: 2px; }
 .plan-act-select { padding: 0; text-decoration: none; } .plan-act-select select { width: auto; max-width: 160px; padding: 0 6px; }
+.plan-sheet, .plan-sim { border: 1px solid var(--pm-line, #ddd); border-radius: 16px; padding: 14px; margin: 10px 0; background: #fff; display: grid; gap: 8px; }
+.plan-sheet h3 { margin: 0; font-size: 16px; }
+.plan-sheet label { display: grid; gap: 4px; font-size: 13px; color: var(--pm-muted); }
+.plan-sheet input { min-height: 44px; border: 1px solid var(--pm-line, #ccc); border-radius: 12px; padding: 0 12px; font: inherit; font-size: 16px; }
+.plan-sim-label { margin: 0; font-size: 12px; color: var(--pm-muted); }
+.plan-outbox { margin: 0; white-space: pre-wrap; font: 13px/1.4 ui-monospace, monospace; background: #e7f6ee; border-radius: 10px; padding: 10px; }

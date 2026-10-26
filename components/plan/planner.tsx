@@ -7,6 +7,7 @@ import { planStrings } from "../../lib/trip-strings";
 import { samplePlan } from "../../lib/trip-sample";
 import { dayLabel } from "../../lib/trip-view";
 import { applyEdits, decodeTrip, encodeTrip, nextAlternative, type EditOp } from "../../lib/trip-edit";
+import { resolveRequest, sendRequest, simulateOperatorSend } from "../../lib/trip-request";
 import { DayTimeline, RoughAlert, SeaBadge, TripMap } from "./cards";
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -89,7 +90,24 @@ export function Planner({ locale }: { locale: Locale }) {
   }
 
   function submit(event: FormEvent) { event.preventDefault(); void send(draft); }
-  function onRequest(_item: PlanItem, _slot: string) {}
+  const [sheet, setSheet] = useState<{ item: PlanItem; slot: string; guests: number; name: string; whatsapp: string } | null>(null);
+  const [outbox, setOutbox] = useState<string | null>(null);
+  function onRequest(item: PlanItem, slot: string) {
+    if (item.kind !== "experience") return;
+    setSheet({ item, slot, guests: (plan?.party.adults ?? 2) + (plan?.party.kids ?? 0), name: "", whatsapp: "" });
+  }
+  function submitRequest(event: FormEvent) {
+    event.preventDefault();
+    if (!plan || !sheet) return;
+    const r = sendRequest(plan, { dayIndex: day, itemId: sheet.item.id, slot: sheet.slot, guests: sheet.guests, name: sheet.name || undefined, whatsapp: sheet.whatsapp || undefined });
+    if ("error" in r) { setNotice(r.error); return; }
+    simulateOperatorSend(r.message);
+    setOutbox(r.message.text);
+    setPlan(r.plan);
+    setSheet(null);
+  }
+  const pending = current_items().find((it) => it.request?.state === "sent");
+  function current_items() { return plan?.days[day]?.items ?? []; }
 
   const current = plan?.days[day];
   return (
@@ -126,6 +144,25 @@ export function Planner({ locale }: { locale: Locale }) {
             <SeaBadge day={current} s={s} />
             <RoughAlert day={current} s={s} />
             {notice && <p className="plan-error" role="alert">{notice}</p>}
+            {sheet && (
+              <form className="plan-sheet" onSubmit={submitRequest} aria-label={s.requestBooking}>
+                <h3>{s.requestBooking} · {sheet.slot}</h3>
+                <label>{s.guests}<input type="number" min={1} max={20} value={sheet.guests} onChange={(e) => setSheet({ ...sheet, guests: Number(e.target.value) })} /></label>
+                <label>{s.yourName}<input value={sheet.name} autoComplete="name" onChange={(e) => setSheet({ ...sheet, name: e.target.value })} /></label>
+                <label>{s.whatsapp}<input type="tel" value={sheet.whatsapp} autoComplete="tel" onChange={(e) => setSheet({ ...sheet, whatsapp: e.target.value })} /></label>
+                <p className="plan-lede">{s.nothingToPay}</p>
+                <div className="plan-actions"><button className="plan-pill plan-pill-action" type="submit">{s.sendRequest}</button><button type="button" className="plan-act" onClick={() => setSheet(null)}>{s.cancel}</button></div>
+              </form>
+            )}
+            {pending && (
+              <div className="plan-sim">
+                {outbox && <><p className="plan-sim-label">{s.simulatedMsg}</p><pre className="plan-outbox">{outbox}</pre></>}
+                <div className="plan-actions">
+                  <button type="button" className="plan-pill" onClick={() => plan && setPlan(resolveRequest(plan, day, pending.id, "confirm"))}>{s.simConfirm}</button>
+                  <button type="button" className="plan-pill" onClick={() => plan && setPlan(resolveRequest(plan, day, pending.id, "decline"))}>{s.simDecline}</button>
+                </div>
+              </div>
+            )}
             <DayTimeline day={current} locale={locale} s={s} onRequest={onRequest} renderActions={renderActions} />
             <TripMap day={current} locale={locale} s={s} />
             {plan.unmet.length > 0 && <p className="plan-unmet"><strong>{s.unmet}:</strong> {plan.unmet.join(", ")}</p>}

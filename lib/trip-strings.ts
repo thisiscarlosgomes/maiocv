@@ -1,6 +1,7 @@
 import type { Locale } from "./locale.ts";
 
 const en = {
+  guests: "Guests", yourName: "Your name", whatsapp: "WhatsApp", nothingToPay: "Nothing to pay now. The operator confirms on WhatsApp.", sendRequest: "Send request", cancel: "Cancel", simConfirm: "Simulate: operator confirms", simDecline: "Simulate: operator declines", otherTimes: "Other times", simulatedMsg: "Simulated WhatsApp to operator (not sent)", 
   title: "Plan your days on Maio", lede: "Test build. Tell the concierge how many days you have, and we'll plan around the sea.",
   placeholder: "e.g. 3 days, calm water, one boat trip", send: "Send", thinking: "Planning…", error: "The planner is unavailable. Try again.",
   yourTrip: "Your trip", empty: "Your plan will appear here as cards.", example: "example", exampleData: "Prices, times and slots are example data.",
@@ -18,6 +19,7 @@ type Strings = typeof en;
 
 const pt: Strings = {
   ...en,
+  guests: "Pessoas", yourName: "O seu nome", whatsapp: "WhatsApp", nothingToPay: "Nada a pagar agora. O operador confirma por WhatsApp.", sendRequest: "Enviar pedido", cancel: "Cancelar", simConfirm: "Simular: operador confirma", simDecline: "Simular: operador recusa", otherTimes: "Outros horários", simulatedMsg: "WhatsApp simulado ao operador (não enviado)", 
   title: "Planeie os seus dias no Maio", lede: "Versão de teste. Diga ao concierge quantos dias tem e planeamos à volta do mar.",
   placeholder: "ex. 3 dias, mar calmo, uma saída de barco", send: "Enviar", thinking: "A planear…", error: "O planeador não está disponível. Tente de novo.",
   yourTrip: "A sua viagem", empty: "O seu plano aparece aqui em cartões.", example: "exemplo", exampleData: "Preços, horários e vagas são dados de exemplo.",
@@ -32,6 +34,7 @@ const pt: Strings = {
 };
 const fr: Strings = {
   ...en,
+  guests: "Personnes", yourName: "Votre nom", whatsapp: "WhatsApp", nothingToPay: "Rien à payer maintenant. L'opérateur confirme sur WhatsApp.", sendRequest: "Envoyer", cancel: "Annuler", simConfirm: "Simuler : confirmé", simDecline: "Simuler : refusé", otherTimes: "Autres horaires", simulatedMsg: "WhatsApp simulé à l'opérateur (non envoyé)", 
   title: "Planifiez vos jours à Maio", lede: "Version de test. Dites au concierge combien de jours vous avez, on planifie selon la mer.",
   placeholder: "ex. 3 jours, mer calme, une sortie en bateau", send: "Envoyer", thinking: "Planification…", error: "Le planificateur est indisponible. Réessayez.",
   yourTrip: "Votre voyage", empty: "Votre plan apparaîtra ici en cartes.", example: "exemple", exampleData: "Prix, horaires et créneaux sont des exemples.",

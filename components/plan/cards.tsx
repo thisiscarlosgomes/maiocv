@@ -30,6 +30,9 @@ export function ItemCard({ item, locale, s, actions, onRequest }: {
         <p className="plan-card-meta">{v.meta}</p>
         {v.price && <p className="plan-card-price">{v.price} <Chip tone="estimate">{s.example}</Chip></p>}
         {state !== "none" && <p className={`plan-status plan-status-${state}`}>{s.status[state]} · {item.request!.slot}</p>}
+        {state === "declined" && !!item.request!.alternatives?.length && (
+          <div className="plan-slots" aria-label={s.otherTimes}>{item.request!.alternatives!.map((a) => (
+            <button key={a.date + a.slot} type="button" className="plan-pill" onClick={() => onRequest?.(item, a.slot)}>{a.date.slice(8)}/{a.date.slice(5, 7)} {a.slot}</button>))}</div>)}
         {v.kind === "experience" && state === "none" && (
           <div className="plan-card-row">
             {v.slots.map((slot) => (
