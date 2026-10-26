@@ -1,12 +1,23 @@
-import { PLACES, experience, food, place, type PlanDay, type PlanItem, type SeaDay } from "./trip.ts";
+import { PLACES, distanceKm, experience, food, place, type PlanDay, type PlanItem, type SeaDay } from "./trip.ts";
 import type { Locale } from "./locale.ts";
 import type { PlanStrings } from "./trip-strings.ts";
 
-export const EUR_TO_CVE = 110.265;
 const intl: Record<Locale, string> = { pt: "pt-PT", en: "en-GB", fr: "fr-FR" };
 
 export function dayLabel(date: string, locale: Locale): string {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString(intl[locale], { weekday: "short", day: "numeric", timeZone: "UTC" }).replace(".", "");
+}
+
+export function dayTitle(date: string, locale: Locale): string {
+  const t = new Date(`${date}T12:00:00Z`).toLocaleDateString(intl[locale], { weekday: "long", day: "numeric", timeZone: "UTC" });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+export function dateRange(days: PlanDay[], locale: Locale): string {
+  const fmt = (d: string, o: Intl.DateTimeFormatOptions) => new Date(`${d}T12:00:00Z`).toLocaleDateString(intl[locale], { ...o, timeZone: "UTC" });
+  const first = days[0].date, last = days[days.length - 1].date;
+  return first === last ? fmt(first, { weekday: "short", day: "numeric", month: "short" })
+    : `${fmt(first, { weekday: "short", day: "numeric" })} – ${fmt(last, { weekday: "short", day: "numeric", month: "short" })}`;
 }
 
 export function duration(min: number, s: PlanStrings): string {
@@ -15,34 +26,67 @@ export function duration(min: number, s: PlanStrings): string {
   return m ? `${h} ${s.h} ${m}` : `${h} ${s.h}`;
 }
 
-export function cve(eur: number): string {
-  return `${String(Math.round(eur * EUR_TO_CVE)).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} CVE`;
-}
-
+export type Operator = { name: string; bookingUrl: string; whatsapp: string; phone: string };
 export type CardView = {
-  kind: PlanItem["kind"]; title: string; meta: string; image: string | null; slots: string[];
-  price: string | null; lat: number | null; lon: number | null; link: string | null; seaDependent: boolean;
+  kind: PlanItem["kind"]; title: string; meta: string; description: string; location: string; image: string | null;
+  lat: number | null; lon: number | null; link: string | null; seaDependent: boolean; operator: Operator | null;
 };
 
-/** Everything a card shows, derived only from fixture data. Returns null for unknown ids. */
+function typeLabel(e: { kind: string; boat: boolean }, s: PlanStrings) {
+  return e.boat ? s.boat : e.kind === "sea" ? s.seaKind : s.experience;
+}
+
+export const osm = (lat: number, lon: number) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}`;
+
+/** Everything a card or detail sheet shows, derived only from fixture data. No prices. Returns null for unknown ids. */
 export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardView | null {
   if (item.kind === "experience") {
     const e = experience(item.refId); if (!e) return null;
     const p = place(e.placeId)!;
-    return { kind: item.kind, title: e.title, meta: `${duration(e.example.durationMin, s)} · ${e.location}`, image: e.image, slots: e.example.slots,
-      price: `${s.from} €${e.example.priceEur} · ${cve(e.example.priceEur)} · ${s.payOnIsland}`, lat: p.lat, lon: p.lon, link: e.sourceUrl, seaDependent: e.seaDependent };
+    return { kind: item.kind, title: e.title, meta: `${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, description: locale === "pt" ? e.description.pt : e.description.en,
+      location: e.location, image: e.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: e.seaDependent, operator: e.operator ?? null };
   }
   if (item.kind === "food") {
     const f = food(item.refId); if (!f) return null;
     const p = place(f.placeId)!;
-    return { kind: item.kind, title: f.title, meta: `${s.lunch} · ${f.location}`, image: f.image, slots: [], price: null, lat: p.lat, lon: p.lon, link: f.sourceUrl, seaDependent: false };
+    return { kind: item.kind, title: f.title, meta: `${s.lunch} · ${f.location}`, description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
+      image: f.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "place") {
     const p = place(item.refId); if (!p) return null;
-    return { kind: item.kind, title: locale === "pt" ? p.name.pt : p.name.en, meta: `${p.category === "beach" ? s.beach : s.place} · ${p.location}`, image: p.image, slots: [], price: null,
-      lat: p.lat, lon: p.lon, link: `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=14/${p.lat}/${p.lon}`, seaDependent: false };
+    return { kind: item.kind, title: locale === "pt" ? p.name.pt : p.name.en, meta: `${p.category === "beach" ? s.beach : s.place} · ${p.location}`, description: "", location: p.location,
+      image: p.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
-  return { kind: "transport", title: item.refId === "ferry" ? s.ferry : s.flight, meta: item.note ?? "", image: null, slots: [], price: null, lat: null, lon: null, link: null, seaDependent: false };
+  return { kind: "transport", title: item.refId === "ferry" ? s.ferry : s.flight, meta: item.note ?? "", description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
+}
+
+/**
+ * Operator contact rule (spec v2): only when the operator has no booking site or app AND we hold
+ * a WhatsApp or phone from Visit Maio data. Otherwise nothing, and never a booking link instead.
+ */
+export function contactLinks(op: Operator | null): { whatsapp: string | null; call: string | null } | null {
+  if (!op || op.bookingUrl) return null;
+  const wa = op.whatsapp.replace(/\D/g, ""), tel = op.phone.replace(/[^\d+]/g, "");
+  if (!wa && !tel) return null;
+  return { whatsapp: wa ? `https://wa.me/${wa}` : null, call: tel ? `tel:${tel}` : null };
+}
+
+function itemPoint(i: PlanItem) {
+  const ref = i.kind === "experience" ? place(experience(i.refId)?.placeId ?? "") : i.kind === "food" ? place(food(i.refId)?.placeId ?? "") : i.kind === "place" ? place(i.refId) : undefined;
+  return ref ? { lat: ref.lat, lon: ref.lon } : null;
+}
+
+/** "3 stops · 25 min driving" (walking when everything is close and there's no car). Straight-line estimate. */
+export function daySummary(day: PlanDay, s: PlanStrings, hasCar: boolean): string {
+  const stops = day.items.filter((i) => i.kind !== "transport");
+  const pts = stops.map(itemPoint).filter((p): p is { lat: number; lon: number } => !!p);
+  let km = 0;
+  for (let i = 1; i < pts.length; i += 1) km += distanceKm(pts[i - 1], pts[i]);
+  const walk = !hasCar && km < 3;
+  const min = Math.max(5, Math.round(((km * 1.3) / (walk ? 4.5 : 40)) * 12) * 5);
+  const parts = [`${stops.length} ${stops.length === 1 ? s.stop : s.stops}`];
+  if (pts.length > 1) parts.push(`${min} ${s.min} ${walk ? s.walking : s.driving}`);
+  return parts.join(" · ");
 }
 
 export function seaLine(sea: SeaDay | null, s: PlanStrings): string {

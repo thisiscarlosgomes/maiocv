@@ -20,11 +20,12 @@ export function planInstructions(today: string, current: TripPlan | null): strin
     `Today in Cabo Verde is ${weekday(today)} ${today}. Resolve relative dates like "Friday" to the next such date.`,
     "Always reply in the guest's language (pt, en or fr) and set locale to match.",
     "For a new trip call propose_itinerary once. Default: start tomorrow, 2 adults, no car, 3 days.",
-    "Use only experience ids returned by search_experiences. Never invent places, operators, prices or times.",
+    "Use only experience ids returned by search_experiences. Never invent places, operators, contacts or times.",
     "If the guest asks for something that search_experiences does not return (for example nightlife, diving or a dolphin cruise), put it in unmet and say plainly that we don't list it yet.",
     "Ferry or flight arrival: set arrival with dayIndex. Use get_transport for published times; if none are published say so.",
     "To change an existing plan call edit_itinerary with the smallest set of operations (item ids are in the current plan). Do not rebuild the plan. Days are 0-based.",
-    "Booking is a free request, not a payment: the operator confirms on WhatsApp and guests pay on the island. Prices are examples in this test.",
+    "You do not book anything and you never mention prices. If asked, say guests arrange directly with the operator; the plan shows a contact only when we have one.",
+    "Edits happen only through you: for a lazier day use retime for later starts and swap far stops for closer ones; for a sunset retime the last stop to about 17:30.",
     "Reply in 2 to 4 short sentences. The plan is shown as cards, so do not list every item.",
     current ? `Current plan (JSON): ${JSON.stringify(current)}` : "There is no plan yet.",
   ].join("\n");
@@ -45,13 +46,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   const tools = {
     search_experiences: tool({
-      description: "List bookable experiences, food places and beaches on Maio from Visit Maio data. Returns ids to use in the plan.",
+      description: "List experiences, food places and beaches on Maio from Visit Maio data. Returns ids to use in the plan.",
       inputSchema: z.object({ kind: z.enum(["sea", "land", "food", "any"]).default("any"), query: z.string().max(60).optional() }),
       execute: async ({ kind, query }) => {
         const q = query?.toLowerCase();
         const match = (text: string) => !q || q.split(/\s+/).some((w) => w.length > 2 && text.toLowerCase().includes(w));
         const exps = kind === "food" ? [] : EXPERIENCES.filter((e) => (kind === "any" || e.kind === kind) && match(`${e.title} ${e.description.en} ${e.description.pt}`))
-          .map((e) => ({ id: e.id, title: e.title, kind: e.kind, location: e.location, seaDependent: e.seaDependent, boat: e.boat, minAge: e.example.minAge, slots: e.example.slots, examplePriceEur: e.example.priceEur }));
+          .map((e) => ({ id: e.id, title: e.title, kind: e.kind, location: e.location, seaDependent: e.seaDependent, boat: e.boat, minAge: e.example.minAge, slots: e.example.slots, durationMin: e.example.durationMin }));
         const eats = kind === "food" || kind === "any" ? FOOD.filter((f) => match(`${f.title} ${f.description.en}`)).map((f) => ({ id: f.id, title: f.title, location: f.location })) : [];
         toolEvents.push({ name: "search_experiences", ok: true, arguments: { kind, query } });
         return { experiences: exps, food: eats, note: exps.length + eats.length ? undefined : "Nothing matches in Visit Maio data." };
@@ -87,7 +88,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       },
     }),
     edit_itinerary: tool({
-      description: "Change the current plan with minimal operations: swap an item for another id of the same kind, move an item to another day, or remove it.",
+      description: "Change the current plan with minimal operations: swap an item for another id of the same kind, move an item to another day, retime it, or remove it.",
       inputSchema: z.object({ ops: z.array(EditOpSchema).min(1).max(5) }),
       execute: async ({ ops }) => {
         if (!plan) { toolEvents.push({ name: "edit_itinerary", ok: false }); return { error: "No plan yet" }; }

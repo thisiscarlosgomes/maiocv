@@ -1,7 +1,7 @@
 // Normalize Visit Maio's public data into lib/trip-data.json for the /plan test.
 // Usage: node scripts/build-trip-fixture.mjs /path/to/visitmaio
 // Real fields come from visitmaio/public/data. Everything under `example` is invented
-// for the test (prices, durations, slots, age limits, pickup) and must be replaced
+// for the test (durations, slots, age limits, pickup) and must be replaced
 // with operator-confirmed values before launch.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -38,15 +38,15 @@ const anchor = {
 };
 // Invented test values, keyed by experience id. Marked example: true in the output.
 const example = {
-  "blue-ondaazul-maio": { kind: "sea", seaDependent: true, priceEur: 45, durationMin: 120, slots: ["09:00", "15:00"], minAge: 8, pickup: true },
-  "blue-maioazul-jetski": { kind: "sea", seaDependent: true, priceEur: 60, durationMin: 30, slots: ["10:00", "11:00", "16:00"], minAge: 16, pickup: false },
-  "blue-beach-volley-camp": { kind: "land", seaDependent: false, priceEur: 15, durationMin: 90, slots: ["17:00"], minAge: 6, pickup: false },
-  "blue-rental-quad-big-game": { kind: "land", seaDependent: false, priceEur: 70, durationMin: 180, slots: ["09:00", "14:00"], minAge: 18, pickup: true },
-  "blue-sport-fishing-big-game": { kind: "sea", seaDependent: true, boat: true, priceEur: 90, durationMin: 240, slots: ["08:00"], minAge: 10, pickup: true },
-  "blue-maio-offroad": { kind: "land", seaDependent: false, priceEur: 55, durationMin: 240, slots: ["09:00"], minAge: 6, pickup: true },
-  "trek-001": { kind: "land", seaDependent: false, priceEur: 35, durationMin: 240, slots: ["07:30"], minAge: 10, pickup: true },
-  "guia-001": { kind: "land", seaDependent: false, priceEur: 40, durationMin: 180, slots: ["09:00", "14:30"], minAge: 0, pickup: true },
-  "guia-002": { kind: "land", seaDependent: false, priceEur: 20, durationMin: 120, slots: ["10:00", "16:00"], minAge: 0, pickup: false },
+  "blue-ondaazul-maio": { kind: "sea", seaDependent: true, durationMin: 120, slots: ["09:00", "15:00"], minAge: 8, pickup: true },
+  "blue-maioazul-jetski": { kind: "sea", seaDependent: true, durationMin: 30, slots: ["10:00", "11:00", "16:00"], minAge: 16, pickup: false },
+  "blue-beach-volley-camp": { kind: "land", seaDependent: false, durationMin: 90, slots: ["17:00"], minAge: 6, pickup: false },
+  "blue-rental-quad-big-game": { kind: "land", seaDependent: false, durationMin: 180, slots: ["09:00", "14:00"], minAge: 18, pickup: true },
+  "blue-sport-fishing-big-game": { kind: "sea", seaDependent: true, boat: true, durationMin: 240, slots: ["08:00"], minAge: 10, pickup: true },
+  "blue-maio-offroad": { kind: "land", seaDependent: false, durationMin: 240, slots: ["09:00"], minAge: 6, pickup: true },
+  "trek-001": { kind: "land", seaDependent: false, durationMin: 240, slots: ["07:30"], minAge: 10, pickup: true },
+  "guia-001": { kind: "land", seaDependent: false, durationMin: 180, slots: ["09:00", "14:30"], minAge: 0, pickup: true },
+  "guia-002": { kind: "land", seaDependent: false, durationMin: 120, slots: ["10:00", "16:00"], minAge: 0, pickup: false },
 };
 
 const experiences = [];
@@ -66,12 +66,17 @@ for (const group of groups) {
       sourceUrl: item.source_url ?? item.instagram_url ?? item.facebook_url ?? item.map_url ?? null,
       group: group.slug,
     };
+    // Operator contact, only from Visit Maio data. Blank means the UI shows nothing.
+    // bookingUrl: the operator's own (non-social) website; Instagram/Facebook are not booking sites.
+    const site = item.source_url && !/instagram|facebook|tripadvisor/i.test(item.source_url) ? item.source_url : "";
+    const digits = String(item.phone ?? "").replace(/\D/g, "");
+    const operator = { name: base.title, bookingUrl: site, whatsapp: "", phone: digits.length === 7 ? `+238${digits}` : "" };
     if (group.slug === "food") food.push(base);
     else {
       const ex = example[item.id];
       if (!ex) throw new Error(`No example values for ${item.id}`);
       const { kind, seaDependent, boat = false, ...rest } = ex;
-      experiences.push({ ...base, kind, seaDependent, boat, example: { ...rest, isExample: true } });
+      experiences.push({ ...base, kind, seaDependent, boat, operator, example: { ...rest, isExample: true } });
     }
   }
 }

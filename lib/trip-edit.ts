@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { EXPERIENCES, FOOD, PLACES, experience, food, place, type PlanItem, type TripPlan } from "./trip.ts";
+import { experience, food, place, type PlanItem, type TripPlan } from "./trip.ts";
 
 export const EditOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("swap"), itemId: z.string(), refId: z.string().describe("New experience, food or place id of the same kind") }),
   z.object({ op: z.literal("move"), itemId: z.string(), toDay: z.number().int().min(0).max(6).describe("0-based day index") }),
   z.object({ op: z.literal("remove"), itemId: z.string() }),
+  z.object({ op: z.literal("retime"), itemId: z.string(), start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("New start time HH:MM, e.g. a later, lazier start") }),
 ]);
 export type EditOp = z.infer<typeof EditOpSchema>;
 
@@ -35,13 +36,19 @@ export function applyEdits(input: TripPlan, ops: EditOp[]): { plan: TripPlan; er
     const day = plan.days[at.d];
     const item = day.items[at.i];
     if (op.op === "remove") { day.items.splice(at.i, 1); continue; }
+    if (op.op === "retime") {
+      if (item.kind === "transport") { errors.push("retime: arrivals keep their published time"); continue; }
+      day.items[at.i] = { ...item, start: op.start };
+      day.items.sort((a, b) => toMin(a.start) - toMin(b.start));
+      continue;
+    }
     if (op.op === "swap") {
       if (!known(item.kind, op.refId)) { errors.push(`swap: ${op.refId} is not a known ${item.kind}`); continue; }
       const next: PlanItem = { ...item, refId: op.refId };
       if (item.kind === "experience") {
         const e = experience(op.refId)!;
         const slot = e.example.slots.find((s) => s === item.start) ?? e.example.slots.reduce((best, s) => Math.abs(toMin(s) - toMin(item.start)) < Math.abs(toMin(best) - toMin(item.start)) ? s : best);
-        Object.assign(next, { start: slot, durationMin: e.example.durationMin, request: { state: "none", slot, guests: item.request?.guests ?? plan.party.adults + plan.party.kids } });
+        Object.assign(next, { start: slot, durationMin: e.example.durationMin });
       }
       if (seaRisk(plan, at.d, next)) { errors.push(`swap: ${op.refId} needs calm sea and day ${at.d + 1} is rough`); continue; }
       day.items[at.i] = next;
@@ -54,28 +61,10 @@ export function applyEdits(input: TripPlan, ops: EditOp[]): { plan: TripPlan; er
     day.items.splice(at.i, 1);
     const target = plan.days[op.toDay];
     if (target.items.length >= 8) { day.items.splice(at.i, 0, item); errors.push(`move: day ${op.toDay + 1} is full`); continue; }
-    const moved = item.request && item.request.state !== "none" ? { ...item, request: { ...item.request, state: "none" as const } } : item;
-    target.items.push(moved);
+    target.items.push(item);
     target.items.sort((a, b) => toMin(a.start) - toMin(b.start));
   }
   return { plan, errors };
-}
-
-/** Next unused alternative of the same kind, for the Swap button. */
-export function nextAlternative(plan: TripPlan, item: PlanItem): string | null {
-  const used = new Set(plan.days.flatMap((d) => d.items.map((i) => i.refId)));
-  const dayIndex = plan.days.findIndex((d) => d.items.some((i) => i.id === item.id));
-  const rough = plan.days[dayIndex]?.sea?.status === "rough";
-  const pool = item.kind === "experience" ? EXPERIENCES.filter((e) => !rough || !e.seaDependent).map((e) => e.id)
-    : item.kind === "food" ? FOOD.map((f) => f.id)
-    : item.kind === "place" ? PLACES.filter((p) => p.category === place(item.refId)?.category).map((p) => p.id)
-    : [];
-  const start = pool.indexOf(item.refId);
-  for (let k = 1; k <= pool.length; k += 1) {
-    const candidate = pool[(start + k) % pool.length];
-    if (!used.has(candidate)) return candidate;
-  }
-  return null;
 }
 
 /** Items that differ between two plans, as "day:id" keys. Used to assert minimal edits. */

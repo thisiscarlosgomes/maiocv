@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { runPlanAgent } from "../lib/plan-agent.ts";
-import { applyEdits, changedItems, decodeTrip, encodeTrip, nextAlternative } from "../lib/trip-edit.ts";
+import { applyEdits, changedItems, decodeTrip, encodeTrip } from "../lib/trip-edit.ts";
 import { parseTripPlan, unknownRefs } from "../lib/trip.ts";
 import { samplePlan } from "../lib/trip-sample.ts";
 import { NOW, fakeFetch } from "./plan/fixtures.ts";
@@ -48,12 +48,12 @@ test("remove drops one item; input is not mutated", () => {
   assert.equal(JSON.stringify(plan), before);
 });
 
-test("swap button picks an unused alternative of the same kind", () => {
-  const item = plan.days[2].items[0];
-  const alt = nextAlternative(plan, item)!;
-  assert.ok(alt && alt !== item.refId);
-  const used = plan.days.flatMap((d) => d.items.map((i) => i.refId));
-  assert.ok(!used.includes(alt));
+test("retime changes one item's start and keeps the day sorted", () => {
+  const { plan: next, errors } = applyEdits(plan, [{ op: "retime", itemId: "d2-exp", start: "09:30" }]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(changedItems(plan, next), ["d2-exp"]);
+  const starts = next.days[2].items.map((i) => i.start);
+  assert.deepEqual(starts, [...starts].sort());
 });
 
 test("share link round-trips the plan, including non-ASCII text", () => {

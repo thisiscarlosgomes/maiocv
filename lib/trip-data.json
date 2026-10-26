@@ -16,8 +16,13 @@
    "kind": "sea",
    "seaDependent": true,
    "boat": false,
+   "operator": {
+    "name": "onda azul · surf school",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
    "example": {
-    "priceEur": 45,
     "durationMin": 120,
     "slots": [
      "09:00",
@@ -43,8 +48,13 @@
    "kind": "sea",
    "seaDependent": true,
    "boat": false,
+   "operator": {
+    "name": "Jet Ski",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
    "example": {
-    "priceEur": 60,
     "durationMin": 30,
     "slots": [
      "10:00",
@@ -71,8 +81,13 @@
    "kind": "land",
    "seaDependent": false,
    "boat": false,
+   "operator": {
+    "name": "Beach Volley Camp",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
    "example": {
-    "priceEur": 15,
     "durationMin": 90,
     "slots": [
      "17:00"
@@ -97,8 +112,13 @@
    "kind": "land",
    "seaDependent": false,
    "boat": false,
+   "operator": {
+    "name": "Rental Quad (Big Game)",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
    "example": {
-    "priceEur": 70,
     "durationMin": 180,
     "slots": [
      "09:00",
@@ -124,8 +144,13 @@
    "kind": "sea",
    "seaDependent": true,
    "boat": true,
+   "operator": {
+    "name": "Sport Fishing (Big Game)",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
    "example": {
-    "priceEur": 90,
     "durationMin": 240,
     "slots": [
      "08:00"
@@ -150,8 +175,13 @@
    "kind": "land",
    "seaDependent": false,
    "boat": false,
+   "operator": {
+    "name": "Maio Offroad",
+    "bookingUrl": "https://www.offroadmaio.com/",
+    "whatsapp": "",
+    "phone": ""
+   },
    "example": {
-    "priceEur": 55,
     "durationMin": 240,
     "slots": [
      "09:00"
@@ -176,8 +206,13 @@
    "kind": "land",
    "seaDependent": false,
    "boat": false,
+   "operator": {
+    "name": "Mountain Tour",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": "+2389717235"
+   },
    "example": {
-    "priceEur": 35,
     "durationMin": 240,
     "slots": [
      "07:30"
@@ -202,8 +237,13 @@
    "kind": "land",
    "seaDependent": false,
    "boat": false,
+   "operator": {
+    "name": "J&Tour",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": "+2389708809"
+   },
    "example": {
-    "priceEur": 40,
     "durationMin": 180,
     "slots": [
      "09:00",
@@ -229,8 +269,13 @@
    "kind": "land",
    "seaDependent": false,
    "boat": false,
+   "operator": {
+    "name": "Porto Inglês Tour",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": "+2389577157"
+   },
    "example": {
-    "priceEur": 20,
     "durationMin": 120,
     "slots": [
      "10:00",

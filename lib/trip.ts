@@ -2,7 +2,6 @@ import { z } from "zod";
 import data from "./trip-data.json" with { type: "json" };
 
 export const LocaleSchema = z.enum(["pt", "en", "fr"]);
-export const RequestStateSchema = z.enum(["none", "sent", "confirmed", "declined"]);
 export const SeaStatusSchema = z.enum(["calm", "moderate", "rough", "unknown"]);
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -15,15 +14,6 @@ export const SeaDaySchema = z.object({
   source: z.string(),
 });
 
-export const BookingRequestSchema = z.object({
-  state: RequestStateSchema,
-  slot: time,
-  guests: z.number().int().min(1).max(20),
-  name: z.string().max(80).optional(),
-  whatsapp: z.string().max(30).optional(),
-  alternatives: z.array(z.object({ date: isoDate, slot: time })).max(3).optional(),
-});
-
 export const ItemKindSchema = z.enum(["experience", "place", "food", "transport"]);
 export const PlanItemSchema = z.object({
   id: z.string().min(1).max(40),
@@ -33,7 +23,6 @@ export const PlanItemSchema = z.object({
   start: time,
   durationMin: z.number().int().min(0).max(720),
   note: z.string().max(200).optional(),
-  request: BookingRequestSchema.optional(),
 });
 
 export const PlanDaySchema = z.object({
@@ -56,7 +45,6 @@ export type TripPlan = z.infer<typeof TripPlanSchema>;
 export type PlanDay = z.infer<typeof PlanDaySchema>;
 export type PlanItem = z.infer<typeof PlanItemSchema>;
 export type SeaDay = z.infer<typeof SeaDaySchema>;
-export type BookingRequest = z.infer<typeof BookingRequestSchema>;
 
 export type Experience = (typeof data.experiences)[number];
 export type Food = (typeof data.food)[number];

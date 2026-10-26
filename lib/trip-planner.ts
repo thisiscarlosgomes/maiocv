@@ -116,7 +116,7 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     const afternoon = exp?.example.slots.find((s) => toMin(s) >= Math.max(clock, toMin("14:30")));
     const book = (slot: string) => {
       if (!exp!.seaDependent) land += 1;
-      items.push({ id: `d${i}-exp`, kind: "experience", refId: exp!.id, start: slot, durationMin: exp!.example.durationMin, request: { state: "none", slot, guests: req.adults + req.kids } });
+      items.push({ id: `d${i}-exp`, kind: "experience", refId: exp!.id, start: slot, durationMin: exp!.example.durationMin });
     };
     if (exp && morning) { book(morning); clock = toMin(morning) + exp.example.durationMin; }
     if (foodPool.length && clock <= toMin("15:00")) {

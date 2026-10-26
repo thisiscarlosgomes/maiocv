@@ -2,7 +2,8 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { samplePlan } from "../lib/trip-sample.ts";
 import { planStrings } from "../lib/trip-strings.ts";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, cve, dayLabel, dayPins, seaLine } from "../lib/trip-view.ts";
+import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayLabel, dayPins, daySummary, seaLine } from "../lib/trip-view.ts";
+import { EXPERIENCES } from "../lib/trip.ts";
 
 const plan = samplePlan("en");
 const s = planStrings.en;
@@ -13,20 +14,38 @@ test("sample trip keeps the sea outing off the rough day", () => {
   assert.deepEqual(seaDays, [false, false, true]);
 });
 
-test("every card in the sample renders from fixture data", () => {
+test("every card in the sample renders from fixture data, with no price anywhere", () => {
   for (const day of plan.days) for (const item of day.items) {
     const v = cardView(item, "en", s);
     assert.ok(v, item.refId);
     assert.ok(v.title.length > 0);
-    if (v.kind === "experience") {
-      assert.ok(v.slots.length > 0);
-      assert.match(v.price!, /^from €\d+ · [\d ]+ CVE · pay on the island$/);
-    }
+    assert.doesNotMatch(JSON.stringify(v), /€|CVE|price|pay on/i);
+  }
+  assert.doesNotMatch(JSON.stringify(plan), /price|request/i);
+  assert.doesNotMatch(JSON.stringify(s), /€|price|pay on the island|request booking/i);
+});
+
+test("fixture has no prices and operator contact comes only from Visit Maio data", () => {
+  for (const e of EXPERIENCES) {
+    assert.equal("priceEur" in e.example, false, e.id);
+    assert.ok(e.operator, e.id);
   }
 });
 
-test("experience card shows CVE at the fixed 110.265 rate", () => {
-  assert.equal(cve(45), "4 962 CVE");
+test("contact rule: booking site → nothing; no site + phone/WhatsApp → links; nothing known → nothing", () => {
+  assert.equal(contactLinks(null), null);
+  assert.equal(contactLinks({ name: "A", bookingUrl: "https://example.com", whatsapp: "2389000000", phone: "+2389000000" }), null);
+  assert.equal(contactLinks({ name: "A", bookingUrl: "", whatsapp: "", phone: "" }), null);
+  assert.deepEqual(contactLinks({ name: "A", bookingUrl: "", whatsapp: "", phone: "+238 970 88 09" }), { whatsapp: null, call: "tel:+2389708809" });
+  assert.deepEqual(contactLinks({ name: "A", bookingUrl: "", whatsapp: "+238 970 88 09", phone: "" }), { whatsapp: "https://wa.me/2389708809", call: null });
+  const offroad = EXPERIENCES.find((e) => e.id === "blue-maio-offroad")!;
+  assert.equal(contactLinks(offroad.operator), null, "has its own site");
+  const fishing = EXPERIENCES.find((e) => e.id === "blue-sport-fishing-big-game")!;
+  assert.equal(contactLinks(fishing.operator), null, "no contact in data");
+});
+
+test("day summary counts stops and estimates travel", () => {
+  assert.match(daySummary(plan.days[2], s, false), /^3 stops · \d+ min (driving|walking)$/);
 });
 
 test("unknown ids render nothing", () => {
