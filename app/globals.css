@@ -1703,3 +1703,8 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-map figcaption { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; color: var(--pm-muted); flex-wrap: wrap; }
 .plan-link { color: var(--pm-ink); text-decoration: underline; min-height: 44px; display: inline-flex; align-items: center; }
 .plan-unmet { margin: 0; padding: 12px 14px; border-radius: 14px; background: #EEF1F2; font-size: 14px; }
+.plan-actions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.plan-act { min-height: 44px; min-width: 44px; padding: 0 10px; border: 0; background: transparent; color: var(--pm-muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; display: inline-flex; align-items: center; }
+.plan-act select { min-height: 44px; border: 0; background: transparent; color: var(--pm-muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+.plan-act:focus-visible, .plan-act select:focus-visible { outline: 2px solid var(--pm-ink); outline-offset: 2px; }
+.plan-act-select { padding: 0; text-decoration: none; } .plan-act-select select { width: auto; max-width: 160px; padding: 0 6px; }

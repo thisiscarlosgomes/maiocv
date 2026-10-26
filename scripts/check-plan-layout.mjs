@@ -23,7 +23,7 @@ const send = (method, params = {}) => new Promise((r) => { id += 1; waiting.set(
 const probe = `(() => {
   const vw = window.innerWidth;
   const overflow = document.documentElement.scrollWidth - vw;
-  const small = [...document.querySelectorAll('.plan-main button, .plan-main a, .plan-main input')]
+  const small = [...document.querySelectorAll('.plan-main button, .plan-main a, .plan-main input, .plan-main select')]
     .filter((el) => el.offsetParent !== null && !el.closest('.plan-chips, .plan-tabs') || (el.closest('.plan-chips, .plan-tabs') && el.getBoundingClientRect().left < vw))
     .map((el) => ({ el, r: el.getBoundingClientRect() }))
     .filter(({ r }) => r.width > 0 && (r.height < 44 || r.width < 44))

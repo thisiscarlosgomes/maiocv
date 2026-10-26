@@ -4,6 +4,7 @@ import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from 
 import { loadSailings, type Sailing } from "./essentials.ts";
 import { EXPERIENCES, FOOD, experience, food, place, parseTripPlan, type TripPlan } from "./trip.ts";
 import { TripRequestSchema, buildPlan, seaStatus } from "./trip-planner.ts";
+import { EditOpSchema, applyEdits } from "./trip-edit.ts";
 
 export type ToolEvent = { name: string; ok: boolean; arguments?: unknown; dropped?: string[] };
 export type PlanAgentResult = { reply: string; plan: TripPlan | null; toolEvents: ToolEvent[] };
@@ -22,6 +23,7 @@ export function planInstructions(today: string, current: TripPlan | null): strin
     "Use only experience ids returned by search_experiences. Never invent places, operators, prices or times.",
     "If the guest asks for something that search_experiences does not return (for example nightlife, diving or a dolphin cruise), put it in unmet and say plainly that we don't list it yet.",
     "Ferry or flight arrival: set arrival with dayIndex. Use get_transport for published times; if none are published say so.",
+    "To change an existing plan call edit_itinerary with the smallest set of operations (item ids are in the current plan). Do not rebuild the plan. Days are 0-based.",
     "Booking is a free request, not a payment: the operator confirms on WhatsApp and guests pay on the island. Prices are examples in this test.",
     "Reply in 2 to 4 short sentences. The plan is shown as cards, so do not list every item.",
     current ? `Current plan (JSON): ${JSON.stringify(current)}` : "There is no plan yet.",
@@ -82,6 +84,17 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         plan = buildPlan({ request: clean, forecast: await forecast(clean.startDate, clean.days), sailings: await getSailings(), forecastSource: forecastSourceName });
         toolEvents.push({ name: "propose_itinerary", ok: true, arguments: request, ...(dropped.length ? { dropped } : {}) });
         return summarize(plan);
+      },
+    }),
+    edit_itinerary: tool({
+      description: "Change the current plan with minimal operations: swap an item for another id of the same kind, move an item to another day, or remove it.",
+      inputSchema: z.object({ ops: z.array(EditOpSchema).min(1).max(5) }),
+      execute: async ({ ops }) => {
+        if (!plan) { toolEvents.push({ name: "edit_itinerary", ok: false }); return { error: "No plan yet" }; }
+        const result = applyEdits(plan, ops);
+        toolEvents.push({ name: "edit_itinerary", ok: result.errors.length === 0, arguments: { ops } });
+        plan = result.plan;
+        return { errors: result.errors, plan: summarize(plan) };
       },
     }),
   };
