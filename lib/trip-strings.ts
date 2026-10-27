@@ -38,6 +38,8 @@ const en = {
   tags: { meal: "Meal", beach: "Beach", activity: "Activity", sunset: "Sunset", drinks: "Drinks", free: "Free time", travel: "Travel" },
   parts: { morning: "Morning", afternoon: "Afternoon", evening: "Evening", night: "Night" },
   drive: (n: number) => `~${n} min drive`,
+  walk: (n: number) => `~${n} min walk`,
+  taxi: (n: number) => `~${n} min by taxi (aluguer)`,
 };
 type Strings = typeof en;
 
@@ -47,6 +49,8 @@ const pt: Strings = {
   tags: { meal: "Refeição", beach: "Praia", activity: "Atividade", sunset: "Pôr do sol", drinks: "Bebidas", free: "Tempo livre", travel: "Viagem" },
   parts: { morning: "Manhã", afternoon: "Tarde", evening: "Fim de tarde", night: "Noite" },
   drive: (n: number) => `~${n} min de carro`,
+  walk: (n: number) => `~${n} min a pé`,
+  taxi: (n: number) => `~${n} min de táxi (aluguer)`,
   eyebrow: "Planeador · teste", title: "Planeie os seus dias no Maio", lede: "Diga quantos dias tem. Planeamos à volta do mar.",
   tripPlan: "Plano de viagem", greeting: "Olá! Quantos dias vai passar no Maio, e quando? Eu planeio em função do mar.", startChips: ["3 dias, ritmo calmo", "Um fim de semana com crianças"],
   placeholder: "Quantos dias, e quando?", followUp: "Mude o que quiser, é só pedir", send: "Enviar", thinking: "A ver a previsão do mar e os lugares…",
@@ -85,6 +89,8 @@ const fr: Strings = {
   tags: { meal: "Repas", beach: "Plage", activity: "Activité", sunset: "Coucher de soleil", drinks: "Verre", free: "Temps libre", travel: "Trajet" },
   parts: { morning: "Matin", afternoon: "Après-midi", evening: "Soir", night: "Nuit" },
   drive: (n: number) => `~${n} min en voiture`,
+  walk: (n: number) => `~${n} min à pied`,
+  taxi: (n: number) => `~${n} min en taxi (aluguer)`,
   eyebrow: "Planificateur · test", title: "Planifiez vos jours à Maio", lede: "Dites combien de jours vous avez. On planifie selon la mer.",
   tripPlan: "Plan de voyage", greeting: "Olá ! Combien de jours passez-vous à Maio, et quand ? Je planifie selon la mer.", startChips: ["3 jours, rythme tranquille", "Un week-end avec les enfants"],
   placeholder: "Combien de jours, et quand ?", followUp: "Changez ce que vous voulez, demandez", send: "Envoyer", thinking: "Prévision de la mer et lieux…",

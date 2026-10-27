@@ -65,6 +65,24 @@ export function driveMin(a: PlanItem, b: PlanItem): number | null {
   return km > 2 ? Math.max(5, Math.round(((km * 1.3) / 40) * 12) * 5) : null;
 }
 
+export type Hop = { mode: "drive" | "walk" | "taxi"; min: number };
+
+/** A vehicle is available on a day when the trip has a car, or the day includes a vehicle rental (e.g. Rental Quad). */
+export function dayHasVehicle(day: PlanDay, hasCar: boolean): boolean {
+  return hasCar || day.items.some((i) => i.kind === "experience" && /rental/i.test(i.refId));
+}
+
+/** Between-stop hint. With a vehicle: drive time when stops are >2 km apart. Without: walk time when stops are >0.5 km apart and ≤30 min on foot (4.5 km/h), else taxi (aluguer) time. */
+export function hopBetween(a: PlanItem, b: PlanItem, vehicle: boolean): Hop | null {
+  if (vehicle) { const d = driveMin(a, b); return d === null ? null : { mode: "drive", min: d }; }
+  const p = itemPoint(a), q = itemPoint(b);
+  if (!p || !q) return null;
+  const km = distanceKm(p, q) * 1.3;
+  if (km < 0.65) return null;
+  const walk = Math.max(5, Math.round((km / 4.5) * 12) * 5);
+  return walk <= 30 ? { mode: "walk", min: walk } : { mode: "taxi", min: Math.max(5, Math.round((km / 40) * 12) * 5) };
+}
+
 export const osm = (lat: number, lon: number) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}`;
 
 /** Island data has a few site-relative image paths (e.g. "/experiences/…") that only exist on visitmaio.com. Make them absolute; drop anything that isn't http(s). */

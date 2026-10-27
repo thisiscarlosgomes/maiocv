@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, driveMin, partOfDay, timeSpan } from "../../lib/trip-view";
+import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, dayHasVehicle, hopBetween, partOfDay, timeSpan } from "../../lib/trip-view";
 
 /** A photo that falls back to the plain placeholder tile if it fails to load, so a bad URL never shows a broken-image icon. */
 export function SafeImg({ src, className, lazy }: { src: string | null; className?: string; lazy?: boolean }) {
@@ -52,16 +52,18 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
   );
 }
 
-export function DayStops({ day, locale, s, onOpen }: { day: PlanDay; locale: Locale; s: PlanStrings; onOpen?: (item: PlanItem, el: HTMLElement) => void }) {
+export function DayStops({ day, hasCar, locale, s, onOpen }: { day: PlanDay; hasCar: boolean; locale: Locale; s: PlanStrings; onOpen?: (item: PlanItem, el: HTMLElement) => void }) {
   const ferries = day.items.filter((i) => i.kind === "transport");
   const stops = day.items.filter((i) => i.kind !== "transport");
+  const vehicle = dayHasVehicle(day, hasCar);
   return (
     <>
       {ferries.length > 0 && <ol className="plan-ferries">{ferries.map((item) => <PlanStop key={item.id} item={item} locale={locale} s={s} />)}</ol>}
       <ol className="plan-stops">{stops.map((item, k) => {
-        const drive = k > 0 ? driveMin(stops[k - 1], item) : null;
+        const hop = k > 0 ? hopBetween(stops[k - 1], item, vehicle) : null;
+        const label = hop ? s[hop.mode](hop.min) : null;
         return [
-          drive ? <li key={`${item.id}-hop`} className="plan-hop mono" aria-label={s.drive(drive)}>{s.drive(drive)}</li> : null,
+          label ? <li key={`${item.id}-hop`} className="plan-hop mono" data-mode={hop!.mode} aria-label={label}>{label}</li> : null,
           <PlanStop key={item.id} item={item} locale={locale} s={s} onOpen={onOpen} />,
         ];
       })}</ol>
