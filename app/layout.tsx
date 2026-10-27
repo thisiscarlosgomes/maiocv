@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "../packages/maio-ui/maio-ui.css";
 import { currentLocale } from "../lib/request-locale";
@@ -14,6 +15,7 @@ const sans = localFont({
   variable: "--font-pp",
   display: "swap",
 });
+const mono = Geist_Mono({ subsets: ["latin"], weight: ["400"], variable: "--font-geist-mono", display: "swap" });
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: "maio.cv",
@@ -39,7 +41,7 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const locale = await currentLocale();
   return (
-    <html lang={localeHtmlLang(locale)} className={sans.variable}>
+    <html lang={localeHtmlLang(locale)} className={`${sans.variable} ${mono.variable}`}>
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchemaFor(locale)).replace(/</g, "\\u003c") }} />
         {children}

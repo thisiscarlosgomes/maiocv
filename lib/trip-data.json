@@ -1,0 +1,1399 @@
+{
+ "source": "github.com/thisiscarlosgomes/visitmaio public/data",
+ "experiences": [
+  {
+   "id": "blue-ondaazul-maio",
+   "title": "onda azul · surf school",
+   "description": {
+    "pt": "Aulas de surf e acompanhamento no mar para todos os níveis, com orientação local e progressão segura nas ondas do Maio.",
+    "en": "Surf lessons and ocean coaching for all levels, with local guidance and safe progression in Maio waves."
+   },
+   "location": "Praia do Morro",
+   "placeId": "praia-do-morro",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773093178/499690905_17865420003391558_9051296291543258259_n_fhxlg7.jpg",
+   "sourceUrl": "https://www.instagram.com/ondaazul.maio",
+   "group": "blue-sports",
+   "kind": "sea",
+   "seaDependent": true,
+   "boat": false,
+   "operator": {
+    "name": "onda azul · surf school",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
+   "example": {
+    "durationMin": 120,
+    "slots": [
+     "09:00",
+     "15:00"
+    ],
+    "minAge": 8,
+    "pickup": true,
+    "isExample": true
+   }
+  },
+  {
+   "id": "blue-maioazul-jetski",
+   "title": "Jet Ski",
+   "description": {
+    "pt": "Passeios guiados de jet ski pela costa do Maio, combinando velocidade, paisagens e acesso a praias.",
+    "en": "Guided jet ski rides along Maio’s coast, combining speed, scenic views, and beach access points."
+   },
+   "location": "Praia de Bitche Rotcha",
+   "placeId": "praia-bitche-rotcha",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1770565396/maje_qkpbmi.jpg",
+   "sourceUrl": "https://www.instagram.com/maio__azul/",
+   "group": "blue-sports",
+   "kind": "sea",
+   "seaDependent": true,
+   "boat": false,
+   "operator": {
+    "name": "Jet Ski",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
+   "example": {
+    "durationMin": 30,
+    "slots": [
+     "10:00",
+     "11:00",
+     "16:00"
+    ],
+    "minAge": 16,
+    "pickup": false,
+    "isExample": true
+   }
+  },
+  {
+   "id": "blue-beach-volley-camp",
+   "title": "Beach Volley Camp",
+   "description": {
+    "pt": "Sessões e camp de vólei de praia à beira-mar, ideais para grupos ativos e evolução técnica.",
+    "en": "Beach volleyball sessions and camps by the sea, ideal for active groups and skill development."
+   },
+   "location": "Praia de Bitche Rotcha",
+   "placeId": "praia-bitche-rotcha",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1770466647/maioazul/camp/volley.jpg",
+   "sourceUrl": "https://www.instagram.com/maio__azul/",
+   "group": "blue-sports",
+   "kind": "land",
+   "seaDependent": false,
+   "boat": false,
+   "operator": {
+    "name": "Beach Volley Camp",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
+   "example": {
+    "durationMin": 90,
+    "slots": [
+     "17:00"
+    ],
+    "minAge": 6,
+    "pickup": false,
+    "isExample": true
+   }
+  },
+  {
+   "id": "blue-rental-quad-big-game",
+   "title": "Rental Quad (Big Game)",
+   "description": {
+    "pt": "Aluguer de quad para rotas independentes pela ilha, passando por dunas, vilas e miradouros costeiros.",
+    "en": "Quad rentals for independent island routes across dunes, villages, and coastal viewpoints."
+   },
+   "location": "Maio",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773135464/quad-C5uOImk5R97SK24U_fvwybn.avif",
+   "sourceUrl": null,
+   "group": "blue-sports",
+   "kind": "land",
+   "seaDependent": false,
+   "boat": false,
+   "operator": {
+    "name": "Rental Quad (Big Game)",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
+   "example": {
+    "durationMin": 180,
+    "slots": [
+     "09:00",
+     "14:00"
+    ],
+    "minAge": 18,
+    "pickup": true,
+    "isExample": true
+   }
+  },
+  {
+   "id": "blue-sport-fishing-big-game",
+   "title": "Sport Fishing (Big Game)",
+   "description": {
+    "pt": "Saídas de pesca desportiva com conhecimento local, focadas em espécies de alto-mar nas águas do Maio.",
+    "en": "Sport fishing outings with local know-how, targeting offshore species in Maio waters."
+   },
+   "location": "Maio",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773135464/pesca-e-noleggio-quad-isola-di-maio-3jlaY7bANPxgfKg4_q8ribz.avif",
+   "sourceUrl": null,
+   "group": "blue-sports",
+   "kind": "sea",
+   "seaDependent": true,
+   "boat": true,
+   "operator": {
+    "name": "Sport Fishing (Big Game)",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": ""
+   },
+   "example": {
+    "durationMin": 240,
+    "slots": [
+     "08:00"
+    ],
+    "minAge": 10,
+    "pickup": true,
+    "isExample": true
+   }
+  },
+  {
+   "id": "blue-maio-offroad",
+   "title": "Maio Offroad",
+   "description": {
+    "pt": "Onde a estrada termina, o Maio começa. Um percurso 4×4 pela ilha do Maio onde aventura, comunidade e natureza seguem o mesmo caminho.",
+    "en": "Where the road ends, Maio begins. A 4×4 route across Maio Island where adventure, community, and nature follow the same path."
+   },
+   "location": "Maio",
+   "placeId": "cidade-porto-ingles",
+   "image": "/experiences/blue-sports/maio-offroad.jpg",
+   "sourceUrl": "https://www.offroadmaio.com/",
+   "group": "blue-sports",
+   "kind": "land",
+   "seaDependent": false,
+   "boat": false,
+   "operator": {
+    "name": "Maio Offroad",
+    "bookingUrl": "https://www.offroadmaio.com/",
+    "whatsapp": "",
+    "phone": ""
+   },
+   "example": {
+    "durationMin": 240,
+    "slots": [
+     "09:00"
+    ],
+    "minAge": 6,
+    "pickup": true,
+    "isExample": true
+   }
+  },
+  {
+   "id": "trek-001",
+   "title": "Mountain Tour",
+   "description": {
+    "pt": "Uma experiência guiada de montanha com miradouros panorâmicos e conhecimento local dos trilhos.",
+    "en": "A guided mountain experience with panoramic viewpoints and local trail insights."
+   },
+   "location": "Maio",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773096597/WhatsApp_Image_2026-03-10_at_06.48.29_xr0npj.jpg",
+   "sourceUrl": "https://www.instagram.com/odjo_del_mar?igsh=MXBvNjA3a3F6cGplOA==",
+   "group": "guia",
+   "kind": "land",
+   "seaDependent": false,
+   "boat": false,
+   "operator": {
+    "name": "Mountain Tour",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": "+2389717235"
+   },
+   "example": {
+    "durationMin": 240,
+    "slots": [
+     "07:30"
+    ],
+    "minAge": 10,
+    "pickup": true,
+    "isExample": true
+   }
+  },
+  {
+   "id": "guia-001",
+   "title": "J&Tour",
+   "description": {
+    "pt": "Serviços de guia local para rotas de natureza, atividades de praia e experiências personalizadas pela ilha.",
+    "en": "Local guide services for nature routes, beach activities, and personalized island experiences."
+   },
+   "location": "Maio",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773094556/1afafcd9b06a-4545-4119-bbe4-00eb35e9f09c_vzswnp.jpg",
+   "sourceUrl": null,
+   "group": "guia",
+   "kind": "land",
+   "seaDependent": false,
+   "boat": false,
+   "operator": {
+    "name": "J&Tour",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": "+2389708809"
+   },
+   "example": {
+    "durationMin": 180,
+    "slots": [
+     "09:00",
+     "14:30"
+    ],
+    "minAge": 0,
+    "pickup": true,
+    "isExample": true
+   }
+  },
+  {
+   "id": "guia-002",
+   "title": "Porto Inglês Tour",
+   "description": {
+    "pt": "Tours guiados culturais e práticos a partir de Porto Inglês, ajustados ao seu ritmo de viagem.",
+    "en": "Cultural and practical guided tours from Porto Inglês, tailored to your travel pace."
+   },
+   "location": "Maio",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773096223/1232487510144_122102376212822456_8674878425658049036_n_kjzyxu.jpg",
+   "sourceUrl": "https://www.facebook.com/profile.php?id=61574673696863",
+   "group": "guia",
+   "kind": "land",
+   "seaDependent": false,
+   "boat": false,
+   "operator": {
+    "name": "Porto Inglês Tour",
+    "bookingUrl": "",
+    "whatsapp": "",
+    "phone": "+2389577157"
+   },
+   "example": {
+    "durationMin": 120,
+    "slots": [
+     "10:00",
+     "16:00"
+    ],
+    "minAge": 0,
+    "pickup": false,
+    "isExample": true
+   }
+  }
+ ],
+ "food": [
+  {
+   "id": "food-001",
+   "title": "Sete Sois Sete Luas",
+   "description": {
+    "pt": "Um lugar encantador para descobrir a comida autêntica do Maio e o sabor local.",
+    "en": "A charming place to discover authentic Maio food and genuine local taste."
+   },
+   "location": "Cidade do Porto Inglês",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773137292/sete_ge2b1t.jpg",
+   "sourceUrl": null,
+   "group": "food"
+  },
+  {
+   "id": "food-002",
+   "title": "Big Game Restaurant - Pizzeria",
+   "description": {
+    "pt": "Um espaço descontraído onde a cozinha italiana encontra a tradição cabo-verdiana.",
+    "en": "A casual dining spot where Italian cuisine meets Cape Verdean tradition."
+   },
+   "location": "Cidade do Porto Inglês",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773135401/biggame_lup1bb.avif",
+   "sourceUrl": null,
+   "group": "food"
+  },
+  {
+   "id": "food-003",
+   "title": "Bar restaurante Vasuza",
+   "description": {
+    "pt": "Uma ótima escolha para amantes de marisco, com peixe fresco, mariscos e pratos locais cheios de sabor.",
+    "en": "A top choice for seafood lovers, offering fresh fish, mariscos, and flavorful local dishes."
+   },
+   "location": "Calheta",
+   "placeId": "baxona-ribinha",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773136389/123484805851_537681939345849_550676790780552479_n_nu6mbj.jpg",
+   "sourceUrl": null,
+   "group": "food"
+  },
+  {
+   "id": "food-004",
+   "title": "Bar Bons Amigos",
+   "description": {
+    "pt": "Um bar desportivo popular e ponto de encontro acolhedor, conhecido sobretudo pela excelente moreia frita.",
+    "en": "A popular sports bar and friendly gathering place, best known for its outstanding fried moray eel."
+   },
+   "location": "Cidade do Porto Inglês",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773136515/1232533023731_1319638646182146_8164201092511629407_n_xqspcf.jpg",
+   "sourceUrl": null,
+   "group": "food"
+  },
+  {
+   "id": "food-005",
+   "title": "Nha Terra",
+   "description": {
+    "pt": "Um restaurante à beira-mar junto a Bitxe Rotcha, focado em sabores autênticos cabo-verdianos.",
+    "en": "A seafront restaurant near Bitxe Rotcha focused on authentic Cape Verdean flavors."
+   },
+   "location": "Cidade do Porto Inglês",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773137293/terra_mgwcp1.jpg",
+   "sourceUrl": "https://www.tripadvisor.com/Restaurant_Review-g2422862-d23967577-Reviews-Nha_Terra-Vila_do_Maio_Maio.html",
+   "group": "food"
+  },
+  {
+   "id": "food-006",
+   "title": "Enzo Caffe Pizza",
+   "description": {
+    "pt": "Um café e pizzaria junto ao mercado, com toque italiano na Vila do Maio.",
+    "en": "A market-side cafe and pizzeria with an Italian touch in Vila do Maio."
+   },
+   "location": "Cidade do Porto Inglês",
+   "placeId": "cidade-porto-ingles",
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1773138109/caption_tz6igm.jpg",
+   "sourceUrl": "https://www.tripadvisor.com.br/Restaurant_Review-g2422862-d12320062-Reviews-Enzo_Caffe_Pizza-Vila_do_Maio_Maio.html",
+   "group": "food"
+  }
+ ],
+ "places": [
+  {
+   "id": "lagoa",
+   "name": {
+    "pt": "Lagoa",
+    "en": "Lagoa"
+   },
+   "category": "historical_heritage",
+   "location": "Barreiro",
+   "lon": -23.1520342,
+   "lat": 15.1293489,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281460/places/lagoa.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "zona-humida-ribeira-lagoa",
+   "name": {
+    "pt": "Zona Húmida da Ribeira Lagoa (Lagoa Taínha)",
+    "en": "Wetlands of Ribeira Lagoa"
+   },
+   "category": "wetland",
+   "location": "Barreiro",
+   "lon": -23.14562203990161,
+   "lat": 15.144812417661598,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281463/places/rlagoa.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praias-boca-lagoa-seada",
+   "name": {
+    "pt": "Praias de Boca Lagoa e Seada",
+    "en": "Beaches of Boca Lagoa and Seada"
+   },
+   "category": "beach",
+   "location": "Barreiro",
+   "lon": -23.14279379222222,
+   "lat": 15.127017916666667,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281464/places/bocalagoa.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praias-guarda-santa-clara",
+   "name": {
+    "pt": "Praias de Guarda e Santa Clara",
+    "en": "Guarda and Santa Clara Beaches"
+   },
+   "category": "beach",
+   "location": "Alcatraz",
+   "lon": -23.095402545454547,
+   "lat": 15.226313672727274,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281466/places/praiaguarda.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praias-monte-branco-ribeira-baia",
+   "name": {
+    "pt": "Praias de Monte Branco a Ribeira Baía",
+    "en": "Monte Branco to Ribeira Baía Beaches"
+   },
+   "category": "beach",
+   "location": "Pilão Cão",
+   "lon": -23.114485335169487,
+   "lat": 15.193996154237283,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281467/places/praiamb.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "reserva-natural-lagoa-cimidor",
+   "name": {
+    "pt": "Reserva Natural da Lagoa Cimidor",
+    "en": "Natural Reserve of Lagoa Cimidor"
+   },
+   "category": "protected_area",
+   "location": "Ribeira D. João",
+   "lon": -23.0966607,
+   "lat": 15.165924,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281468/places/lagoacimidor.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "lagoa-cimidor",
+   "name": {
+    "pt": "Lagoa Cimidor",
+    "en": "Cimidor Lagoon"
+   },
+   "category": "wetland",
+   "location": "Ribeira D. João",
+   "lon": -23.0966607,
+   "lat": 15.165924,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281468/places/lagoacimidor.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-ponta-dos-flamingos",
+   "name": {
+    "pt": "Praia e Ponta dos Flamingos",
+    "en": "Beach and Headland of Flamingos"
+   },
+   "category": "beach",
+   "location": "Ribeira D. João",
+   "lon": -23.12134,
+   "lat": 15.1441919,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281470/places/flamengo.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "conjunto-urbano-ribeira-d-joao",
+   "name": {
+    "pt": "Ribeira D. João",
+    "en": "Village of Ribeira D. João"
+   },
+   "category": "settlement",
+   "location": "Ribeira D. João",
+   "lon": -23.12134,
+   "lat": 15.1441919,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281472/places/rj.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-sao-joao-ribeira-d-joao",
+   "name": {
+    "pt": "Capela de São João",
+    "en": "Chapel of São João"
+   },
+   "category": "religious_heritage",
+   "location": "Ribeira D. João",
+   "lon": -23.12134,
+   "lat": 15.1441919,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281473/places/capelarj.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "queijaria-ribeira-d-joao",
+   "name": {
+    "pt": "Queijaria de Ribeira D. João",
+    "en": "Cheese Factory of Ribeira D. João"
+   },
+   "category": "economic_activity",
+   "location": "Ribeira D. João",
+   "lon": -23.12134,
+   "lat": 15.1441919,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281474/places/queijorj.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praias-porto-ribeira-funda",
+   "name": {
+    "pt": "Praias de Porto e Ribeira Funda",
+    "en": "Beaches of Porto and Ribeira Funda"
+   },
+   "category": "beach",
+   "location": "Ribeira D. João",
+   "lon": -23.166673174074074,
+   "lat": 15.212226847222222,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287173/places/portopraia.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-joao-martinho",
+   "name": {
+    "pt": "Praia de João Martinho",
+    "en": "João Martinho Beach"
+   },
+   "category": "beach",
+   "location": "Ribeira D. João",
+   "lon": -23.12134,
+   "lat": 15.1441919,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287173/places/portopraia.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "ppbf-barreiro-figueira",
+   "name": {
+    "pt": "Paisagem Protegida de Barreiro e Figueira",
+    "en": "Protected Landscape of Barreiro and Figueira"
+   },
+   "category": "protected_area",
+   "location": "Barreiro and Figueira",
+   "lon": -23.14720900943396,
+   "lat": 15.139868616981133,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281480/places/protectedb.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "trapiches-grogue",
+   "name": {
+    "pt": "Trapiches de Grogue",
+    "en": "Trapiches of Grogue"
+   },
+   "category": "economic_activity",
+   "location": "Figueira and Ribeira of Chico Vaz",
+   "lon": -23.1515582,
+   "lat": 15.1597077,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281483/places/grogue.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "figueira-horta-village",
+   "name": {
+    "pt": "Figueira Horta",
+    "en": "Village of Figueira Horta"
+   },
+   "category": "settlement",
+   "location": "Figueira Horta",
+   "lon": -23.1515582,
+   "lat": 15.1597077,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281485/places/horta.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-cristo-rei",
+   "name": {
+    "pt": "Capela do Cristo Rei",
+    "en": "Chapel of Cristo Rei"
+   },
+   "category": "religious_heritage",
+   "location": "Figueira Horta",
+   "lon": -23.1515582,
+   "lat": 15.1597077,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281487/places/capelafigueira.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "figueira-seca-village",
+   "name": {
+    "pt": "Figueira Seca",
+    "en": "Village of Figueira Seca"
+   },
+   "category": "settlement",
+   "location": "Figueira Seca",
+   "lon": -23.1448847,
+   "lat": 15.1558583,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281490/places/seca.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "banda-riba-village",
+   "name": {
+    "pt": " Barreiro Banda Riba",
+    "en": "Village of Banda Riba"
+   },
+   "category": "settlement",
+   "location": "Ribeira do Barreiro",
+   "lon": -23.1601029,
+   "lat": 15.138182,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281491/places/bandariba.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-sagrada-familia",
+   "name": {
+    "pt": "Capela da Sagrada Família",
+    "en": "Chapel of Sagrada Família"
+   },
+   "category": "religious_heritage",
+   "location": "Barreiro Lém Varela",
+   "lon": -23.1607208,
+   "lat": 15.1350598,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281493/places/capelasagrada.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "lem-varela-village",
+   "name": {
+    "pt": "Barreiro Lém Varela",
+    "en": "Village of Lém Varela"
+   },
+   "category": "settlement",
+   "location": "BarreiroLém Varela",
+   "lon": -23.1607208,
+   "lat": 15.1350598,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281494/places/lemvarela.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "cadjetinha-morrinho-beach",
+   "name": {
+    "pt": "Praia da Cadjetinha de Morrinho",
+    "en": "Cadjetinha Beach of Morrinho"
+   },
+   "category": "beach",
+   "location": "Morrinho",
+   "lon": -23.22683617857143,
+   "lat": 15.26808277857143,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281496/places/praiacadjetinha.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "santana-beach",
+   "name": {
+    "pt": "Praia de Santana",
+    "en": "Beach of Santana"
+   },
+   "category": "beach",
+   "location": "Santana Bay",
+   "lon": -23.2071681,
+   "lat": 15.2880811,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281497/places/praiasantana.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "porto-cais-beach-port",
+   "name": {
+    "pt": "Praia e refúgio pesqueiro de Porto Cais",
+    "en": "Beach and Port of Porto Cais"
+   },
+   "category": "beach",
+   "location": "Porto Cais",
+   "lon": -23.224435646666667,
+   "lat": 15.273675793333334,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287192/places/portocais.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "terras-salgadas",
+   "name": {
+    "pt": "Terras Salgadas",
+    "en": "Terras Salgadas"
+   },
+   "category": "wetland",
+   "location": "Between Morrinho and Galeão",
+   "lon": -23.1845323,
+   "lat": 15.296436,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281500/places/terrassalgadas.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "galeao-beach-dunes",
+   "name": {
+    "pt": "Praia e Dunas de Galeão",
+    "en": "Beach and Dunes of Galeão"
+   },
+   "category": "beach",
+   "location": "Galeão",
+   "lon": -23.1369123,
+   "lat": 15.3124062,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281501/places/praiagaleao.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-real",
+   "name": {
+    "pt": "Praia Real",
+    "en": "Praia Real"
+   },
+   "category": "beach",
+   "location": "Between Porto Cais and Galeão, north of Cascabulho",
+   "lon": -23.1725926,
+   "lat": 15.269957,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281502/places/praiareal.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "ilheu-laje-branca",
+   "name": {
+    "pt": "Ilhéu de Laje Branca",
+    "en": "Islet of Laje Branca"
+   },
+   "category": "islet",
+   "location": "Off the northern coast of Maio, in front of Laje Branca",
+   "lon": -23.1369123,
+   "lat": 15.3124062,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1770354285/places/ilheu.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-santo-antonio",
+   "name": {
+    "pt": "Praia e Dunas de Santo António",
+    "en": "Beach and Dunes of Santo António"
+   },
+   "category": "beach",
+   "location": "2 km northeast of the village of Santo António",
+   "lon": -23.105905779999997,
+   "lat": 15.289949144,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281510/places/dunasst.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "montes-santo-antonio-chapeu-2",
+   "name": {
+    "pt": "Montes Santo António à Chapéu",
+    "en": "Mounts Santo António to Chapéu"
+   },
+   "category": "mountain",
+   "location": "Between the villages of Santo António and Cascabulho",
+   "lon": -23.1478007,
+   "lat": 15.2725398,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281511/places/stchapeu.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-refugio-praiona",
+   "name": {
+    "pt": "Praia e Refúgio Pesqueiro de Praiona",
+    "en": "Beach and Port of Praiona"
+   },
+   "category": "beach",
+   "location": "About 1 km east of the village of Praiona",
+   "lon": -23.10450210000001,
+   "lat": 15.271879942857144,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281512/places/praiona.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-goncalo-santo-antonio",
+   "name": {
+    "pt": "Praia Gonçalo e Santo António",
+    "en": "Villages of Praia Gonçalo and Santo António"
+   },
+   "category": "settlement",
+   "location": "Northeast of the island of Maio",
+   "lon": -23.1185598,
+   "lat": 15.2712344,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281512/places/pg.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-santo-antonio",
+   "name": {
+    "pt": "Capela de Santo António",
+    "en": "Chapel of Santo António"
+   },
+   "category": "religious_heritage",
+   "location": "Ribeira of Santo António",
+   "lon": -23.1230088,
+   "lat": 15.2751226,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281514/places/capelast.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "prainha-boca-ribeira",
+   "name": {
+    "pt": "Praias de Prainha e Boca Ribeira",
+    "en": "Prainha and Boca Ribeira Beaches"
+   },
+   "category": "beach",
+   "location": "About 2 km east of the village of Pedro Vaz",
+   "lon": -23.099940734224603,
+   "lat": 15.249291589572191,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281515/places/bocaribeira.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "pedro-vaz",
+   "name": {
+    "pt": " Pedro Vaz",
+    "en": "Village of Pedro Vaz"
+   },
+   "category": "settlement",
+   "location": "Northeast of the island of Maio",
+   "lon": -23.1158373,
+   "lat": 15.2473839,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281516/places/pv.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "paisagem-protegida-monte-penoso-monte-branco",
+   "name": {
+    "pt": "Paisagem Protegida de Monte Penoso e Monte Branco",
+    "en": "Protected Landscape of Monte Penoso and Monte Branco"
+   },
+   "category": "protected_area",
+   "location": "Eastern part of the interior massif of the island of Maio",
+   "lon": -23.12597675,
+   "lat": 15.2147852,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281517/places/montepenoso.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "monte-penoso",
+   "name": {
+    "pt": "Monte Penoso",
+    "en": "Mount Penoso"
+   },
+   "category": "mountain",
+   "location": "Eastern part of the interior massif of the island of Maio",
+   "lon": -23.1300798,
+   "lat": 15.2278226,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281517/places/montepenoso.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "monte-branco",
+   "name": {
+    "pt": "Monte Branco",
+    "en": "Mount Branco"
+   },
+   "category": "mountain",
+   "location": "West of Pilão Cão, in the interior of the island of Maio",
+   "lon": -23.1218737,
+   "lat": 15.2017478,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281520/places/montebranco.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-nossa-senhora-rosario-penoso",
+   "name": {
+    "pt": "Capela de Nossa Senhora do Rosário",
+    "en": "Chapel of Nossa Senhora do Rosário"
+   },
+   "category": "religious_heritage",
+   "location": "Next to Monte Penoso, eastern interior of the island of Maio",
+   "lon": -23.1300798,
+   "lat": 15.2278226,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281521/places/capelaalcatraz.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "alcatraz-pilao-cao",
+   "name": {
+    "pt": "Alcatraz e Pilão Cão",
+    "en": "Villages of Alcatraz and Pilão Cão"
+   },
+   "category": "settlement",
+   "location": "Eastern interior of the island of Maio, between Monte Penoso and Ribeira Lagoa",
+   "lon": -23.1042028,
+   "lat": 15.213302,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281522/places/alcapc.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-alcatraz-pilao-cao",
+   "name": {
+    "pt": "Capela de Alcatraz e Pilão Cão",
+    "en": "Chapel of Alcatraz and Pilão Cão"
+   },
+   "category": "religious_heritage",
+   "location": "Between the villages of Alcatraz and Pilão Cão, eastern interior of Maio",
+   "lon": -23.1042028,
+   "lat": 15.213302,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281524/places/capelaalc.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "morro-village",
+   "name": {
+    "pt": " Morro",
+    "en": "Village of Morro"
+   },
+   "category": "settlement",
+   "location": "Southwest of the island of Maio, 5 km north of Porto Inglês",
+   "lon": -23.2217424,
+   "lat": 15.1796575,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281525/places/conjuntomorro.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-nossa-senhora-fatima-morro",
+   "name": {
+    "pt": "Capela de Nossa Senhora de Fátima",
+    "en": "Chapel of Nossa Senhora de Fátima"
+   },
+   "category": "religious_heritage",
+   "location": "Centre of the village of Morro, opposite the main square",
+   "lon": -23.2217424,
+   "lat": 15.1796575,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281526/places/capelamorro.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "centro-ceramica-morro",
+   "name": {
+    "pt": "Centro de Cerâmica do Morro",
+    "en": "Pottery Centre of Morro"
+   },
+   "category": "economic_activity",
+   "location": "Morro",
+   "lon": -23.2217424,
+   "lat": 15.1796575,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281527/places/ceramicamorro.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "rnpm-praia-do-morro",
+   "name": {
+    "pt": "Reserva Natural da Praia do Morro",
+    "en": "Natural Reserve of Praia do Morro"
+   },
+   "category": "protected_area",
+   "location": "Morro",
+   "lon": -23.2320507,
+   "lat": 15.180635,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281528/places/praiadomorro.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-do-morro",
+   "name": {
+    "pt": "Praia do Morro",
+    "en": "Morro Beach"
+   },
+   "category": "beach",
+   "location": "Morro",
+   "lon": -23.2320507,
+   "lat": 15.180635,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281529/places/morrob.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "monte-batalha",
+   "name": {
+    "pt": "Monte Batalha",
+    "en": "Mount Batalha"
+   },
+   "category": "mountain",
+   "location": "West of the island of Maio",
+   "lon": -23.1858886,
+   "lat": 15.2019116,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281532/places/montebatalha.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "perimetro-florestal-calheta",
+   "name": {
+    "pt": "Perímetro Florestal de Calheta",
+    "en": "Forest of Calheta"
+   },
+   "category": "forest_area",
+   "location": "Between Mount Batalha and the villages of Morrinho and Cascabulho",
+   "lon": -23.1858886,
+   "lat": 15.2019116,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281533/places/florestacalheta.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "centro-zootecnico-calheta",
+   "name": {
+    "pt": "Centro Zootécnico",
+    "en": "Zootechnical Centre"
+   },
+   "category": "economic_activity",
+   "location": "Within the Forest of Calheta",
+   "lon": -23.1858886,
+   "lat": 15.2019116,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281534/places/centrozootecnico.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "ribona-lem-tavares",
+   "name": {
+    "pt": "Ribona e Lém Tavares (Calheta de Cima)",
+    "en": "Ribona and Lém Tavares (Upper Calheta)"
+   },
+   "category": "settlement",
+   "location": "Main road of Calheta, central area of the island of Maio",
+   "lon": -23.21115135,
+   "lat": 15.2289425,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281535/places/ribonacalheta.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-sao-jose-ribona",
+   "name": {
+    "pt": "Capela de São José",
+    "en": "Chapel of São José"
+   },
+   "category": "religious_heritage",
+   "location": "Central area of Ribona, near the square and Ribeira da Calheta",
+   "lon": -23.2112438,
+   "lat": 15.2296327,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281536/places/capelacalheta.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "centro-artesanato-calheta",
+   "name": {
+    "pt": "Centro de Artesanato da Calheta",
+    "en": "Artisan Centre of Calheta"
+   },
+   "category": "economic_activity",
+   "location": "Lém Tavares area, Calheta",
+   "lon": -23.2112107,
+   "lat": 15.2292429,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281537/places/centroart.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "baxona-ribinha",
+   "name": {
+    "pt": "Baxona e Ribinha (Calheta de Baixo)",
+    "en": "Baxona and Ribinha (Lower Calheta)"
+   },
+   "category": "settlement",
+   "location": "South-western end of Calheta, in front of Baxona Beach",
+   "lon": -23.2160701,
+   "lat": 15.22642185,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287245/places/baxona.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-baxona",
+   "name": {
+    "pt": "Praia de Baxona",
+    "en": "Baxona Beach"
+   },
+   "category": "beach",
+   "location": "Baxona area, south-western end of Calheta",
+   "lon": -23.216503,
+   "lat": 15.224127,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287245/places/baxona.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praias-soca-pau-seco",
+   "name": {
+    "pt": "Praias de Soca a Pau Seco",
+    "en": "Beaches of Soca to Pau Seco"
+   },
+   "category": "beach",
+   "location": "North of Calheta",
+   "lon": -23.2301176,
+   "lat": 15.2582025,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281543/places/pauseco.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "morrinho",
+   "name": {
+    "pt": " Morrinho",
+    "en": "Village of Morrinho"
+   },
+   "category": "settlement",
+   "location": "North-west of Maio Island",
+   "lon": -23.2043873,
+   "lat": 15.2655865,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281544/places/morinho.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-santa-ana-sao-joaquim",
+   "name": {
+    "pt": "Capela de Santa Ana e São Joaquim",
+    "en": "Chapel of Santa Ana and São Joaquim"
+   },
+   "category": "religious_heritage",
+   "location": "Centre of Morrinho village, next to the square",
+   "lon": -23.2043873,
+   "lat": 15.2655865,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281545/places/capelamorrinho.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "cruz-santana",
+   "name": {
+    "pt": "Cruz de Santana",
+    "en": "Santana Cross"
+   },
+   "category": "religious_heritage",
+   "location": "Northern Morrinho, along the old path to Santana Beach",
+   "lon": -23.2071681,
+   "lat": 15.2880811,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281546/places/cruzsantana.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "fornos-carvao-cascabulho",
+   "name": {
+    "pt": "Fornos de carvão",
+    "en": "Charcoal production"
+   },
+   "category": "economic_activity",
+   "location": "Rural area between Morrinho and Cascabulho",
+   "lon": -23.1725926,
+   "lat": 15.269957,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281547/places/carvao.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "cascabulho",
+   "name": {
+    "pt": " Cascabulho",
+    "en": "Village of Cascabulho"
+   },
+   "category": "settlement",
+   "location": "North-central Maio Island, between Morrinho and Santo António",
+   "lon": -23.1725926,
+   "lat": 15.269957,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281548/places/cascabulho.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "capela-nossa-senhora-socorro",
+   "name": {
+    "pt": "Capela de Nossa Senhora de Socorro",
+    "en": "Chapel of Nossa Senhora de Socorro"
+   },
+   "category": "religious_heritage",
+   "location": "Entrance of the village of Cascabulho",
+   "lon": -23.1725926,
+   "lat": 15.269957,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281548/places/capelac.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "parque-natural-norte-maio",
+   "name": {
+    "pt": "Parque Natural do Norte da Ilha do Maio",
+    "en": "Norte da Ilha do Maio Natural Park"
+   },
+   "category": "protected_area",
+   "location": "Northernmost part of Maio Island",
+   "lon": -23.175128582926828,
+   "lat": 15.299599234146346,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281549/places/parquenorte.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "dunas-do-morrinho",
+   "name": {
+    "pt": "Dunas do Morrinho",
+    "en": "Dunes of Morrinho"
+   },
+   "category": "dunes",
+   "location": "Approximately 1 km northwest of Morrinho",
+   "lon": -23.215604,
+   "lat": 15.276444,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287256/places/dunasmorrinho.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "zona-humida-casas-velhas",
+   "name": {
+    "pt": "Zona Húmida das Casas Velhas",
+    "en": "Wetlands of Casas Velhas"
+   },
+   "category": "wetland",
+   "location": "Between Cidade do Porto Inglês and the southern part of Barreiro",
+   "lon": -23.2112673,
+   "lat": 15.1375142,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281480/places/protectedb.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "casas-velhas",
+   "name": {
+    "pt": "Casas Velhas",
+    "en": "Casas Velhas"
+   },
+   "category": "historical_heritage",
+   "location": "North of Ribeira das Casas Velhas, about 3 km from Cidade do Porto Inglês",
+   "lon": -23.2112673,
+   "lat": 15.1375142,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281553/places/casasvelhas.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-djampadja",
+   "name": {
+    "pt": "Praia de Djampadja",
+    "en": "Djampadja Beach"
+   },
+   "category": "beach",
+   "location": "Southern part of the island, between Ponta Preta and Boca Lagoa",
+   "lon": -23.1607208,
+   "lat": 15.1350598,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281553/places/djampadja.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-ponta-preta",
+   "name": {
+    "pt": "Praia de Ponta Preta",
+    "en": "Ponta Preta Beach"
+   },
+   "category": "beach",
+   "location": "Southern end of Porto Inglês, just after the Ponta Preta headland",
+   "lon": -23.20317193,
+   "lat": 15.126350873333335,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287262/places/pontapreta.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "cidade-porto-ingles",
+   "name": {
+    "pt": "Cidade do Porto Inglês",
+    "en": "City of Porto Inglês"
+   },
+   "category": "settlement",
+   "location": "Southwest of Maio Island",
+   "lon": -23.2112673,
+   "lat": 15.1375142,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281555/places/vila2.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "farol-forte-sao-jose",
+   "name": {
+    "pt": "Farol (Forte de São José)",
+    "en": "Fort of São José"
+   },
+   "category": "historical_heritage",
+   "location": "Southern end of Avenida Amílcar Cabral, City of Porto Inglês",
+   "lon": -23.212674,
+   "lat": 15.136651,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287265/places/farol.webp",
+   "source": "AFIA"
+  },
+  {
+   "id": "igreja-nossa-senhora-da-luz",
+   "name": {
+    "pt": "Igreja de Nossa Senhora da Luz",
+    "en": "Church of Nossa Senhora da Luz"
+   },
+   "category": "religious_heritage",
+   "location": "Centre of the City of Porto Inglês",
+   "lon": -23.211449,
+   "lat": 15.137913,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281558/places/Igrejavila.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "sobrado-paicv",
+   "name": {
+    "pt": "Sobrado (Sede do PAICV)",
+    "en": "Townhouse (PAICV headquarters)"
+   },
+   "category": "historical_heritage",
+   "location": "Centre of the City of Porto Inglês, next to the Church of Nossa Senhora da Luz",
+   "lon": -23.211136,
+   "lat": 15.137416,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281559/places/Sobrado.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "montinho-de-lume",
+   "name": {
+    "pt": "Montinho de Lume",
+    "en": "Mount de Lume"
+   },
+   "category": "mountain",
+   "location": "Northern end of the City of Porto Inglês",
+   "lon": -23.2112673,
+   "lat": 15.1375142,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281561/places/Montinho.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "praia-bitche-rotcha",
+   "name": {
+    "pt": "Praia de Bitche Rotcha",
+    "en": "Bitche Rotcha Beach"
+   },
+   "category": "beach",
+   "location": "West of Porto Inglês, near the pier",
+   "lon": -23.21548963333333,
+   "lat": 15.140366133333336,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281555/places/vila2.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "rotcha",
+   "name": {
+    "pt": "Rotcha",
+    "en": "Rotcha"
+   },
+   "category": "beach",
+   "location": "West of Porto Inglês",
+   "lon": -23.213305,
+   "lat": 15.136882,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770288664/places/rotcha.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "cooperativa-producao-sal",
+   "name": {
+    "pt": "Cooperativa de Produção de Sal",
+    "en": "Salt Production Cooperative"
+   },
+   "category": "economic_activity",
+   "location": "Extreme north of Porto Inglês, on the access road to the pier",
+   "lon": -23.2112673,
+   "lat": 15.1375142,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281562/places/sal.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "ppspi-salinas-porto-ingles",
+   "name": {
+    "pt": "Paisagem Protegida das Salinas do Porto Inglês",
+    "en": "Protected Landscape of Salinas do Porto Inglês"
+   },
+   "category": "protected_area",
+   "location": "Between the port of Cidade do Porto Inglês, the airport and the village of Morro",
+   "lon": -23.218007259459466,
+   "lat": 15.14692070540541,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770287271/places/salinas.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "center-salinas-porto-ingles",
+   "name": {
+    "pt": "Salinas do Maio Interpretive Center",
+    "en": "Salinas Interpretive Center"
+   },
+   "category": "education_center",
+   "location": "Between the port of Cidade do Porto Inglês, the airport and the village of Morro",
+   "lon": -23.218007259459466,
+   "lat": 15.14692070540541,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281564/places/center.jpg",
+   "source": "AFIA"
+  },
+  {
+   "id": "praias-salina-bancona",
+   "name": {
+    "pt": "Praias da Salina e Bancona",
+    "en": "Salina and Bancona Beaches"
+   },
+   "category": "beach",
+   "location": "Southwest coast of Maio, between the port and Boca Morro",
+   "lon": -23.2277749219697,
+   "lat": 15.154959723484849,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/f_auto,q_auto/v1770281565/places/praiasalinas.png",
+   "source": "AFIA"
+  },
+  {
+   "id": "cadjetinha-vila-beach",
+   "name": {
+    "pt": "Praia de Cadjetinha",
+    "en": "Cadjetinha Beach"
+   },
+   "category": "beach",
+   "location": "Vila do Maio",
+   "lon": -23.211995838461537,
+   "lat": 15.135716392307693,
+   "image": "https://res.cloudinary.com/dhxfkhewr/image/upload/v1771156402/cadj_u4nbda.jpg",
+   "source": "Visit Maio"
+  }
+ ]
+}

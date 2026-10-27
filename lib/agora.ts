@@ -235,3 +235,28 @@ function numberOrNull(value: unknown): number | null {
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
+
+export type DailySea = { date: string; waveHeightM: number | null; windKmh: number | null; tempMaxC: number | null };
+
+/** Daily marine and wind forecast for trip planning (Open-Meteo, up to 7 days). */
+export async function loadDailyForecast(fetchImpl: typeof fetch, startDate: string, days: number): Promise<DailySea[]> {
+  const end = new Date(`${startDate}T12:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + Math.max(0, days - 1));
+  const range = `start_date=${startDate}&end_date=${end.toISOString().slice(0, 10)}&timezone=Atlantic%2FCape_Verde`;
+  const [marine, weather] = await Promise.all([
+    readJson(await fetchImpl(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&daily=wave_height_max&${range}`)).catch(() => null),
+    readJson(await fetchImpl(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=wind_speed_10m_max,temperature_2m_max&wind_speed_unit=kmh&${range}`)).catch(() => null),
+  ]);
+  const m = asRecord(asRecord(marine).daily);
+  const w = asRecord(asRecord(weather).daily);
+  const dates = Array.isArray(m.time) ? m.time : Array.isArray(w.time) ? w.time : [];
+  const at = (list: unknown, i: number) => (Array.isArray(list) && typeof list[i] === "number" ? list[i] as number : null);
+  return dates.filter((d): d is string => typeof d === "string").map((date, i) => ({
+    date,
+    waveHeightM: at(m.wave_height_max, i),
+    windKmh: at(w.wind_speed_10m_max, i),
+    tempMaxC: at(w.temperature_2m_max, i),
+  }));
+}
+
+export const forecastSourceName = openMeteo.name;
