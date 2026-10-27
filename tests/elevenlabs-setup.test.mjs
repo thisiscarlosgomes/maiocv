@@ -97,6 +97,29 @@ test('dry-run performs no provider mutations', async t => {
   assert.equal(state.writes().length, 0);
 });
 
+test('provisioning creates a private token-authenticated agent without a provider host allowlist', async t => {
+  const state = harness(t);
+  await main(['--apply']);
+  const created = state.calls.find(call => call.path === '/v1/convai/agents/create' && call.method === 'POST');
+  const auth = { enable_auth: true, allowlist: [], require_origin_header: false };
+  assert.deepEqual(created?.body.platform_settings.auth, auth);
+  assert.deepEqual(state.agents[0].platform_settings.auth, auth);
+});
+
+test('legacy combined token auth and host allowlisting blocks reuse without rewriting resources', async t => {
+  const agent = { agent_id: 'agent1', ...agentConfig('mcp1', 'river') };
+  agent.platform_settings.auth = {
+    enable_auth: true,
+    allowlist: ['localhost', '127.0.0.1', 'maio.cv', 'www.maio.cv'].map(hostname => ({ hostname })),
+    require_origin_header: true,
+  };
+  const previous = structuredClone(agent);
+  const state = harness(t, { agents: [agent], servers: [{ id: 'mcp1', config: serverConfig() }] });
+  await assert.rejects(() => main(['--apply']), /differs at agent\.platform_settings\.auth\.allowlist/);
+  assert.equal(state.writes().length, 0);
+  assert.deepEqual(state.agents[0], previous);
+});
+
 test('disabled workspace MCP blocks apply before mutations', async t => {
   const state = harness(t, { enabled: false });
   await assert.rejects(() => main(['--apply']), /MCP is disabled/);

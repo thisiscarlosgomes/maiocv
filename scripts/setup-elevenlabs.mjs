@@ -139,8 +139,8 @@ export function agentConfig(serverId, voiceId) {
     platform_settings: {
       auth: {
         enable_auth: true,
-        allowlist: ["localhost", "127.0.0.1", "maio.cv", "www.maio.cv"].map((hostname) => ({ hostname })),
-        require_origin_header: true,
+        allowlist: [],
+        require_origin_header: false,
       },
       call_limits: { agent_concurrency_limit: 2, daily_limit: 10, bursting_enabled: false },
       privacy: { record_voice: false, retention_days: 1, delete_audio: true, delete_transcript_and_pii: true, zero_retention_mode: false },
