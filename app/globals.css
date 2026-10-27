@@ -1756,17 +1756,17 @@ body:has(.chat-screen) { overflow: hidden; }
 @media (min-width: 701px) { .plan-sharebar { align-self: center; width: 560px; } }
 .plan-print { display: none; }
 @media print {
-  /* v3.3 print: A4, 16/16/20mm, normal flow, running footer, no maps, rows never split. */
-  @page { size: A4 portrait; margin: 15mm 15mm 18mm;
-    @bottom-left { font: 8pt var(--font-pp, sans-serif); color: #56565b; }
-    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-mono); color: #56565b; } }
+  /* Print: A4; side margins are inner padding (15mm) so Chrome "Margins: None"/"Minimum" still look right; @page keeps top/bottom 14/18mm; normal flow, running footer, no maps, rows never split. */
+  @page { size: A4 portrait; margin: 14mm 0 18mm;
+    @bottom-left { font: 8pt var(--font-pp, sans-serif); color: #56565b; padding-left: 15mm; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-mono); color: #56565b; padding-right: 15mm; } }
   html, body { margin: 0 !important; padding: 0 !important; background: #fff; width: auto !important; min-width: 0 !important; max-width: none !important; overflow: visible !important; }
   .plan-screen { min-height: 0 !important; overflow: visible !important; }
   body * { visibility: hidden; }
   .plan-print, .plan-print * { visibility: visible; }
   .plan-screen > :not(main), .plan-main > :not(.plan-print), .maio-header, .plan-sheet-backdrop { display: none !important; }
   .plan-main { display: block; margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; }
-  .plan-print { display: block; position: static; box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 0; overflow-wrap: anywhere; color: #111; font-size: 10.5pt; line-height: 1.4; }
+  .plan-print { display: block; position: static; box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 4mm 15mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; overflow-wrap: anywhere; color: #111; font-size: 10.5pt; line-height: 1.4; }
   .plan-print-head { border-bottom: 1px solid #56565b; padding-bottom: 10pt; margin-bottom: 14pt; break-inside: avoid; }
   .plan-print-head h1 { font-size: 26pt; font-weight: 500; line-height: 1.1; margin: 4pt 0 4pt; }
   .plan-print-head p { margin: 0; color: #56565b; }
@@ -1786,6 +1786,4 @@ body:has(.chat-screen) { overflow: hidden; }
   .plan-print-foot { margin-top: 10pt; color: #56565b; font-size: 8.5pt; break-inside: avoid; }
   .plan-print .plan-map { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  /* iOS Safari print can ignore @page margins: keep a safe inner margin there. */
-  @supports (-webkit-touch-callout: none) { .plan-print { padding: 0 12mm; } }
 }
