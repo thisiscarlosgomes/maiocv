@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind, inferSlot, stopCount, toMin } from "../lib/full-day.ts";
+import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind, inferSlot, restCovered, stopCount, toMin } from "../lib/full-day.ts";
 import { enforcePlanRules, isBar, planRuleViolations } from "../lib/plan-rules.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { samplePlan } from "../lib/trip-sample.ts";
@@ -35,7 +35,7 @@ test("full days cover all seven core slots and have 6–8 stops", () => {
     if (dayKind(d) !== "full") continue;
     full += 1;
     const slots = new Set(d.items.map(inferSlot));
-    for (const s of FULL_DAY_SLOTS) assert.ok(slots.has(s), `${name} ${d.date}: ${s}`);
+    for (const s of FULL_DAY_SLOTS) assert.ok(slots.has(s) || (s === "rest" && restCovered(d.items)), `${name} ${d.date}: ${s}`);
     const n = stopCount(d);
     assert.ok(n >= FULL_DAY_RANGE.min && n <= FULL_DAY_RANGE.max, `${name} ${d.date}: ${n}`);
     const times = d.items.map((i) => toMin(i.start));
@@ -156,4 +156,30 @@ test("older share links without slots still parse and render", () => {
   const p = samplePlan("en");
   const legacy = { ...p, days: p.days.map((d) => ({ ...d, items: d.items.map(({ slot: _s, ...i }) => i) })) };
   assert.ok(parseTripPlan(legacy));
+});
+
+const overlaps = (p: TripPlan) => p.days.flatMap((d) => {
+  const xs = d.items.filter((i) => i.kind !== "transport").sort((a, b) => toMin(a.start) - toMin(b.start));
+  return xs.slice(1).flatMap((x, k) => toMin(x.start) < toMin(xs[k].start) + xs[k].durationMin ? [`${d.date} ${xs[k].refId}@${xs[k].start} overlaps ${x.refId}@${x.start}`] : []);
+});
+
+test("no two stops in a day overlap, across the matrix and with an afternoon tour", () => {
+  for (const { name, p } of matrix) assert.deepEqual(overlaps(p), [], name);
+  for (const e of EXPERIENCES) {
+    const p = plan({ days: 3, hasCar: true, include: [e.id] });
+    assert.deepEqual(overlaps(p), [], e.id);
+  }
+});
+
+test("repair drops rest time that collides with a 14:30 tour (J&Tour case from the PDF)", () => {
+  const base = plan({ days: 3, hasCar: true });
+  const bad = structuredClone(base) as TripPlan;
+  for (const x of bad.days) x.items = x.items.filter((i) => i.kind !== "experience");
+  const d = bad.days[1];
+  d.items = d.items.filter((i) => i.slot !== "activity").concat([{ id: "jt", kind: "experience", refId: "guia-001", start: "14:30", durationMin: 180, slot: "activity" }]);
+  const fixed = enforcePlanRules(bad);
+  assert.deepEqual(overlaps(fixed), []);
+  const day = fixed.days[1];
+  assert.ok(day.items.some((i) => i.refId === "guia-001" && i.start === "14:30"));
+  assert.ok(!day.items.some((i) => i.refId === "rest" && toMin(i.start) < toMin("17:30") && toMin(i.start) + i.durationMin > toMin("14:30")));
 });
