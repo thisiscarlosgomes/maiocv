@@ -1756,23 +1756,26 @@ body:has(.chat-screen) { overflow: hidden; }
 @media (min-width: 701px) { .plan-sharebar { align-self: center; width: 560px; } }
 .plan-print { display: none; }
 @media print {
-  /* v3.3 print: A4, 16/16/20mm, normal flow, running footer, no maps, rows never split. */
-  @page { size: A4 portrait; margin: 16mm 16mm 20mm;
-    @bottom-left { font: 8pt var(--font-pp, sans-serif); color: #56565b; }
-    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-mono); color: #56565b; } }
-  html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
+  /* Print: A4; side margins are inner padding (15mm) so Chrome "Margins: None"/"Minimum" still look right; @page keeps top/bottom 14/18mm; normal flow, running footer, no maps, rows never split. */
+  @page { size: A4 portrait; margin: 14mm 0 18mm;
+    @bottom-left { font: 8pt var(--font-pp, sans-serif); color: #56565b; padding-left: 15mm; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-mono); color: #56565b; padding-right: 15mm; } }
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff; width: auto !important; min-width: 0 !important; max-width: none !important; overflow: visible !important; }
+  .plan-screen { min-height: 0 !important; overflow: visible !important; }
   body * { visibility: hidden; }
   .plan-print, .plan-print * { visibility: visible; }
   .plan-screen > :not(main), .plan-main > :not(.plan-print), .maio-header, .plan-sheet-backdrop { display: none !important; }
   .plan-main { display: block; margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; }
-  .plan-print { display: block; position: static; width: auto; margin: 0; padding: 0; color: #111; font-size: 10.5pt; line-height: 1.4; }
+  .plan-print { display: block; position: static; box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 4mm 15mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; overflow-wrap: anywhere; color: #111; font-size: 10.5pt; line-height: 1.4; }
   .plan-print-head { border-bottom: 1px solid #56565b; padding-bottom: 10pt; margin-bottom: 14pt; break-inside: avoid; }
   .plan-print-head h1 { font-size: 26pt; font-weight: 500; line-height: 1.1; margin: 4pt 0 4pt; }
   .plan-print-head p { margin: 0; color: #56565b; }
   .plan-print-day { margin-bottom: 16pt; }
-  .plan-print-dayhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8mm; border-bottom: 1px solid #111; padding-bottom: 4pt; break-inside: avoid; break-after: avoid; page-break-after: avoid; }
+  .plan-print-dayhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2pt 8mm; border-bottom: 1px solid #111; padding-bottom: 4pt; break-inside: avoid; break-after: avoid; page-break-after: avoid; }
   .plan-print-dayhead h2 { font-size: 15pt; font-weight: 500; margin: 0; }
-  .plan-print-dayhead p { margin: 0; color: #111; font-size: 9pt; }
+  .plan-print-dayhead p { margin: 0; color: #111; font-size: 9pt; min-width: 0; }
+  .plan-print ol > li:first-child { break-before: avoid; page-break-before: avoid; }
+  .plan-print li > div { min-width: 0; }
   .plan-print .plan-weekday { color: #56565b; }
   .plan-print ol { list-style: none; margin: 0; padding: 0; }
   .plan-print li { display: grid; grid-template-columns: 30mm minmax(0, 1fr); gap: 4mm; padding: 7pt 0; border-bottom: 1px solid #e5e5e7; break-inside: avoid; page-break-inside: avoid; }

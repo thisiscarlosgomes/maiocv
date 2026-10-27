@@ -203,8 +203,12 @@ export function repairDay(day: PlanDay, i: number): PlanDay {
   let items: PlanItem[] = day.items.map((it) => ({ ...it, slot: inferSlot(it) }));
   if (kind === "full") {
     const has = new Set(items.map((x) => x.slot));
-    for (const slot of FULL_DAY_SLOTS) if (!has.has(slot)) {
-      const f = FILL[slot]; items.push({ id: `d${i}-${slot}-fill`, kind: "free", refId: f.refId, start: f.at, durationMin: f.dur, slot });
+    const first = Math.min(...items.filter((x) => x.kind !== "transport").map((x) => toMin(x.start)));
+    for (const slot of FULL_DAY_SLOTS) if (!has.has(slot) && !(slot === "rest" && restCovered(items))) {
+      const f = FILL[slot];
+      // Breakfast goes before an early tour rather than on top of it.
+      const at = slot === "breakfast" ? toTime(Math.max(toMin("06:00"), Math.min(toMin(f.at), first - f.dur))) : f.at;
+      items.push({ id: `d${i}-${slot}-fill`, kind: "free", refId: f.refId, start: at, durationMin: f.dur, slot });
     }
     while (stopCountItems(items) > FULL_DAY_RANGE.max) items = dropOne(items, ["drinks"]);
   } else {
@@ -212,8 +216,38 @@ export function repairDay(day: PlanDay, i: number): PlanDay {
     items = items.filter((x) => x.kind !== "experience");
     while (stopCountItems(items) > max) items = dropOne(items, ["drinks", "activity", "morning", "lunch"]);
   }
-  items.sort((a, b) => toMin(a.start) - toMin(b.start));
-  return { ...day, items };
+  return { ...day, items: resolveOverlaps(items) };
+}
+
+/** An afternoon tour starting 13:30–16:00 takes the rest slot: the day has no separate rest row. */
+export const restCovered = (items: PlanItem[]) => items.some((x) => x.kind === "experience" && toMin(x.start) >= toMin("13:30") && toMin(x.start) < toMin("16:00"));
+
+/** No two stops may overlap. Free time yields to a real stop (trimmed, or dropped if under 30 min left); otherwise the
+ *  later stop moves to when the earlier one ends. The arrival transport row is a header and is not checked. */
+export function resolveOverlaps(input: PlanItem[]): PlanItem[] {
+  const sorted = [...input].sort((a, b) => toMin(a.start) - toMin(b.start) || (a.kind === "free" ? 1 : 0) - (b.kind === "free" ? 1 : 0));
+  const out: PlanItem[] = [];
+  const end = (x: PlanItem) => toMin(x.start) + (x.durationMin ?? 0);
+  for (let item of sorted) {
+    if (item.kind === "transport") { out.push(item); continue; }
+    for (;;) {
+      const k = out.findLastIndex((x) => x.kind !== "transport");
+      const prev = k >= 0 ? out[k] : null;
+      if (!prev || toMin(item.start) >= end(prev)) { out.push(item); break; }
+      if (item.kind === "free") {
+        const left = end(item) - end(prev);
+        if (left >= 30) out.push({ ...item, start: toTime(end(prev)), durationMin: left });
+        break;
+      }
+      if (prev.kind === "free") {
+        const left = toMin(item.start) - toMin(prev.start);
+        if (left >= 30) out[k] = { ...prev, durationMin: left }; else out.splice(k, 1);
+        continue;
+      }
+      item = { ...item, start: toTime(end(prev)) };
+    }
+  }
+  return out;
 }
 const stopCountItems = (items: PlanItem[]) => items.filter((x) => x.kind !== "transport").length;
 function dropOne(items: PlanItem[], order: Slot[]): PlanItem[] {

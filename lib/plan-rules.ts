@@ -1,5 +1,5 @@
 import { FOOD, PLACES, distanceKm, experience, isExcludedExperience, place, food, type Food, type PlanDay, type PlanItem, type TripPlan } from "./trip.ts";
-import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind, inferSlot, repairDay, stopCount } from "./full-day.ts";
+import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind, inferSlot, repairDay, restCovered, stopCount } from "./full-day.ts";
 
 /** Plan rules enforced in code after generation (Carlos, Oct 27):
  *  1. At most one tour/experience across the whole trip.
@@ -94,7 +94,7 @@ export function planRuleViolations(plan: TripPlan): string[] {
     const kind = dayKind(d), n = stopCount(d);
     const range = kind === "full" ? FULL_DAY_RANGE : kind === "arrival" ? ARRIVAL_RANGE : DEPARTURE_RANGE;
     if (n < range.min || n > range.max) out.push(`${kind} day ${d.date}: ${n} stops (want ${range.min}-${range.max})`);
-    if (kind === "full") { const slots = new Set(d.items.map(inferSlot)); for (const s of FULL_DAY_SLOTS) if (!slots.has(s)) out.push(`${d.date}: missing ${s}`); }
+    if (kind === "full") { const slots = new Set(d.items.map(inferSlot)); for (const s of FULL_DAY_SLOTS) if (!slots.has(s) && !(s === "rest" && restCovered(d.items))) out.push(`${d.date}: missing ${s}`); }
     else if (d.items.some((i) => i.kind === "experience")) out.push(`${kind} day ${d.date} has a tour`);
     const lunchDinner = d.items.filter((i) => (inferSlot(i) === "lunch" || inferSlot(i) === "dinner" || inferSlot(i) === "breakfast") && i.kind === "food" && isBar(i.refId));
     for (const i of lunchDinner) out.push(`meal at bar ${i.refId} on ${d.date}`);
