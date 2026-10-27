@@ -38,24 +38,32 @@ function typeLabel(e: { kind: string; boat: boolean }, s: PlanStrings) {
 
 export const osm = (lat: number, lon: number) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}`;
 
+/** Island data has a few site-relative image paths (e.g. "/experiences/…") that only exist on visitmaio.com. Make them absolute; drop anything that isn't http(s). */
+const IMAGE_ORIGIN = "https://www.visitmaio.com";
+export function imageUrl(src: string | null | undefined): string | null {
+  if (!src) return null;
+  if (src.startsWith("/") && !src.startsWith("//")) return IMAGE_ORIGIN + src;
+  return /^https?:\/\//.test(src) ? src : null;
+}
+
 /** Everything a card or detail sheet shows, derived only from fixture data. No prices. Returns null for unknown ids. */
 export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardView | null {
   if (item.kind === "experience") {
     const e = experience(item.refId); if (!e) return null;
     const p = place(e.placeId)!;
     return { kind: item.kind, title: e.title, meta: `${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, description: locale === "pt" ? e.description.pt : e.description.en,
-      location: e.location, image: e.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: e.seaDependent, operator: e.operator ?? null };
+      location: e.location, image: imageUrl(e.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: e.seaDependent, operator: e.operator ?? null };
   }
   if (item.kind === "food") {
     const f = food(item.refId); if (!f) return null;
     const p = place(f.placeId)!;
     return { kind: item.kind, title: f.title, meta: `${item.start >= "19:00" ? s.evening : s.lunch} · ${f.location}`, description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
-      image: f.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
+      image: imageUrl(f.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "place") {
     const p = place(item.refId); if (!p) return null;
     return { kind: item.kind, title: locale === "pt" ? p.name.pt : p.name.en, meta: `${p.category === "beach" ? s.beach : s.place} · ${p.location}`, description: "", location: p.location,
-      image: p.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
+      image: imageUrl(p.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   return { kind: "transport", title: item.refId === "ferry" ? s.ferry : s.flight, meta: item.note ?? "", description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
 }

@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { samplePlan } from "../lib/trip-sample.ts";
 import { planStrings } from "../lib/trip-strings.ts";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayLabel, dayPins, daySummary, seaLine } from "../lib/trip-view.ts";
+import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayLabel, dayPins, daySummary, imageUrl, seaLine } from "../lib/trip-view.ts";
 import { EXPERIENCES } from "../lib/trip.ts";
 
 const plan = samplePlan("en");
@@ -63,4 +63,11 @@ test("map pins land inside the map frame", () => {
   for (const day of plan.days) for (const pin of dayPins(day, "en", s)) {
     assert.ok(pin.x >= 0 && pin.x <= MAP_W && pin.y >= 0 && pin.y <= MAP_H, JSON.stringify(pin));
   }
+});
+
+test("every stop image resolves to an absolute http(s) URL or null", () => {
+  assert.equal(imageUrl("/experiences/blue-sports/maio-offroad.jpg"), "https://www.visitmaio.com/experiences/blue-sports/maio-offroad.jpg");
+  assert.equal(imageUrl(""), null);
+  assert.equal(imageUrl("javascript:x"), null);
+  for (const e of EXPERIENCES) { const u = imageUrl(e.image); assert.ok(u === null || /^https?:\/\//.test(u), e.id); }
 });

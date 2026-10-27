@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
 import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, timeSpan } from "../../lib/trip-view";
+
+/** A photo that falls back to the plain placeholder tile if it fails to load, so a bad URL never shows a broken-image icon. */
+export function SafeImg({ src, className, lazy }: { src: string | null; className?: string; lazy?: boolean }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!src || failed === src) return <span className={className} aria-hidden="true" />;
+  return <img className={className} src={src} alt="" loading={lazy ? "lazy" : undefined} onError={() => setFailed(src)} />;
+}
 
 export function RoughAlert({ day, s }: { day: PlanDay; s: PlanStrings }) {
   if (day.sea?.status !== "rough") return null;
@@ -27,7 +34,7 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
   }
   const body = (
     <>
-      {v.image ? <img className="plan-stop-img" src={v.image} alt="" loading="lazy" /> : <span className="plan-stop-img" aria-hidden="true" />}
+      <SafeImg className="plan-stop-img" src={v.image} lazy />
       <span className="plan-stop-m">
         <span className="plan-stop-title">{v.title}</span>
         <span className="plan-stop-meta">{v.meta}</span>
@@ -120,7 +127,7 @@ export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: Pl
   return (
     <Dialog label={v.title} onClose={onClose}>
       <button type="button" className="plan-sheet-close" onClick={onClose} aria-label={s.close} autoFocus>×</button>
-      {v.image ? <img className="plan-sheet-hero" src={v.image} alt="" /> : <div className="plan-sheet-hero" aria-hidden="true" />}
+      <SafeImg className="plan-sheet-hero" src={v.image} />
       <div className="plan-sheet-body">
         <p className="plan-eyebrow">{type} · {dayTitle(day.date, locale)}</p>
         <h2 id="plan-sheet-title">{v.title}</h2>

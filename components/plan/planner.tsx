@@ -7,7 +7,7 @@ import { planStrings, type PlanStrings } from "../../lib/trip-strings";
 import { samplePlan } from "../../lib/trip-sample";
 import { cardView, dateRange, dayParts, seaLine, timeSpan } from "../../lib/trip-view";
 import { decodeTrip, encodeTrip } from "../../lib/trip-share";
-import { DayMap, DayStops, PlaceDetail, RoughAlert, SeaText } from "./cards";
+import { DayMap, DayStops, PlaceDetail, RoughAlert, SafeImg, SeaText } from "./cards";
 
 // v3.3: conversational start, compact rows, mono dates. One vertical trip. The plan is fixed once generated; the chat only answers questions.
 type Msg = { role: "user" | "assistant"; content: string; trip?: boolean };
@@ -190,7 +190,7 @@ function TripCard({ plan, locale, s, onOpen }: { plan: TripPlan; locale: Locale;
   const img = cover(plan, locale, s);
   return (
     <div className="plan-tripcard">
-      {img ? <img src={img} alt="" /> : <span className="plan-tripcard-img" aria-hidden="true" />}
+      <SafeImg className="plan-tripcard-img" src={img} />
       <div><p className="plan-tripcard-title">{plan.title}</p><p className="plan-tripcard-meta mono">{dateRange(plan.days, locale)} · {stopCount(plan)} {s.stops}</p></div>
       <button type="button" className="plan-primary" onClick={onOpen}>{s.openTrip}</button>
     </div>
