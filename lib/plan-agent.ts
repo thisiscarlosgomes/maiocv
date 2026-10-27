@@ -24,6 +24,8 @@ export function planInstructions(today: string, current: TripPlan | null): strin
     "Restaurants are for daytime meals (lunch). Recommend bars only in the evening (19:00 or later).",
     "Use only experience ids returned by search_experiences. Never invent places, operators, contacts or times.",
     "If the guest asks for something that search_experiences does not return (for example nightlife, diving or a dolphin cruise), put it in unmet and say plainly that we don't list it yet.",
+    "Days are full and relaxed: breakfast, a morning beach or walk, lunch, free time, an afternoon activity or second beach, sunset, dinner and optional drinks. The planner fills these from Visit Maio data; you only set the request.",
+    "If the guest leaves Maio on the last day, set departure (mode and time). If they want quiet evenings, set drinks to false.",
     "Ferry or flight arrival: set arrival with dayIndex. Use get_transport for published times; if none are published say so.",
     "You do not book anything and you never mention prices. If asked, say guests arrange directly with the operator; the plan shows a contact only when we have one.",
     "Reply in 2 to 4 short sentences. The plan is shown as a trip page, so do not list every item.",

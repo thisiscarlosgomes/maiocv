@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { samplePlan } from "../lib/trip-sample.ts";
 import { planStrings } from "../lib/trip-strings.ts";
 import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayLabel, dayPins, daySummary, imageUrl, seaLine } from "../lib/trip-view.ts";
-import { EXPERIENCES } from "../lib/trip.ts";
+import { EXPERIENCES, experience } from "../lib/trip.ts";
 
 const plan = samplePlan("en");
 const s = planStrings.en;
@@ -11,7 +11,9 @@ const s = planStrings.en;
 test("sample trip keeps the sea outing off the rough day", () => {
   assert.equal(plan.days[1].sea?.status, "rough");
   const seaDays = plan.days.map((d) => d.items.some((i) => i.kind === "experience" && cardView(i, "en", s)?.seaDependent));
-  assert.deepEqual(seaDays, [false, false, true]);
+  // The only full day is rough and arrival/departure days take no tour, so there is no sea outing; the guest is told.
+  assert.deepEqual(seaDays, [false, false, false]);
+  assert.ok(plan.unmet.some((u) => /sea outing/.test(u)));
 });
 
 test("every card in the sample renders from fixture data, with no price anywhere", () => {
@@ -38,7 +40,7 @@ test("contact rule: booking site → nothing; no site + phone/WhatsApp → links
   assert.equal(contactLinks({ name: "A", bookingUrl: "", whatsapp: "", phone: "" }), null);
   assert.deepEqual(contactLinks({ name: "A", bookingUrl: "", whatsapp: "", phone: "+238 970 88 09" }), { whatsapp: null, call: "tel:+2389708809" });
   assert.deepEqual(contactLinks({ name: "A", bookingUrl: "", whatsapp: "+238 970 88 09", phone: "" }), { whatsapp: "https://wa.me/2389708809", call: null });
-  const offroad = EXPERIENCES.find((e) => e.id === "blue-maio-offroad")!;
+  const offroad = experience("blue-maio-offroad")!;
   assert.equal(contactLinks(offroad.operator), null, "has its own site");
   const fishing = EXPERIENCES.find((e) => e.id === "blue-sport-fishing-big-game")!;
   assert.equal(contactLinks(fishing.operator), null, "no contact in data");

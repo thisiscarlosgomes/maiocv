@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, timeSpan } from "../../lib/trip-view";
+import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, driveMin, partOfDay, timeSpan } from "../../lib/trip-view";
 
 /** A photo that falls back to the plain placeholder tile if it fails to load, so a bad URL never shows a broken-image icon. */
 export function SafeImg({ src, className, lazy }: { src: string | null; className?: string; lazy?: boolean }) {
@@ -38,12 +38,13 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
       <span className="plan-stop-m">
         <span className="plan-stop-title">{v.title}</span>
         <span className="plan-stop-meta">{v.meta}</span>
-        <time className="plan-stop-time mono">{timeSpan(item)}</time>
+        <span className="plan-stop-time"><time className="mono">{timeSpan(item)}</time> · {partOfDay(item.start, s)}</span>
       </span>
     </>
   );
+  if (item.kind === "free") onOpen = undefined;
   return (
-    <li className="plan-stop-row">
+    <li className="plan-stop-row" data-slot={item.slot}>
       {onOpen
         ? <a href={`#${item.id}`} className="plan-stop" data-testid={`card-${item.kind}`} aria-label={`${v.title}, ${s.openDetails}`} onClick={(e) => { e.preventDefault(); onOpen(item, e.currentTarget); }}>{body}</a>
         : <div className="plan-stop" data-testid={`card-${item.kind}`}>{body}</div>}
@@ -57,7 +58,13 @@ export function DayStops({ day, locale, s, onOpen }: { day: PlanDay; locale: Loc
   return (
     <>
       {ferries.length > 0 && <ol className="plan-ferries">{ferries.map((item) => <PlanStop key={item.id} item={item} locale={locale} s={s} />)}</ol>}
-      <ol className="plan-stops">{stops.map((item) => <PlanStop key={item.id} item={item} locale={locale} s={s} onOpen={onOpen} />)}</ol>
+      <ol className="plan-stops">{stops.map((item, k) => {
+        const drive = k > 0 ? driveMin(stops[k - 1], item) : null;
+        return [
+          drive ? <li key={`${item.id}-hop`} className="plan-hop mono" aria-label={s.drive(drive)}>{s.drive(drive)}</li> : null,
+          <PlanStop key={item.id} item={item} locale={locale} s={s} onOpen={onOpen} />,
+        ];
+      })}</ol>
     </>
   );
 }

@@ -32,7 +32,7 @@ test("venue type: Bar Bons Amigos is a bar; restaurants and bar-restaurants are 
 });
 
 test("fixture violates both rules before enforcement", () => {
-  assert.equal(planRuleViolations(fixture).length, 3);
+  assert.equal(planRuleViolations(fixture).filter((v) => /experiences \(max|^bar /.test(v)).length, 3);
 });
 
 test("rule 1: at most one tour/experience per trip; the best (safe sea outing) is kept, others become beach visits", () => {

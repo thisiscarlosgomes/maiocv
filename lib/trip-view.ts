@@ -1,4 +1,5 @@
 import { PLACES, distanceKm, experience, food, place, type PlanDay, type PlanItem, type SeaDay } from "./trip.ts";
+import { inferSlot, itemPoint } from "./full-day.ts";
 import type { Locale } from "./locale.ts";
 import type { PlanStrings } from "./trip-strings.ts";
 
@@ -36,6 +37,34 @@ function typeLabel(e: { kind: string; boat: boolean }, s: PlanStrings) {
   return e.boat ? s.boat : e.kind === "sea" ? s.seaKind : s.experience;
 }
 
+const withNote = (meta: string, item: PlanItem) => (item.note ? `${meta} · ${item.note}` : meta);
+
+/** Row tag (Meal, Beach, Activity, Sunset, Drinks, Free time). */
+export function rowTag(item: PlanItem, s: PlanStrings): string {
+  const slot = inferSlot(item);
+  if (slot === "sunset") return s.tags.sunset;
+  if (slot === "drinks") return s.tags.drinks;
+  if (slot === "breakfast" || slot === "lunch" || slot === "dinner") return s.tags.meal;
+  if (slot === "transfer" || slot === "departure" || slot === "arrival") return s.tags.travel;
+  if (item.kind === "experience") return s.tags.activity;
+  if (item.kind === "place") return place(item.refId)?.category === "beach" ? s.tags.beach : s.place;
+  return s.tags.free;
+}
+
+/** Morning (<12), Afternoon (<17:30), Evening (<21), Night. */
+export function partOfDay(start: string, s: PlanStrings): string {
+  const m = Number(start.slice(0, 2)) * 60 + Number(start.slice(3));
+  return m < 720 ? s.parts.morning : m < 1050 ? s.parts.afternoon : m < 1260 ? s.parts.evening : s.parts.night;
+}
+
+/** Drive minutes between two consecutive stops when they are more than ~2 km apart (straight line × 1.3 at 40 km/h), else null. */
+export function driveMin(a: PlanItem, b: PlanItem): number | null {
+  const p = itemPoint(a), q = itemPoint(b);
+  if (!p || !q) return null;
+  const km = distanceKm(p, q);
+  return km > 2 ? Math.max(5, Math.round(((km * 1.3) / 40) * 12) * 5) : null;
+}
+
 export const osm = (lat: number, lon: number) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}`;
 
 /** Island data has a few site-relative image paths (e.g. "/experiences/…") that only exist on visitmaio.com. Make them absolute; drop anything that isn't http(s). */
@@ -51,19 +80,23 @@ export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardVi
   if (item.kind === "experience") {
     const e = experience(item.refId); if (!e) return null;
     const p = place(e.placeId)!;
-    return { kind: item.kind, title: e.title, meta: `${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, description: locale === "pt" ? e.description.pt : e.description.en,
+    return { kind: item.kind, title: e.title, meta: withNote(`${s.tags.activity} · ${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, item), description: locale === "pt" ? e.description.pt : e.description.en,
       location: e.location, image: imageUrl(e.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: e.seaDependent, operator: e.operator ?? null };
   }
   if (item.kind === "food") {
     const f = food(item.refId); if (!f) return null;
     const p = place(f.placeId)!;
-    return { kind: item.kind, title: f.title, meta: `${item.start >= "19:00" ? s.evening : s.lunch} · ${f.location}`, description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
+    return { kind: item.kind, title: f.title, meta: withNote(`${rowTag(item, s)} · ${f.location}`, item), description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
       image: imageUrl(f.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "place") {
     const p = place(item.refId); if (!p) return null;
-    return { kind: item.kind, title: locale === "pt" ? p.name.pt : p.name.en, meta: `${p.category === "beach" ? s.beach : s.place} · ${p.location}`, description: "", location: p.location,
+    return { kind: item.kind, title: locale === "pt" ? p.name.pt : p.name.en, meta: withNote(`${inferSlot(item) === "sunset" ? s.tags.sunset : p.category === "beach" ? s.beach : s.place} · ${p.location}`, item), description: "", location: p.location,
       image: imageUrl(p.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
+  }
+  if (item.kind === "free") {
+    const title = (s.free as Record<string, string>)[item.refId] ?? s.free["free-time"];
+    return { kind: item.kind, title, meta: withNote(rowTag(item, s), item), description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
   }
   return { kind: "transport", title: item.refId === "ferry" ? s.ferry : s.flight, meta: item.note ?? "", description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
 }
@@ -79,10 +112,6 @@ export function contactLinks(op: Operator | null): { whatsapp: string | null; ca
   return { whatsapp: wa ? `https://wa.me/${wa}` : null, call: tel ? `tel:${tel}` : null };
 }
 
-function itemPoint(i: PlanItem) {
-  const ref = i.kind === "experience" ? place(experience(i.refId)?.placeId ?? "") : i.kind === "food" ? place(food(i.refId)?.placeId ?? "") : i.kind === "place" ? place(i.refId) : undefined;
-  return ref ? { lat: ref.lat, lon: ref.lon } : null;
-}
 
 /** "3 stops · 25 min driving" (walking when everything is close and there's no car). Straight-line estimate. */
 export function daySummary(day: PlanDay, s: PlanStrings, hasCar: boolean): string {
@@ -144,6 +173,7 @@ export function dayParts(date: string, locale: Locale): { short: string; weekday
 /** "10:00 – 12:30" for timed visits, just "13:00" for meals and arrivals. */
 export function timeSpan(item: PlanItem): string {
   if (item.kind === "food" || item.kind === "transport" || !item.durationMin) return item.start;
+  if (item.kind === "free" && !["rest", "free-time"].includes(item.refId)) return item.start;
   const m = Number(item.start.slice(0, 2)) * 60 + Number(item.start.slice(3)) + item.durationMin;
   return `${item.start} – ${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }

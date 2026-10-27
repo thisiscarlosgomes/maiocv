@@ -33,11 +33,20 @@ const en = {
   people: (n: number) => `${n} ${n === 1 ? "person" : "people"}`,
   demoReply: "Here’s a slow plan. Boat on Saturday, when the sea is calm.",
   seaFactLine: { calm: "Calm", moderate: "Some swell", rough: "Rough", unknown: "No forecast" },
+  // Full-day plan (Oct 27): generic rows, row tags, part-of-day labels, drive hints.
+  free: { "breakfast-stay": "Breakfast at your stay", "lunch-free": "Lunch near your stay", "dinner-free": "Dinner near your stay", rest: "Free time · shade & rest", "free-time": "Free time", transfer: "Transfer & check-in", "depart-airport": "Head to the airport", "depart-port": "Head to the port" },
+  tags: { meal: "Meal", beach: "Beach", activity: "Activity", sunset: "Sunset", drinks: "Drinks", free: "Free time", travel: "Travel" },
+  parts: { morning: "Morning", afternoon: "Afternoon", evening: "Evening", night: "Night" },
+  drive: (n: number) => `~${n} min drive`,
 };
 type Strings = typeof en;
 
 const pt: Strings = {
   ...en,
+  free: { "breakfast-stay": "Pequeno-almoço no alojamento", "lunch-free": "Almoço perto do alojamento", "dinner-free": "Jantar perto do alojamento", rest: "Tempo livre · sombra e descanso", "free-time": "Tempo livre", transfer: "Transfer e check-in", "depart-airport": "Ir para o aeroporto", "depart-port": "Ir para o porto" },
+  tags: { meal: "Refeição", beach: "Praia", activity: "Atividade", sunset: "Pôr do sol", drinks: "Bebidas", free: "Tempo livre", travel: "Viagem" },
+  parts: { morning: "Manhã", afternoon: "Tarde", evening: "Fim de tarde", night: "Noite" },
+  drive: (n: number) => `~${n} min de carro`,
   eyebrow: "Planeador · teste", title: "Planeie os seus dias no Maio", lede: "Diga quantos dias tem. Planeamos à volta do mar.",
   tripPlan: "Plano de viagem", greeting: "Olá! Quantos dias vai passar no Maio, e quando? Eu planeio em função do mar.", startChips: ["3 dias, ritmo calmo", "Um fim de semana com crianças"],
   placeholder: "Quantos dias, e quando?", followUp: "Mude o que quiser, é só pedir", send: "Enviar", thinking: "A ver a previsão do mar e os lugares…",
@@ -72,6 +81,10 @@ const pt: Strings = {
 };
 const fr: Strings = {
   ...en,
+  free: { "breakfast-stay": "Petit-déjeuner sur place", "lunch-free": "Déjeuner près de chez vous", "dinner-free": "Dîner près de chez vous", rest: "Temps libre · ombre et repos", "free-time": "Temps libre", transfer: "Transfert et check-in", "depart-airport": "Direction l'aéroport", "depart-port": "Direction le port" },
+  tags: { meal: "Repas", beach: "Plage", activity: "Activité", sunset: "Coucher de soleil", drinks: "Verre", free: "Temps libre", travel: "Trajet" },
+  parts: { morning: "Matin", afternoon: "Après-midi", evening: "Soir", night: "Nuit" },
+  drive: (n: number) => `~${n} min en voiture`,
   eyebrow: "Planificateur · test", title: "Planifiez vos jours à Maio", lede: "Dites combien de jours vous avez. On planifie selon la mer.",
   tripPlan: "Plan de voyage", greeting: "Olá ! Combien de jours passez-vous à Maio, et quand ? Je planifie selon la mer.", startChips: ["3 jours, rythme tranquille", "Un week-end avec les enfants"],
   placeholder: "Combien de jours, et quand ?", followUp: "Changez ce que vous voulez, demandez", send: "Envoyer", thinking: "Prévision de la mer et lieux…",
