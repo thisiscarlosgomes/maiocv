@@ -2,7 +2,7 @@
 
 Ask Maio uses ElevenLabs for a live voice conversation and queries `https://portal.maio.cv/api/mcp` directly for public island data. The existing text chat continues to use the Maio chat backend. Voice has its own reviewed instructions and tool permissions; it does not automatically inherit the text backend's prompt, citation logic or rate limits.
 
-The browser starts a conversation only after the visitor chooses to speak and grants microphone access. `/api/voice/session` obtains a short-lived ElevenLabs conversation credential on the server. The ElevenLabs API key is never sent to the browser. The agent can query approved MCP tools and call the `show_sources` client tool to display links beside the transcript.
+The browser starts a conversation only after the visitor chooses to speak and grants microphone access. `/api/voice/session` checks that the request comes from the app's own origin, applies the issuance cooldown, and obtains a short-lived ElevenLabs WebRTC conversation token on the server. The ElevenLabs API key is never sent to the browser. The agent can query approved MCP tools and call the `show_sources` client tool to display links beside the transcript.
 
 ## Local setup
 
@@ -79,18 +79,19 @@ The dedicated prototype has these provider-side limits:
 | Client source-tool timeout | 5 seconds |
 | Voice recording | Disabled |
 | Conversation retention | 1 day, with transcript/PII and audio deletion enabled |
-| Session authentication | Required |
-| Allowed browser hosts | localhost, 127.0.0.1, maio.cv, www.maio.cv |
+| Session authentication | Private, with server-issued conversation tokens |
+
+ElevenLabs requires choosing one authentication method. This prototype uses private token authentication: `enable_auth: true`, `allowlist: []`, and `require_origin_header: false`. Do not combine it with the provider's domain allowlist. The app's token broker requires the request's `Origin` to match the endpoint's own origin and rejects cross-origin browser requests. Localhost and preview deployments use that same broker; they do not need entries in a provider hostname allowlist.
 
 Audio still travels to ElevenLabs for processing, and their LLM providers process the conversation; disabling voice recording does not mean zero processing or zero retention. Direct MCP mode is not compatible with ElevenLabs Zero Retention Mode. Publish an accurate privacy notice and verify the account retention settings before making voice available publicly.
 
-Provider limits supplement the app's session-issuance controls. They do not establish a spending guarantee: conversations, model usage and tools may be metered separately, and issued session credentials can be replayed within their provider-defined lifetime. Before production, review account billing and alerts, use durable rate limiting or authentication appropriate to expected traffic, and check the provider's current pricing. Keep the private agent and server-only credential exchange; a hostname allowlist is not a substitute for authentication. Add an explicitly reviewed preview hostname if testing on a deployment outside the allowed hosts.
+Provider limits supplement the app's session-issuance controls. They do not establish a spending guarantee: conversations, model usage and tools may be metered separately, and issued session credentials can be replayed within their provider-defined lifetime. Before production, review account billing and alerts, use durable rate limiting or authentication appropriate to expected traffic, and check the provider's current pricing. Keep the private agent and server-only credential exchange.
 
 Provisioning refuses duplicate matching names/endpoints, unrelated agents, shared integrations, and managed resources whose configuration has drifted. It does not overwrite or delete them. The one explicit adoption path is the user-created, otherwise unused **Maio Open Data** integration described above. After an interrupted run, repeat dry-run: completed resources are found by their exact names and endpoint, so an incomplete setup can be resumed without intentionally creating duplicates. POST requests are not automatically retried. If the provider reports a failure after applying a request, inspect the dashboard and rerun dry-run before retrying.
 
 ## Verification
 
-During implementation, the setup payloads were validated with the official `@elevenlabs/elevenlabs-js` 2.74.0 schemas for agent creation, MCP configuration and client tools. A live dry-run successfully initialized the Maio MCP endpoint and matched all 29 reviewed tools. Seven persisted provisioning tests cover no-write dry-runs, refusal when MCP is disabled, duplicate/unrelated resource refusal, unknown/changed tool exclusion, manual integration adoption, and a second apply reusing the same agent, integration and approvals:
+During implementation, the setup payloads were validated with the official `@elevenlabs/elevenlabs-js` 2.74.0 schemas for agent creation, MCP configuration and client tools. A live dry-run successfully initialized the Maio MCP endpoint and matched all 29 reviewed tools. Nine persisted provisioning tests cover no-write dry-runs, private token auth without a provider host allowlist, refusal to overwrite legacy combined-auth configuration, refusal when MCP is disabled, duplicate/unrelated resource refusal, unknown/changed tool exclusion, manual integration adoption, and a second apply reusing the same agent, integration and approvals:
 
 ```sh
 node --test tests/elevenlabs-setup.test.mjs
