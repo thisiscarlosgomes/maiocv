@@ -120,7 +120,7 @@ export function agentConfig(serverId, voiceId) {
         first_message: "Olá! O que gostaria de saber sobre a ilha do Maio?",
         prompt: {
           prompt: PROMPT,
-          llm: "gemini-2.5-flash",
+          llm: "nemotron-35-super-vl-nvfp4",
           temperature: 0.2,
           max_tokens: 700,
           timezone: "Atlantic/Cape_Verde",
@@ -133,7 +133,7 @@ export function agentConfig(serverId, voiceId) {
       turn: { turn_timeout: 10, silence_end_call_timeout: 30 },
       conversation: {
         max_duration_seconds: 60,
-        client_events: ["audio", "interruption", "user_transcript", "agent_response", "agent_response_correction", "client_tool_call"],
+        client_events: ["audio", "interruption", "user_transcript", "agent_response", "agent_response_correction", "client_tool_call", "mcp_tool_call"],
       },
     },
     platform_settings: {
