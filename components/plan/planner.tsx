@@ -5,11 +5,11 @@ import type { Locale } from "../../lib/locale";
 import { parseTripPlan, type PlanDay, type PlanItem, type TripPlan } from "../../lib/trip";
 import { planStrings, type PlanStrings } from "../../lib/trip-strings";
 import { samplePlan } from "../../lib/trip-sample";
-import { cardView, dateRange, dayTitle, daySummary, seaLine } from "../../lib/trip-view";
+import { cardView, dateRange, dayParts, seaLine, timeSpan } from "../../lib/trip-view";
 import { decodeTrip, encodeTrip } from "../../lib/trip-share";
-import { DayMap, DayStops, PlaceDetail, RoughAlert, SeaText, TripMap } from "./cards";
+import { DayMap, DayStops, PlaceDetail, RoughAlert, SeaText } from "./cards";
 
-// v3.2: one vertical trip. The plan is fixed once generated; the chat only answers questions.
+// v3.3: conversational start, compact rows, mono dates. One vertical trip. The plan is fixed once generated; the chat only answers questions.
 type Msg = { role: "user" | "assistant"; content: string; trip?: boolean };
 type Screen = "chat" | "trip";
 
@@ -18,6 +18,7 @@ const cover = (plan: TripPlan, locale: Locale, s: PlanStrings) => {
   return null;
 };
 const meta = (plan: TripPlan, locale: Locale, s: PlanStrings) => `${dateRange(plan.days, locale)} · ${s.people(plan.party.adults + plan.party.kids)}`;
+const stopCount = (plan: TripPlan) => plan.days.reduce((n, d) => n + d.items.filter((i) => i.kind !== "transport").length, 0);
 
 export function Planner({ locale }: { locale: Locale }) {
   const s = planStrings[locale];
@@ -98,7 +99,7 @@ export function Planner({ locale }: { locale: Locale }) {
   function submit(event: FormEvent) { event.preventDefault(); void send(draft); }
 
   const asked = new Set(messages.filter((m) => m.role === "user").map((m) => m.content));
-  const suggestions = plan ? s.questions.filter((q) => !asked.has(q)).slice(0, 2) : s.chips.slice(0, 2);
+  const suggestions = plan ? s.questions.filter((q) => !asked.has(q)).slice(0, 2) : s.startChips;
   const detailDay = detail && plan ? plan.days.find((d) => d.items.some((i) => i.id === detail.id)) : null;
 
   const composer = !shared && (
@@ -115,8 +116,9 @@ export function Planner({ locale }: { locale: Locale }) {
     <main id="conteudo" className={`plan-main plan-screen-${screen}${shared ? " is-shared" : ""}`} lang={locale}>
       {screen === "chat" && !shared && (
         <section className="plan-chat" aria-label="Concierge">
-          <header className="plan-head"><p className="plan-eyebrow">{s.eyebrow}</p>{!plan && <h1 className="plan-title">{s.title}</h1>}{!messages.length && <p className="plan-lede">{s.lede}</p>}</header>
+          <h1 className="sr-only">{s.title}</h1>
           <div className="plan-messages" aria-live="polite">
+            {!messages.length && <p className="plan-msg plan-msg-assistant plan-greet">{s.greeting}</p>}
             {messages.map((m, i) => (
               <Fragment key={i}>
                 <p className={`plan-msg plan-msg-${m.role}`}>{m.content}</p>
@@ -128,7 +130,7 @@ export function Planner({ locale }: { locale: Locale }) {
             {error && <p className="plan-msg is-failed" role="alert">{error}</p>}
           </div>
           {!busy && suggestions.length > 0 && (
-            <div className="plan-chips" aria-label={plan ? s.ask : s.try}>
+            <div className={`plan-chips${plan ? " is-questions" : ""}`} aria-label={plan ? s.ask : s.try}>
               {suggestions.map((chip) => <button key={chip} type="button" className="plan-chip" onClick={() => void send(chip)}>{chip}</button>)}
             </div>
           )}
@@ -139,11 +141,10 @@ export function Planner({ locale }: { locale: Locale }) {
         <section className="plan-trip" aria-label={s.yourTrip}>
           {!shared && <button type="button" className="plan-back" onClick={() => setScreen("chat")}>← {s.backToChat}</button>}
           {shared && <p className="plan-eyebrow">{s.sharedPlan}</p>}
-          {cover(plan, locale, s) ? <img className="plan-cover" src={cover(plan, locale, s)!} alt="" /> : null}
           <div className="plan-trip-head">
             <div>
               <h1>{plan.title}</h1>
-              <p className="plan-sub">{meta(plan, locale, s)}</p>
+              <p className="plan-sub mono">{meta(plan, locale, s)}</p>
             </div>
             <div className="plan-trip-tools">
               {!shared && <button type="button" className="plan-btn" onClick={() => void share()}>{copied ? s.copied : s.share}</button>}
@@ -153,7 +154,7 @@ export function Planner({ locale }: { locale: Locale }) {
           {plan.days.map((d) => (
             <section key={d.date} className="plan-day" aria-labelledby={`day-${d.date}`}>
               <div className="plan-day-head">
-                <h2 id={`day-${d.date}`}>{dayTitle(d.date, locale)}</h2>
+                <h2 id={`day-${d.date}`}><span className="mono">{dayParts(d.date, locale).short}</span> <span className="plan-weekday">{dayParts(d.date, locale).weekday}</span></h2>
                 <SeaText day={d} s={s} />
               </div>
               <RoughAlert day={d} s={s} />
@@ -184,16 +185,14 @@ export function Planner({ locale }: { locale: Locale }) {
   );
 }
 
-/** The trip in the chat: 16:10 photo, title, dates · people, "Open trip". */
+/** The trip in the chat (v3.3 mini card): 64 thumbnail, title, mono dates · stops, "Open trip". */
 function TripCard({ plan, locale, s, onOpen }: { plan: TripPlan; locale: Locale; s: PlanStrings; onOpen: () => void }) {
   const img = cover(plan, locale, s);
   return (
     <div className="plan-tripcard">
       {img ? <img src={img} alt="" /> : <span className="plan-tripcard-img" aria-hidden="true" />}
-      <div className="plan-tripcard-row">
-        <div><p className="plan-tripcard-title">{plan.title}</p><p className="plan-tripcard-meta">{meta(plan, locale, s)}</p></div>
-        <button type="button" className="plan-primary" onClick={onOpen}>{s.openTrip}</button>
-      </div>
+      <div><p className="plan-tripcard-title">{plan.title}</p><p className="plan-tripcard-meta mono">{dateRange(plan.days, locale)} · {stopCount(plan)} {s.stops}</p></div>
+      <button type="button" className="plan-primary" onClick={onOpen}>{s.openTrip}</button>
     </div>
   );
 }
@@ -217,42 +216,42 @@ function PlanProgress({ steps }: { steps: string[] }) {
   );
 }
 
-/** Printable itinerary for Export PDF (window.print → Save as PDF). Hidden on screen. No prices. */
+/** Printable itinerary for Export PDF (window.print → Save as PDF). Hidden on screen. No prices, no maps:
+ *  each row carries its location text. Normal flow so @page margins hold; rows never split. */
 function PrintPlan({ plan, locale }: { plan: TripPlan; locale: Locale }) {
   const s = planStrings[locale];
   return (
     <section className="plan-print" aria-hidden="true">
+      <style>{`@media print { @page { @bottom-left { content: ${JSON.stringify(`${plan.title} · maio.cv`)}; } } }`}</style>
       <header className="plan-print-head">
-        <p className="plan-eyebrow">maio.cv · {s.eyebrow}</p>
+        <p className="plan-eyebrow">maio.cv · {s.tripPlan}</p>
         <h1>{plan.title}</h1>
-        <p>{dateRange(plan.days, locale)}</p>
+        <p className="mono">{meta(plan, locale, s)} · {stopCount(plan)} {s.stops}</p>
       </header>
-      {plan.days.map((d) => (
-        <article key={d.date} className="plan-print-day">
-          <div className="plan-print-dayhead">
-            <h2>{dayTitle(d.date, locale)}</h2>
-            <p>{daySummary(d, s, plan.hasCar)} · {seaLine(d.sea, s)}</p>
-            {d.sea?.status === "rough" && <p className="plan-print-rough">{s.roughAlert}</p>}
-          </div>
-          <div className="plan-print-grid">
+      {plan.days.map((d) => {
+        const p = dayParts(d.date, locale);
+        return (
+          <article key={d.date} className="plan-print-day">
+            <div className="plan-print-dayhead">
+              <h2><span className="mono">{p.short}</span> <span className="plan-weekday">{p.weekday}</span></h2>
+              <p>{seaLine(d.sea, s)}{d.sea?.status === "rough" ? ` · ${s.noBoat}` : ""}</p>
+            </div>
             <ol>
-              {d.items.map((item, n) => {
+              {d.items.map((item) => {
                 const v = cardView(item, locale, s);
                 if (!v) return null;
                 return (
                   <li key={item.id}>
-                    <span className="plan-print-time">{item.start}</span>
-                    <span className="plan-print-n">{v.lat !== null ? n + 1 : ""}</span>
-                    <div><strong>{v.title}</strong><span>{v.meta}</span>{v.description && <span className="plan-print-desc">{v.description}</span>}</div>
+                    <span className="plan-print-time mono">{timeSpan(item)}</span>
+                    <div><strong>{v.title}</strong><span>{v.meta}</span></div>
                   </li>
                 );
               })}
             </ol>
-            <TripMap day={d} locale={locale} s={s} caption={false} />
-          </div>
-        </article>
-      ))}
-      {plan.unmet.length > 0 && <p><strong>{s.unmet}:</strong> {plan.unmet.join(", ")}</p>}
+          </article>
+        );
+      })}
+      {plan.unmet.length > 0 && <p className="plan-print-unmet"><strong>{s.unmet}:</strong> {plan.unmet.join(", ")}</p>}
       <footer className="plan-print-foot">{s.foot} · {s.forecast} · maio.cv</footer>
     </section>
   );

@@ -1653,6 +1653,7 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-msg { margin: 0; font-size: 17px; line-height: 1.45; max-width: 92%; }
 .plan-msg-user { align-self: flex-end; background: var(--maio-surface-data); padding: 10px 16px; border-radius: var(--radius-card); font-size: 15px; }
 .plan-msg-assistant { align-self: flex-start; }
+.plan-greet { background: var(--maio-surface-data); padding: 12px 16px; border-radius: 22px 22px 22px 6px; max-width: 88%; }
 .plan-msg.is-failed { color: var(--maio-error); }
 .plan-thinking { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); font-size: 15px; }
 .plan-progress ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -1664,14 +1665,13 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-skel { display: block; margin-top: 20px; aspect-ratio: 4 / 3; border-radius: var(--radius-card); background: var(--maio-surface-data); }
 @media (min-width: 701px) { .plan-skel { aspect-ratio: 5 / 2; } }
 @keyframes plan-spin { to { transform: rotate(360deg); } }
-.plan-tripcard { display: grid; gap: 14px; }
-.plan-tripcard img, .plan-tripcard-img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--radius-card); background: var(--maio-surface-data); }
-.plan-tripcard-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.plan-tripcard-title { margin: 0; font-size: 20px; font-weight: 500; }
-.plan-tripcard-meta { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.plan-tripcard { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-card); }
+.plan-tripcard img, .plan-tripcard-img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 12px; background: var(--maio-surface-data); }
+.plan-tripcard-title { margin: 0; font-size: 17px; font-weight: 500; }
+.plan-tripcard-meta { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 .plan-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .plan-chip { min-height: 44px; padding: 0 16px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; }
-@media (max-width: 700px) { .plan-chip:nth-child(n + 2) { display: none; } }
+@media (max-width: 700px) { .plan-chips.is-questions .plan-chip:nth-child(n + 2) { display: none; } }
 .plan-dock { position: sticky; bottom: 0; z-index: 30; margin: auto calc(-1 * var(--gutter)) 0; padding: 32px var(--gutter) calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, rgb(255 255 255 / 0), var(--paper) 40%); }
 .plan-composer { display: flex; align-items: center; gap: 8px; max-width: 720px; margin: 0 auto; border: 1.5px solid var(--ink); border-radius: var(--radius-input); padding: 4px 4px 4px 20px; background: var(--paper); }
 .plan-composer input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: transparent; font: inherit; font-size: 16px; color: var(--ink); outline: none; }
@@ -1683,11 +1683,11 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-trip { display: flex; flex-direction: column; min-width: 0; }
 .plan-cover { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-card); margin-top: 8px; }
 .plan-trip-head { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
-.plan-trip-head h1 { margin: 0; font-size: 34px; line-height: 1.05; font-weight: 500; letter-spacing: var(--tracking-display); }
+.plan-trip-head h1 { margin: 0; font-size: 28px; line-height: 1.05; font-weight: 500; letter-spacing: var(--tracking-display); }
 .plan-trip-tools { display: flex; gap: 8px; }
-.plan-day { margin-top: 44px; }
+.plan-day { margin-top: 36px; }
 .plan-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
-.plan-day-head h2 { margin: 0; font-size: 24px; font-weight: 500; }
+.plan-day-head h2 { margin: 0; font-size: 18px; font-weight: 500; }
 .plan-seal { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .plan-seal i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
 .plan-seal-rough { color: var(--maio-error); }
@@ -1697,13 +1697,18 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-ferry { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; padding: 12px 16px; margin-bottom: 22px; border-radius: 12px; background: var(--maio-surface-data); font-size: 15px; }
 .plan-ferry time { font-variant-numeric: tabular-nums; }
 .plan-ferry-note { color: var(--muted); }
-.plan-stops { display: grid; gap: 22px; }
-.plan-stop { display: block; color: var(--ink); text-decoration: none; border-radius: var(--radius-card); }
-.plan-stop-img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: var(--radius-card); background: var(--maio-surface-data); }
-.plan-stop-m { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 4px; margin-top: 12px; align-items: baseline; }
-.plan-stop-time { font-size: 15px; font-variant-numeric: tabular-nums; }
-.plan-stop-title { display: block; font-size: 19px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
-.plan-stop-meta { display: block; margin-top: 4px; font-size: 15px; color: var(--muted); }
+.plan-stops { display: grid; gap: 0; }
+/* v3.3 mono token for dates and times (Geist Mono via next/font, system fallback). */
+:root { --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+.plan-sub.mono { font-size: 14px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.plan-stop { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: center; min-height: 88px; padding: 12px 0; box-sizing: border-box; color: var(--ink); text-decoration: none; border-radius: 12px; }
+.plan-stop-img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 12px; background: var(--maio-surface-data); }
+.plan-stop-m { display: grid; gap: 2px; min-width: 0; }
+.plan-stop-time { font-size: 13px; color: var(--maio-text-data); }
+.plan-stop-title { display: block; font-size: 17px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.plan-stop-meta { display: block; font-size: 15px; line-height: 1.35; color: var(--muted); }
+.plan-weekday { color: var(--muted); }
 .plan-daymap { display: inline-flex; align-items: center; min-height: 44px; margin-top: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .plan-unmet { margin: 32px 0 0; font-size: 15px; color: var(--maio-text-data); }
 .plan-foot { margin: 48px 0 0; font-size: 13px; color: var(--muted); }
@@ -1712,10 +1717,6 @@ body:has(.chat-screen) { overflow: hidden; }
   .plan-title { font-size: 48px; }
   .plan-cover { aspect-ratio: 5 / 2; }
   .plan-trip-head { flex-direction: row; align-items: flex-end; justify-content: space-between; }
-  .plan-trip-head h1 { font-size: 44px; }
-  .plan-day { margin-top: 48px; }
-  .plan-stops { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; row-gap: 32px; }
-  .plan-stop-img { aspect-ratio: 4 / 3; }
 }
 /* Map inside "View day on map" and the PDF. */
 .plan-map { margin: 0; border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--paper); }
@@ -1731,7 +1732,7 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(17 17 17 / .35); display: flex; align-items: stretch; }
 .plan-sheet { position: relative; width: 100%; height: 100dvh; overflow-y: auto; background: var(--paper); }
 .plan-sheet-close { position: absolute; top: 16px; left: 16px; z-index: 1; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--paper); color: var(--ink); font-size: 22px; cursor: pointer; }
-.plan-sheet-hero { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: var(--maio-surface-data); }
+.plan-sheet-hero { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--maio-surface-data); }
 .plan-sheet-map .plan-sheet-body { padding-top: 76px; }
 .plan-sheet-body { padding: 20px var(--gutter) 32px; display: flex; flex-direction: column; gap: 12px; }
 .plan-sheet-body h2 { margin: 0; font-size: 32px; font-weight: 500; line-height: 1.1; letter-spacing: var(--tracking-display); }
@@ -1754,34 +1755,31 @@ body:has(.chat-screen) { overflow: hidden; }
 @media (min-width: 701px) { .plan-sharebar { align-self: center; width: 560px; } }
 .plan-print { display: none; }
 @media print {
-  @page { size: A4; margin: 18mm 17mm 18mm; }
+  /* v3.3 print: A4, 16/16/20mm, normal flow, running footer, no maps, rows never split. */
+  @page { size: A4 portrait; margin: 16mm 16mm 20mm;
+    @bottom-left { font: 8pt var(--font-pp, sans-serif); color: #56565b; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-mono); color: #56565b; } }
   html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
   body * { visibility: hidden; }
   .plan-print, .plan-print * { visibility: visible; }
   .plan-screen > :not(main), .plan-main > :not(.plan-print), .maio-header, .plan-sheet-backdrop { display: none !important; }
-  .plan-main { display: block; padding: 0; max-width: none; }
-  .plan-print { display: block; position: static; width: auto; max-width: 100%; box-sizing: border-box; padding: 0; margin: 0; color: #111; font-size: 11pt; overflow: visible; }
-  .plan-screen > main, .plan-main { margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; }
-  .plan-print-head { border-bottom: 1px solid #111; padding-bottom: 8pt; margin-bottom: 12pt; }
-  .plan-print-head h1 { font-size: 24pt; font-weight: 500; margin: 4pt 0 2pt; }
+  .plan-main { display: block; margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; }
+  .plan-print { display: block; position: static; width: auto; margin: 0; padding: 0; color: #111; font-size: 10.5pt; line-height: 1.4; }
+  .plan-print-head { border-bottom: 1px solid #56565b; padding-bottom: 10pt; margin-bottom: 14pt; break-inside: avoid; }
+  .plan-print-head h1 { font-size: 26pt; font-weight: 500; line-height: 1.1; margin: 4pt 0 4pt; }
   .plan-print-head p { margin: 0; color: #56565b; }
-  .plan-print-day { margin-bottom: 14pt; }
-  .plan-print-dayhead { break-after: avoid; page-break-after: avoid; break-inside: avoid; }
-  .plan-print li { break-inside: avoid; page-break-inside: avoid; }
-  .plan-print-head, .plan-print-foot { break-inside: avoid; }
+  .plan-print-day { margin-bottom: 16pt; }
+  .plan-print-dayhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8mm; border-bottom: 1px solid #111; padding-bottom: 4pt; break-inside: avoid; break-after: avoid; page-break-after: avoid; }
   .plan-print-dayhead h2 { font-size: 15pt; font-weight: 500; margin: 0; }
-  .plan-print-dayhead p { margin: 2pt 0 6pt; color: #56565b; font-size: 10pt; }
-  .plan-print-rough { color: #9d4c36 !important; }
-  .plan-print-grid { display: block; }
+  .plan-print-dayhead p { margin: 0; color: #111; font-size: 9pt; }
+  .plan-print .plan-weekday { color: #56565b; }
   .plan-print ol { list-style: none; margin: 0; padding: 0; }
-  .plan-print li { display: grid; grid-template-columns: 12mm 6mm minmax(0, 1fr); gap: 2mm; padding: 5pt 0; border-top: 1px solid #e5e5e7; }
-  .plan-print li strong { display: block; font-weight: 500; }
+  .plan-print li { display: grid; grid-template-columns: 30mm minmax(0, 1fr); gap: 4mm; padding: 7pt 0; border-bottom: 1px solid #e5e5e7; break-inside: avoid; page-break-inside: avoid; }
+  .plan-print li strong { display: block; font-size: 11pt; font-weight: 500; }
   .plan-print li span { display: block; color: #56565b; font-size: 9.5pt; }
-  .plan-print-time { font-variant-numeric: tabular-nums; color: #111 !important; font-size: 11pt !important; }
-  .plan-print-n { font-weight: 500; color: #111 !important; }
-  .plan-print-desc { margin-top: 2pt; }
+  .plan-print .plan-print-time { color: #111; font-size: 9.5pt; }
+  .plan-print-unmet { font-size: 9.5pt; }
+  .plan-print-foot { margin-top: 10pt; color: #56565b; font-size: 8.5pt; break-inside: avoid; }
   .plan-print .plan-map { display: none !important; }
-  .plan-print .plan-map-sea { fill: #f5f5f7; } .plan-print .plan-map-island { fill: #e5e5e7; stroke: #dedee1; }
-  .plan-print-foot { border-top: 1px solid #e5e5e7; padding-top: 6pt; color: #6e6e73; font-size: 9pt; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

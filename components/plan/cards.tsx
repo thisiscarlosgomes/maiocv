@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayPins, dayTitle } from "../../lib/trip-view";
+import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, timeSpan } from "../../lib/trip-view";
 
 export function RoughAlert({ day, s }: { day: PlanDay; s: PlanStrings }) {
   if (day.sea?.status !== "rough") return null;
@@ -18,19 +18,20 @@ export function SeaText({ day, s }: { day: PlanDay; s: PlanStrings }) {
   return <span className={`plan-seal plan-seal-${status}`}><i aria-hidden="true" />{s.sea[status]}{status === "rough" ? ` · ${s.noBoat}` : ""}</span>;
 }
 
-/** v3.2 stop: borderless 3:2 (4:3 on desktop) photo, then time, title and one meta line. The whole stop opens the detail. */
+/** v3.3 stop: compact row, 64×64 thumbnail, title, meta, mono time. The whole row opens the detail. */
 export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: Locale; s: PlanStrings; onOpen?: (item: PlanItem, el: HTMLElement) => void }) {
   const v = cardView(item, locale, s);
   if (!v) return null;
   if (item.kind === "transport") {
-    return <li className="plan-ferry" data-testid="card-transport"><time>{item.start}</time><span>{v.title}</span>{v.meta && <span className="plan-ferry-note">· {v.meta}</span>}</li>;
+    return <li className="plan-ferry" data-testid="card-transport"><time className="mono">{item.start}</time><span>{v.title}</span>{v.meta && <span className="plan-ferry-note">· {v.meta}</span>}</li>;
   }
   const body = (
     <>
       {v.image ? <img className="plan-stop-img" src={v.image} alt="" loading="lazy" /> : <span className="plan-stop-img" aria-hidden="true" />}
       <span className="plan-stop-m">
-        <time className="plan-stop-time">{item.start}</time>
-        <span><span className="plan-stop-title">{v.title}</span><span className="plan-stop-meta">{v.meta}</span></span>
+        <span className="plan-stop-title">{v.title}</span>
+        <span className="plan-stop-meta">{v.meta}</span>
+        <time className="plan-stop-time mono">{timeSpan(item)}</time>
       </span>
     </>
   );
@@ -125,7 +126,7 @@ export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: Pl
         <h2 id="plan-sheet-title">{v.title}</h2>
         {v.description && <p className="plan-sheet-desc">{v.description}</p>}
         <dl className="plan-facts">
-          <div><dt>{s.time}</dt><dd>{item.start} – {end}</dd></div>
+          <div><dt>{s.time}</dt><dd className="mono">{dayParts(day.date, locale).short} · {item.start} – {end}</dd></div>
           {v.location && <div><dt>{s.meet}</dt><dd>{v.location}</dd></div>}
           {v.operator && <div><dt>{s.operator}</dt><dd>{v.operator.name}</dd></div>}
           {v.seaDependent && <div><dt>{s.seaFact}</dt><dd>{s.seaFactLine[sea?.status ?? "unknown"]}{sea?.waveHeightM != null ? ` · ${sea.waveHeightM.toFixed(1)} ${s.waves}` : ""}</dd></div>}

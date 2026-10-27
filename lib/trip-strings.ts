@@ -2,7 +2,8 @@ import type { Locale } from "./locale.ts";
 
 const en = {
   eyebrow: "Trip planner · test", title: "Plan your days on Maio", lede: "Say how many days you have. We plan around the sea.",
-  placeholder: "e.g. 3 days, calm water, one boat trip", followUp: "Change anything, just ask", send: "Send", thinking: "Checking sea forecast and places…",
+  tripPlan: "Trip plan", greeting: "Olá! How many days do you have on Maio, and when? I plan around the sea.", startChips: ["3 days, slow pace", "A weekend with kids"],
+  placeholder: "How many days, and when?", followUp: "Change anything, just ask", send: "Send", thinking: "Checking sea forecast and places…",
   error: "The planner is unavailable. Try again.", editFailed: "Couldn't update the plan. Nothing changed.",
   yourTrip: "Your trip", empty: "Your plan will appear here as cards.", try: "Try",
   min: "min", h: "h", stop: "stop", stops: "stops", driving: "driving", walking: "walking",
@@ -38,7 +39,8 @@ type Strings = typeof en;
 const pt: Strings = {
   ...en,
   eyebrow: "Planeador · teste", title: "Planeie os seus dias no Maio", lede: "Diga quantos dias tem. Planeamos à volta do mar.",
-  placeholder: "ex. 3 dias, mar calmo, uma saída de barco", followUp: "Mude o que quiser, é só pedir", send: "Enviar", thinking: "A ver a previsão do mar e os lugares…",
+  tripPlan: "Plano de viagem", greeting: "Olá! Quantos dias vai passar no Maio, e quando? Eu planeio em função do mar.", startChips: ["3 dias, ritmo calmo", "Um fim de semana com crianças"],
+  placeholder: "Quantos dias, e quando?", followUp: "Mude o que quiser, é só pedir", send: "Enviar", thinking: "A ver a previsão do mar e os lugares…",
   error: "O planeador não está disponível. Tente de novo.", editFailed: "Não foi possível atualizar o plano. Nada mudou.",
   yourTrip: "A sua viagem", empty: "O seu plano aparece aqui em cartões.", try: "Experimente",
   stop: "paragem", stops: "paragens", driving: "de carro", walking: "a pé",
@@ -71,7 +73,8 @@ const pt: Strings = {
 const fr: Strings = {
   ...en,
   eyebrow: "Planificateur · test", title: "Planifiez vos jours à Maio", lede: "Dites combien de jours vous avez. On planifie selon la mer.",
-  placeholder: "ex. 3 jours, mer calme, une sortie en bateau", followUp: "Changez ce que vous voulez, demandez", send: "Envoyer", thinking: "Prévision de la mer et lieux…",
+  tripPlan: "Plan de voyage", greeting: "Olá ! Combien de jours passez-vous à Maio, et quand ? Je planifie selon la mer.", startChips: ["3 jours, rythme tranquille", "Un week-end avec les enfants"],
+  placeholder: "Combien de jours, et quand ?", followUp: "Changez ce que vous voulez, demandez", send: "Envoyer", thinking: "Prévision de la mer et lieux…",
   error: "Le planificateur est indisponible. Réessayez.", editFailed: "Impossible de modifier le plan. Rien n'a changé.",
   yourTrip: "Votre voyage", empty: "Votre plan apparaîtra ici en cartes.", try: "Essayez",
   stop: "étape", stops: "étapes", driving: "en voiture", walking: "à pied",

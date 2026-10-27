@@ -5,7 +5,7 @@ import { FOOD, PLACES, distanceKm, experience, place, food, type Food, type Plan
  *  2. Bars only in evening slots (19:00+); daytime meals go to restaurants. */
 
 export const EVENING_START = "19:00";
-export const BAR_SLOT = "19:30";
+export const BAR_SLOT = "21:00";
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 const toTime = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 

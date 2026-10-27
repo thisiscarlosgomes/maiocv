@@ -124,3 +124,18 @@ export function dayPins(day: PlanDay, locale: Locale, s: PlanStrings) {
     return [{ n: i + 1, x, y, title: v.title }];
   });
 }
+
+/** v3.3 mono day label: "Wed 28" plus the long weekday, split so the date can be mono. */
+export function dayParts(date: string, locale: Locale): { short: string; weekday: string } {
+  const d = new Date(`${date}T12:00:00Z`);
+  const wk = (o: Intl.DateTimeFormatOptions) => d.toLocaleDateString(intl[locale], { ...o, timeZone: "UTC" });
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  return { short: `${cap(wk({ weekday: "short" }).replace(".", ""))} ${d.getUTCDate()}`, weekday: cap(wk({ weekday: "long" })) };
+}
+
+/** "10:00 – 12:30" for timed visits, just "13:00" for meals and arrivals. */
+export function timeSpan(item: PlanItem): string {
+  if (item.kind === "food" || item.kind === "transport" || !item.durationMin) return item.start;
+  const m = Number(item.start.slice(0, 2)) * 60 + Number(item.start.slice(3)) + item.durationMin;
+  return `${item.start} – ${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
