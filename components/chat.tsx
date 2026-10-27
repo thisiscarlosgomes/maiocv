@@ -14,6 +14,7 @@ import type { Locale } from "../lib/locale";
 
 const OpenUIBusiness = dynamic(() => import("./openui-business").then(module => module.OpenUIBusiness));
 const OpenUIPlaces = dynamic(() => import("./openui-places").then(module => module.OpenUIPlaces));
+const VoiceConversation = dynamic(() => import("./voice-conversation").then(module => module.VoiceConversation), { ssr: false });
 
 type Message = {
   role: "user" | "assistant";
@@ -58,6 +59,8 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const voiceLauncher = useRef<HTMLButtonElement>(null);
   const active = useRef<AbortController | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const audioStream = useRef<MediaStream | null>(null);
@@ -516,6 +519,15 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         <div ref={scrollTail} aria-hidden="true" />
       </div>
       <div className="chat-composer-wrap">
+        <div className="chat-voice-launcher-wrap">
+          <button ref={voiceLauncher} type="button" className="chat-voice-launcher" disabled={busy || recording || transcribing}
+            onClick={() => setVoiceOpen(true)} aria-haspopup="dialog">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4" />
+            </svg>
+            {copy("voice.launch")}
+          </button>
+        </div>
         {recording && <p role="status" className="chat-voice-status">{copy("chat.voice.listening")}</p>}
         {transcribing && <p role="status" className="chat-voice-status">{copy("chat.voice.transcribing")}</p>}
         <form className="chat-composer" onSubmit={event => { event.preventDefault(); if (!recording && !transcribing) void send(); }}>
@@ -562,6 +574,10 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         {voiceError && <p role="alert" className="chat-voice-error">{voiceError}</p>}
         <p className="chat-note">{copy("chat.note")}</p>
       </div>
+      {voiceOpen && <VoiceConversation locale={locale} onClose={() => {
+        setVoiceOpen(false);
+        requestAnimationFrame(() => voiceLauncher.current?.focus());
+      }} />}
     </main>
   );
 }

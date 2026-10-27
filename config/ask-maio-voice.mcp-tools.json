@@ -1,0 +1,123 @@
+{
+  "endpoint": "https://portal.maio.cv/api/mcp",
+  "reviewedOn": "2026-10-27",
+  "description": "Reviewed public read-only Maio tools. Any tool with a new name or changed description/input schema remains disabled until this manifest is reviewed.",
+  "tools": [
+    {
+      "name": "get_open_data_catalog",
+      "sha256": "1639e14c94f4f22061199e36cad64fd34e5309da2318d632bc29ac01250dcd6f"
+    },
+    {
+      "name": "get_open_data_collection",
+      "sha256": "f183b40c63d2a6c4a1d4318c3a476beacfb63b1f2e4230b9fdf81a1a7f6cbaad"
+    },
+    {
+      "name": "get_open_data_feature",
+      "sha256": "c324de5b4d6dbba077880909180b7eb762441bb24f2cbe2fc80805df787370c2"
+    },
+    {
+      "name": "get_open_data_dataset",
+      "sha256": "cb213edd6ab163e234174dac10beb9626fa05296d845f0f4abefdbfc08b582a9"
+    },
+    {
+      "name": "get_open_data_source",
+      "sha256": "8221a2598d5aee3b39867ba72df2cde059dd4817337112b39b39d67c11776ed9"
+    },
+    {
+      "name": "get_tourism_overview",
+      "sha256": "5988f51dfc90de4c4e45cf587aba2eadd9cc4ee15da75e35fb97f038ba7dee0a"
+    },
+    {
+      "name": "get_tourism_indicators",
+      "sha256": "04825b4b08d631fbfac45bbbcd7362733b9304d917ef060f179e0cf11fdd47ea"
+    },
+    {
+      "name": "get_maio_core_metrics",
+      "sha256": "7c7390ccbee2c536acd20516061b86c6832663ee8df14ecac3b25f4dde68d021"
+    },
+    {
+      "name": "get_tourism_quarters",
+      "sha256": "d114a04aaa93de2d1dbc5ac6dd7756f3bafb1efa84fcef043144337a538178bd"
+    },
+    {
+      "name": "get_tourism_population",
+      "sha256": "bc0a28c810e43aeb3b2c5bb6bbef849009ff58611259722a380df3519c0b6a9d"
+    },
+    {
+      "name": "get_tourism_dependency",
+      "sha256": "80d1dedbc7acc31cfcc77d1953aa5b97dd63ce98da85c4e6eea0d12c8530f029"
+    },
+    {
+      "name": "get_tourism_occupancy",
+      "sha256": "b57e723721e1e0f47936b4886262a00c7945881db245863a3f75bb8a0b74c3d4"
+    },
+    {
+      "name": "get_transport_overview",
+      "sha256": "11daeda6ef1b1d60747bbc11bdc046eb2cc2021731be00f0c4b6373ed6f8700a"
+    },
+    {
+      "name": "get_boat_schedules",
+      "sha256": "3d8c26647c9b55ccb57b589e99beda2e7c0fb45e0207ea65adece019119fc1f7"
+    },
+    {
+      "name": "get_flight_schedules",
+      "sha256": "23624010ebbd3309865133122f81cffd5ad2f34942f37be3d73c132501ccf050"
+    },
+    {
+      "name": "get_maio_weather",
+      "sha256": "f093be4185f39538b4273930713f2caa74addf12101b349e862656edec57ad54"
+    },
+    {
+      "name": "get_maio_marine",
+      "sha256": "b9b5ec6f683c53239c9cdf034b01c24da4e5febea64346003efc67973dfd49bc"
+    },
+    {
+      "name": "get_maio_wind",
+      "sha256": "2ad83fbd1d4a6055b074142065c748ee618cb012ebfc0b337db7c8b218042da7"
+    },
+    {
+      "name": "get_payment_system_data",
+      "sha256": "6906bf662c3fbbda8281adba102ea33b1000078f1947e5d37ef4bd2ee5a784ba"
+    },
+    {
+      "name": "get_external_sector_finance_data",
+      "sha256": "85f8c8fd69ee7cc6508ad48b2ccb51ade36078377cd4082971e8df0c26f658bc"
+    },
+    {
+      "name": "get_island_comparison_snapshot",
+      "sha256": "80c9790a12864b368759dd32301f296e57281c0979e10ce1e44a71667236b154"
+    },
+    {
+      "name": "get_maio_budget",
+      "sha256": "ae2d1d1005f15644c1facb9d8b45288e6fe272475c1e112f99ec319fb4c6e671"
+    },
+    {
+      "name": "get_maio_budget_comparison",
+      "sha256": "ef61ff7942fae0b429293994930f73c80a82e581d207de20ab0df93bb2037be8"
+    },
+    {
+      "name": "get_maio_budget_metrics_snapshot",
+      "sha256": "a58f832ce3a5906f7c5716d38e92086e069eeb3d2fd87bc6274817621b8a39a0"
+    },
+    {
+      "name": "get_maio_compensation_lookup",
+      "sha256": "bb709fa20bf927e63069f2f064dfa0c4a28043aa377cf0c89978be627bb51e1a"
+    },
+    {
+      "name": "get_maio_energy_core",
+      "sha256": "2fdd6e64da8a54cec7cc89e622904c4e6db2784bf9fc6fc4962cce275b702380"
+    },
+    {
+      "name": "search_codigo_postura",
+      "sha256": "4e8199d0a99b2195adb6c8a261f8fdd2d131a1b4e34c7f29e4dcaf12c68d6508"
+    },
+    {
+      "name": "get_codigo_postura_article",
+      "sha256": "c934303d0dc54fa0cb3250a526481af34a0246a94e1d8d9e8899b34bff502032"
+    },
+    {
+      "name": "get_codigo_postura_stats",
+      "sha256": "fc39c7ad1e357488aaa3fca1cde3b9e6f31bab24e8fb2f8ab302f11bb35bf689"
+    }
+  ]
+}
