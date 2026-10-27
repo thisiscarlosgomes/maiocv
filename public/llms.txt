@@ -18,4 +18,4 @@ MaioCV is an initiative hub, not a government website. Statistics should be attr
 
 The on-page question examples include prepared answers. Custom questions use a chat service. Prepared examples are not live statistics; consult the linked data sources for current values.
 
-- [Chat with Maio](https://www.maio.cv/chat): Ask questions and follow up using the island’s data tools.
+- [Ask Maio](https://www.maio.cv/chat): Ask questions and follow up using the island’s data tools.

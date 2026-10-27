@@ -39,7 +39,7 @@ function fileName(question: string): string {
 export async function saveChatAnswerPdf({ question, answer, citations, example, uncited, locale, labels }: PdfAnswer): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
-  pdf.setProperties({ title: question, author: "maio.cv", subject: "MaioCV chat answer", creator: "maio.cv" });
+  pdf.setProperties({ title: question, author: "maio.cv", subject: "Ask Maio answer", creator: "maio.cv" });
   const width = pdf.internal.pageSize.getWidth();
   const height = pdf.internal.pageSize.getHeight();
   const margin = 20;
