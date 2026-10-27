@@ -4,7 +4,6 @@ import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from 
 import { loadSailings, type Sailing } from "./essentials.ts";
 import { EXPERIENCES, FOOD, experience, food, place, parseTripPlan, type TripPlan } from "./trip.ts";
 import { TripRequestSchema, buildPlan, seaStatus } from "./trip-planner.ts";
-import { EditOpSchema, applyEdits } from "./trip-edit.ts";
 
 export type ToolEvent = { name: string; ok: boolean; arguments?: unknown; dropped?: string[] };
 export type PlanAgentResult = { reply: string; plan: TripPlan | null; toolEvents: ToolEvent[] };
@@ -19,16 +18,15 @@ export function planInstructions(today: string, current: TripPlan | null): strin
     "You are the Maio island trip concierge on maio.cv. You plan days on Maio, Cabo Verde.",
     `Today in Cabo Verde is ${weekday(today)} ${today}. Resolve relative dates like "Friday" to the next such date.`,
     "Always reply in the guest's language (pt, en or fr) and set locale to match.",
-    "For a new trip call propose_itinerary once. Default: start tomorrow, 2 adults, no car, 3 days.",
+    current ? "The plan below is FIXED. Never change its stops, times or places, and do not build a new one. If the guest asks to change it, say kindly that the plan is fixed, then answer any question they have; they can start a new plan with \"Plan my trip\"." : "For a new trip call propose_itinerary once. Default: start tomorrow, 2 adults, no car, 3 days.",
+    current ? "Answer questions about Maio and this trip (beaches, food, kids, sea, what to pack, getting around) from the tools and the plan." : "",
     "Use only experience ids returned by search_experiences. Never invent places, operators, contacts or times.",
     "If the guest asks for something that search_experiences does not return (for example nightlife, diving or a dolphin cruise), put it in unmet and say plainly that we don't list it yet.",
     "Ferry or flight arrival: set arrival with dayIndex. Use get_transport for published times; if none are published say so.",
-    "To change an existing plan call edit_itinerary with the smallest set of operations (item ids are in the current plan). Do not rebuild the plan. Days are 0-based.",
     "You do not book anything and you never mention prices. If asked, say guests arrange directly with the operator; the plan shows a contact only when we have one.",
-    "Edits happen only through you: for a lazier day use retime for later starts and swap far stops for closer ones; for a sunset retime the last stop to about 17:30.",
-    "Reply in 2 to 4 short sentences. The plan is shown as cards, so do not list every item.",
+    "Reply in 2 to 4 short sentences. The plan is shown as a trip page, so do not list every item.",
     current ? `Current plan (JSON): ${JSON.stringify(current)}` : "There is no plan yet.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 export async function runPlanAgent(messages: ModelMessage[], current: TripPlan | null, deps: PlanDeps): Promise<PlanAgentResult> {
@@ -87,29 +85,20 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         return summarize(plan);
       },
     }),
-    edit_itinerary: tool({
-      description: "Change the current plan with minimal operations: swap an item for another id of the same kind, move an item to another day, retime it, or remove it.",
-      inputSchema: z.object({ ops: z.array(EditOpSchema).min(1).max(5) }),
-      execute: async ({ ops }) => {
-        if (!plan) { toolEvents.push({ name: "edit_itinerary", ok: false }); return { error: "No plan yet" }; }
-        const result = applyEdits(plan, ops);
-        toolEvents.push({ name: "edit_itinerary", ok: result.errors.length === 0, arguments: { ops } });
-        plan = result.plan;
-        return { errors: result.errors, plan: summarize(plan) };
-      },
-    }),
   };
 
+  // v3.2: once a plan exists it is fixed. Only read-only tools are offered, so the model can't rebuild or edit it.
+  const { propose_itinerary, ...readOnly } = tools;
   const result = await generateText({
     model: deps.model,
     instructions: planInstructions(today, current),
     messages,
-    tools,
+    tools: current ? readOnly : { ...readOnly, propose_itinerary },
     stopWhen: stepCountIs(6),
     temperature: 0,
   } as Parameters<typeof generateText>[0]);
 
-  const safe = plan ? parseTripPlan(plan) : null;
+  const safe = current ?? (plan ? parseTripPlan(plan) : null);
   return { reply: result.text.trim(), plan: safe, toolEvents };
 }
 

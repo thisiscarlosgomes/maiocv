@@ -20,10 +20,18 @@ const en = {
   moved: (t: string, at: string) => `${t} moved to ${at}`, swapped: (a: string, b: string) => `${a} swapped for ${b}`,
   added: (t: string) => `${t} added`, removed: (t: string) => `${t} removed`, movedDay: (t: string, d: string) => `${t} moved to ${d}`,
   daysN: (n: number) => `${n} days`,
-  openDetails: "open details", close: "Close", time: "Time", meetingPoint: "Meeting point", operator: "Operator",
-  contact: "Contact the operator:", whatsapp: "WhatsApp", call: "Call", openInMap: "Open in map", askAbout: "Ask about this",
+  openDetails: "details", close: "Close", time: "Time", meetingPoint: "Meeting point", operator: "Operator",
+  contact: "No booking site. Contact the operator:", whatsapp: "WhatsApp", call: "Call", openInMap: "Open in map", askAbout: "Ask about this",
   askPrefill: (t: string) => `Tell me more about ${t}`,
   sharedPlan: "Shared plan · view only", plannedWith: "planned with maio.cv", viewOnly: "View only. Copy it to change anything by chat.", copyPlan: "Copy plan",
+  // v3.2: the plan is fixed once generated; the chat answers questions.
+  ask: "Ask about Maio or your trip", openTrip: "Open trip", backToChat: "Back to chat", viewDayMap: "View day on map",
+  questions: ["Is Bitche Rotcha OK for kids?", "Where to eat near Calheta?", "What should I pack?"],
+  progress: ["Read your request", "Checked the sea forecast", "Choosing places and times"],
+  wantOwn: "Want your own days on Maio?", planMine: "Plan my trip", noBoat: "no boat", meet: "Meet", seaFact: "Sea",
+  people: (n: number) => `${n} ${n === 1 ? "person" : "people"}`,
+  demoReply: "Here’s a slow plan. Boat on Saturday, when the sea is calm.",
+  seaFactLine: { calm: "Calm", moderate: "Some swell", rough: "Rough", unknown: "No forecast" },
 };
 type Strings = typeof en;
 
@@ -48,9 +56,16 @@ const pt: Strings = {
   moved: (t, at) => `${t} passou para as ${at}`, swapped: (a, b) => `${a} trocado por ${b}`,
   added: (t) => `${t} adicionado`, removed: (t) => `${t} removido`, movedDay: (t, d) => `${t} passou para ${d}`,
   daysN: (n) => `${n} dias`,
-  openDetails: "abrir detalhes", close: "Fechar", time: "Hora", meetingPoint: "Ponto de encontro", operator: "Operador",
-  contact: "Contacte o operador:", call: "Ligar", openInMap: "Abrir no mapa", askAbout: "Perguntar sobre isto",
+  openDetails: "detalhes", close: "Fechar", time: "Hora", meetingPoint: "Ponto de encontro", operator: "Operador",
+  contact: "Sem site de reservas. Contacte o operador:", call: "Ligar", openInMap: "Abrir no mapa", askAbout: "Perguntar sobre isto",
   askPrefill: (t) => `Fale-me mais sobre ${t}`,
+  ask: "Pergunte sobre o Maio ou a viagem", openTrip: "Abrir viagem", backToChat: "Voltar ao chat", viewDayMap: "Ver o dia no mapa",
+  questions: ["Bitche Rotcha é boa para crianças?", "Onde comer perto de Calheta?", "O que levar na mala?"],
+  progress: ["Pedido lido", "Previsão do mar consultada", "A escolher lugares e horas"],
+  wantOwn: "Quer os seus dias no Maio?", planMine: "Planear a minha viagem", noBoat: "sem barco", meet: "Encontro", seaFact: "Mar",
+  people: (n) => `${n} ${n === 1 ? "pessoa" : "pessoas"}`,
+  demoReply: "Um plano tranquilo. O barco fica para sábado, com o mar calmo.",
+  seaFactLine: { calm: "Calmo", moderate: "Alguma ondulação", rough: "Agitado", unknown: "Sem previsão" },
   sharedPlan: "Plano partilhado · só leitura", plannedWith: "planeado com maio.cv", viewOnly: "Só leitura. Copie-o para mudar o que quiser no chat.", copyPlan: "Copiar plano",
 };
 const fr: Strings = {
@@ -74,9 +89,16 @@ const fr: Strings = {
   moved: (t, at) => `${t} déplacé à ${at}`, swapped: (a, b) => `${a} remplacé par ${b}`,
   added: (t) => `${t} ajouté`, removed: (t) => `${t} retiré`, movedDay: (t, d) => `${t} déplacé au ${d}`,
   daysN: (n) => `${n} jours`,
-  openDetails: "ouvrir les détails", close: "Fermer", time: "Heure", meetingPoint: "Point de rendez-vous", operator: "Opérateur",
-  contact: "Contacter l'opérateur :", call: "Appeler", openInMap: "Ouvrir la carte", askAbout: "Poser une question",
+  openDetails: "détails", close: "Fermer", time: "Heure", meetingPoint: "Point de rendez-vous", operator: "Opérateur",
+  contact: "Pas de site de réservation. Contacter l'opérateur :", call: "Appeler", openInMap: "Ouvrir la carte", askAbout: "Poser une question",
   askPrefill: (t) => `Dites-m'en plus sur ${t}`,
+  ask: "Questions sur Maio ou votre voyage", openTrip: "Ouvrir le voyage", backToChat: "Retour au chat", viewDayMap: "Voir la journée sur la carte",
+  questions: ["Bitche Rotcha, ok pour les enfants ?", "Où manger près de Calheta ?", "Que mettre dans la valise ?"],
+  progress: ["Demande lue", "Météo marine vérifiée", "Choix des lieux et horaires"],
+  wantOwn: "Envie de vos propres jours à Maio ?", planMine: "Planifier mon voyage", noBoat: "pas de bateau", meet: "Rendez-vous", seaFact: "Mer",
+  people: (n) => `${n} ${n === 1 ? "personne" : "personnes"}`,
+  demoReply: "Un plan tranquille. Le bateau est samedi, mer calme.",
+  seaFactLine: { calm: "Calme", moderate: "Un peu de houle", rough: "Agitée", unknown: "Pas de prévision" },
   sharedPlan: "Plan partagé · lecture seule", plannedWith: "planifié avec maio.cv", viewOnly: "Lecture seule. Copiez-le pour tout changer par chat.", copyPlan: "Copier le plan",
 };
 
