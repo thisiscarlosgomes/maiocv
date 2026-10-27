@@ -158,7 +158,7 @@ export function Planner({ locale }: { locale: Locale }) {
                 <SeaText day={d} s={s} />
               </div>
               <RoughAlert day={d} s={s} />
-              <DayStops day={d} locale={locale} s={s} onOpen={(item) => setDetail(item)} />
+              <DayStops day={d} hasCar={plan.hasCar} locale={locale} s={s} onOpen={(item) => setDetail(item)} />
               <button type="button" className="plan-daymap" onClick={() => setMapDay(d)}>{s.viewDayMap}</button>
             </section>
           ))}

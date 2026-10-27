@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { enforcePlanRules } from "./plan-rules.ts";
+import { Picker, buildDay, type DayKind } from "./full-day.ts";
 import type { DailySea } from "./agora.ts";
 import type { Sailing } from "./essentials.ts";
 import {
-  EXPERIENCES, FOOD, PLACES, LocaleSchema, addDays, distanceKm, experience, place,
+  EXPERIENCES, LocaleSchema, isExcludedExperience, addDays, distanceKm, experience, place,
   type Experience, type PlanDay, type PlanItem, type SeaDay, type TripPlan,
 } from "./trip.ts";
 
@@ -22,6 +23,8 @@ export const TripRequestSchema = z.object({
   boatTrips: z.number().int().min(0).max(3).default(0).describe("How many sea outings (boat, surf, jet ski) the guest wants"),
   interests: z.array(InterestSchema).max(5).default([]),
   arrival: z.object({ mode: z.enum(["ferry", "flight"]), dayIndex: z.number().int().min(0).max(6).default(0), time: time.optional() }).optional(),
+  departure: z.object({ mode: z.enum(["ferry", "flight"]), time: time.optional().describe("Departure time of the ferry or flight, HH:MM") }).optional().describe("Set when the guest leaves Maio on the last day"),
+  drinks: z.boolean().default(true).describe("false if the guest wants quiet evenings (no bar)"),
   include: z.array(z.string()).max(5).default([]).describe("Experience ids from search_experiences the guest asked for"),
   exclude: z.array(z.string()).max(10).default([]),
   unmet: z.array(z.string().max(80)).max(5).default([]).describe("Things the guest asked for that are not in the data, in their words"),
@@ -55,84 +58,63 @@ function ageOk(exp: Experience, req: TripRequest): boolean {
 
 const titles = { pt: (n: number) => `${n} ${n === 1 ? "dia" : "dias"} no Maio`, en: (n: number) => `${n} ${n === 1 ? "day" : "days"} on Maio`, fr: (n: number) => `${n} ${n === 1 ? "jour" : "jours"} à Maio` };
 
-export type PlannerInput = { request: TripRequest; forecast: DailySea[]; sailings: Sailing[]; forecastSource?: string };
+export type PlannerInput = { request: z.input<typeof TripRequestSchema>; forecast: DailySea[]; sailings: Sailing[]; forecastSource?: string };
 
 export function buildPlan({ request: raw, forecast, sailings, forecastSource = "Open-Meteo" }: PlannerInput): TripPlan {
   const req = TripRequestSchema.parse(raw);
   const unmet = [...req.unmet];
   const exclude = new Set(req.exclude);
   const kids = req.kids > 0;
-  const eligible = EXPERIENCES.filter((e) => !exclude.has(e.id) && ageOk(e, req) && reachable(e, req.hasCar));
+  const eligible = EXPERIENCES.filter((e) => !exclude.has(e.id) && !isExcludedExperience(e.id) && ageOk(e, req) && reachable(e, req.hasCar));
   const dates = Array.from({ length: req.days }, (_, i) => addDays(req.startDate, i));
   const sea = dates.map((date) => forecast.find((f) => f.date === date));
   const status = sea.map(seaStatus);
 
-  // Day start: arrival pushes the first day's plans to after the ferry or flight.
-  const dayStart = dates.map(() => toMin("07:00"));
-  const transport: (PlanItem | null)[] = dates.map(() => null);
+  const kinds: DayKind[] = dates.map(() => "full");
+  // Arrival: the transport row, then the day starts after the transfer.
+  let arrival: PlanItem | null = null, arrivalIndex = -1, arrivalReady = toMin("14:00");
   if (req.arrival) {
-    const i = Math.min(req.arrival.dayIndex, req.days - 1);
-    const sailing = req.arrival.mode === "ferry" ? sailings.find((s) => s.date === dates[i] && /maio/i.test(s.to)) : undefined;
+    arrivalIndex = Math.min(req.arrival.dayIndex, req.days - 1);
+    const sailing = req.arrival.mode === "ferry" ? sailings.find((s) => s.date === dates[arrivalIndex] && /maio/i.test(s.to)) : undefined;
     const at = req.arrival.time ?? sailing?.departure ?? "14:00";
-    transport[i] = {
-      id: `d${i}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
+    arrival = {
+      id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
       note: sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}` : "Time not published yet. Confirm with the operator.",
     };
-    dayStart[i] = toMin(at) + (req.arrival.mode === "ferry" ? 150 : 60);
+    arrivalReady = toMin(at) + (req.arrival.mode === "ferry" ? 150 : 60);
+    kinds[arrivalIndex] = "arrival";
   }
+  // Departure: the last day, when the guest leaves on it (and it isn't also the arrival day).
+  const leave = req.departure && req.days > 1 && kinds[req.days - 1] === "full"
+    ? { mode: req.departure.mode, time: req.departure.time ?? "16:00", note: req.departure.time ? undefined : "Time not set. Confirm with the operator." }
+    : undefined;
+  if (leave) kinds[req.days - 1] = "departure";
+  const earlyExit = !!leave && toMin(leave.time) < toMin("12:00");
 
-  // Sea outings go on the calmest safe days, one per day.
-  const seaPicks = new Map<number, Experience>();
-  const seaPool = [
-    ...req.include.map(experience).filter((e): e is Experience => !!e && e.seaDependent && eligible.includes(e)),
-    ...eligible.filter((e) => e.seaDependent).sort((a, b) => Number(b.boat) - Number(a.boat)),
-  ].filter((e, i, list) => list.indexOf(e) === i);
-  const safeDays = dates.map((_, i) => i)
-    .filter((i) => status[i] === "calm" || status[i] === "moderate")
-    .sort((a, b) => (sea[a]?.waveHeightM ?? 9) - (sea[b]?.waveHeightM ?? 9));
-  for (let n = 0; n < req.boatTrips; n += 1) {
-    const exp = seaPool[n];
-    const day = safeDays.find((d) => !seaPicks.has(d) && exp && exp.example.slots.some((s) => toMin(s) >= dayStart[d]));
-    if (!exp) { unmet.push("more sea outings than we list"); break; }
-    if (day === undefined) { unmet.push(`${exp.title}: no safe sea day`); continue; }
-    seaPicks.set(day, exp);
+  // One tour for the whole trip, on a full day only. Requested first, then a sea outing on the calmest safe day, then a land tour.
+  const fullDays = dates.map((_, i) => i).filter((i) => kinds[i] === "full");
+  const safe = (i: number) => status[i] === "calm" || status[i] === "moderate";
+  const calmest = [...fullDays].filter(safe).sort((a, b) => (sea[a]?.waveHeightM ?? 9) - (sea[b]?.waveHeightM ?? 9));
+  const requested = req.include.map(experience).filter((e): e is Experience => !!e && eligible.includes(e));
+  const seaPool = eligible.filter((e) => e.seaDependent).sort((a, b) => Number(b.boat) - Number(a.boat));
+  const landPool = eligible.filter((e) => !e.seaDependent && (!kids || e.example.durationMin <= 180));
+  let tour: { exp: Experience; day: number } | null = null;
+  for (const exp of [...requested, ...(req.boatTrips > 0 ? seaPool : []), ...landPool]) {
+    const day = exp.seaDependent ? calmest[0] : (fullDays.find((i) => status[i] === "rough") ?? fullDays[0]);
+    if (day !== undefined) { tour = { exp, day }; break; }
+    if (requested.includes(exp)) unmet.push(`${exp.title}: no ${exp.seaDependent ? "safe sea" : "free"} day`);
   }
+  if (req.boatTrips > 1 || req.include.length > 1) unmet.push("one tour per trip");
+  if (req.boatTrips > 0 && !tour?.exp.seaDependent) unmet.push("sea outing: no safe sea day");
 
-  const landPool = [
-    ...req.include.map(experience).filter((e): e is Experience => !!e && !e.seaDependent && eligible.includes(e)),
-    ...eligible.filter((e) => !e.seaDependent && (!kids || e.example.durationMin <= 180)),
-  ].filter((e, i, list) => list.indexOf(e) === i);
-  const foodPool = FOOD.filter((f) => req.hasCar || distanceKm(place(f.placeId)!, TOWN) <= WALKABLE_KM);
-  const wantsNature = req.interests.includes("nature") || req.interests.includes("walking");
-  const placePool = PLACES.filter((p) => (p.category === "beach" || (!kids && wantsNature && p.category === "protected_area"))
-    && (req.hasCar || distanceKm(p, TOWN) <= WALKABLE_KM));
-  let land = 0, meal = 0, spot = 0;
-
+  const pools = { hasCar: req.hasCar, locale: req.locale, drinks: req.drinks };
+  const picker = new Picker(pools);
   const days: PlanDay[] = dates.map((date, i) => {
-    const items: PlanItem[] = [];
-    if (transport[i]) items.push(transport[i]!);
-    let clock = dayStart[i];
-    const exp = seaPicks.get(i) ?? (land < landPool.length ? landPool[land] : undefined);
-    const morning = exp?.example.slots.find((s) => toMin(s) >= clock && toMin(s) <= toMin("11:00"));
-    const afternoon = exp?.example.slots.find((s) => toMin(s) >= Math.max(clock, toMin("14:30")));
-    const book = (slot: string) => {
-      if (!exp!.seaDependent) land += 1;
-      items.push({ id: `d${i}-exp`, kind: "experience", refId: exp!.id, start: slot, durationMin: exp!.example.durationMin });
-    };
-    if (exp && morning) { book(morning); clock = toMin(morning) + exp.example.durationMin; }
-    if (foodPool.length && clock <= toMin("15:00")) {
-      const lunch = Math.max(clock + 15, toMin("13:00"));
-      const f = foodPool[meal++ % foodPool.length];
-      items.push({ id: `d${i}-food`, kind: "food", refId: f.id, start: toTime(lunch), durationMin: 75 });
-      clock = lunch + 75;
-    }
-    const late = exp && !morning ? exp.example.slots.find((s) => toMin(s) >= clock + 15) ?? afternoon : undefined;
-    if (exp && !morning && late && toMin(late) >= clock) { book(late); clock = toMin(late) + exp.example.durationMin; }
-    else if (placePool.length && clock <= toMin("17:00")) {
-      const p = placePool[spot++ % placePool.length];
-      items.push({ id: `d${i}-place`, kind: "place", refId: p.id, start: toTime(clock + 30), durationMin: 120 });
-    }
-    items.sort((a, b) => toMin(a.start) - toMin(b.start));
+    const items = buildDay({
+      index: i, kind: kinds[i], rough: status[i] === "rough", sunset: sea[i]?.sunset ?? null, picker, pools,
+      arrival: i === arrivalIndex ? arrival : null, arrivalReadyMin: arrivalReady, leave,
+      tour: tour?.day === i ? tour.exp : null, quietNight: earlyExit && i === req.days - 2,
+    });
     const s = sea[i];
     return { date, sea: s ? { status: status[i], waveHeightM: s.waveHeightM, windKmh: s.windKmh, tempMaxC: s.tempMaxC, source: forecastSource } : null, items };
   });

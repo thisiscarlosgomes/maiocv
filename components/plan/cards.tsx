@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, timeSpan } from "../../lib/trip-view";
+import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, dayHasVehicle, hopBetween, partOfDay, timeSpan } from "../../lib/trip-view";
 
 /** A photo that falls back to the plain placeholder tile if it fails to load, so a bad URL never shows a broken-image icon. */
 export function SafeImg({ src, className, lazy }: { src: string | null; className?: string; lazy?: boolean }) {
@@ -38,12 +38,13 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
       <span className="plan-stop-m">
         <span className="plan-stop-title">{v.title}</span>
         <span className="plan-stop-meta">{v.meta}</span>
-        <time className="plan-stop-time mono">{timeSpan(item)}</time>
+        <span className="plan-stop-time"><time className="mono">{timeSpan(item)}</time> · {partOfDay(item.start, s)}</span>
       </span>
     </>
   );
+  if (item.kind === "free") onOpen = undefined;
   return (
-    <li className="plan-stop-row">
+    <li className="plan-stop-row" data-slot={item.slot}>
       {onOpen
         ? <a href={`#${item.id}`} className="plan-stop" data-testid={`card-${item.kind}`} aria-label={`${v.title}, ${s.openDetails}`} onClick={(e) => { e.preventDefault(); onOpen(item, e.currentTarget); }}>{body}</a>
         : <div className="plan-stop" data-testid={`card-${item.kind}`}>{body}</div>}
@@ -51,13 +52,21 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
   );
 }
 
-export function DayStops({ day, locale, s, onOpen }: { day: PlanDay; locale: Locale; s: PlanStrings; onOpen?: (item: PlanItem, el: HTMLElement) => void }) {
+export function DayStops({ day, hasCar, locale, s, onOpen }: { day: PlanDay; hasCar: boolean; locale: Locale; s: PlanStrings; onOpen?: (item: PlanItem, el: HTMLElement) => void }) {
   const ferries = day.items.filter((i) => i.kind === "transport");
   const stops = day.items.filter((i) => i.kind !== "transport");
+  const vehicle = dayHasVehicle(day, hasCar);
   return (
     <>
       {ferries.length > 0 && <ol className="plan-ferries">{ferries.map((item) => <PlanStop key={item.id} item={item} locale={locale} s={s} />)}</ol>}
-      <ol className="plan-stops">{stops.map((item) => <PlanStop key={item.id} item={item} locale={locale} s={s} onOpen={onOpen} />)}</ol>
+      <ol className="plan-stops">{stops.map((item, k) => {
+        const hop = k > 0 ? hopBetween(stops[k - 1], item, vehicle) : null;
+        const label = hop ? s[hop.mode](hop.min) : null;
+        return [
+          label ? <li key={`${item.id}-hop`} className="plan-hop mono" data-mode={hop!.mode} aria-label={label}>{label}</li> : null,
+          <PlanStop key={item.id} item={item} locale={locale} s={s} onOpen={onOpen} />,
+        ];
+      })}</ol>
     </>
   );
 }

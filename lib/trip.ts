@@ -14,7 +14,13 @@ export const SeaDaySchema = z.object({
   source: z.string(),
 });
 
-export const ItemKindSchema = z.enum(["experience", "place", "food", "transport"]);
+export const ItemKindSchema = z.enum(["experience", "place", "food", "transport", "free"]);
+/** Full-day slots (Oct 27 full-day plan). Optional so older share links still parse. */
+export const SlotSchema = z.enum(["arrival", "transfer", "breakfast", "morning", "lunch", "rest", "activity", "sunset", "dinner", "drinks", "departure"]);
+export type Slot = z.infer<typeof SlotSchema>;
+/** Generic rows that are not venues. Never a made-up place name. */
+export const FREE_IDS = ["breakfast-stay", "lunch-free", "dinner-free", "rest", "free-time", "transfer", "depart-airport", "depart-port"] as const;
+const freeIds = new Set<string>(FREE_IDS);
 export const PlanItemSchema = z.object({
   id: z.string().min(1).max(40),
   kind: ItemKindSchema,
@@ -23,6 +29,7 @@ export const PlanItemSchema = z.object({
   start: time,
   durationMin: z.number().int().min(0).max(720),
   note: z.string().max(200).optional(),
+  slot: SlotSchema.optional(),
 });
 
 export const PlanDaySchema = z.object({
@@ -50,12 +57,15 @@ export type Experience = (typeof data.experiences)[number];
 export type Food = (typeof data.food)[number];
 export type Place = (typeof data.places)[number];
 
-export const EXPERIENCES: Experience[] = data.experiences;
+/** Hard exclusions (Carlos, Oct 27): never planned, never offered by search. Kept in the lookup so old share links still open. */
+export const EXCLUDED_EXPERIENCE_IDS: ReadonlySet<string> = new Set(["blue-beach-volley-camp", "blue-maio-offroad"]);
+export const isExcludedExperience = (id: string) => EXCLUDED_EXPERIENCE_IDS.has(id);
+export const EXPERIENCES: Experience[] = data.experiences.filter((e) => !EXCLUDED_EXPERIENCE_IDS.has(e.id));
 export const FOOD: Food[] = data.food;
 export const PLACES: Place[] = data.places;
 export const DATA_SOURCE = data.source;
 
-const experienceById = new Map(EXPERIENCES.map((item) => [item.id, item]));
+const experienceById = new Map(data.experiences.map((item) => [item.id, item]));
 const foodById = new Map(FOOD.map((item) => [item.id, item]));
 const placeById = new Map(PLACES.map((item) => [item.id, item]));
 
@@ -70,6 +80,7 @@ export function unknownRefs(plan: TripPlan): string[] {
     const known = item.kind === "experience" ? experienceById.has(item.refId)
       : item.kind === "food" ? foodById.has(item.refId)
       : item.kind === "place" ? placeById.has(item.refId)
+      : item.kind === "free" ? freeIds.has(item.refId)
       : true;
     if (!known) missing.push(item.refId);
   }

@@ -14,7 +14,7 @@ const sample: TripPlan = {
 };
 
 test("fixture keeps Visit Maio ids and marks invented values as example", () => {
-  assert.ok(EXPERIENCES.length >= 9 && FOOD.length >= 6 && PLACES.length > 50);
+  assert.ok(EXPERIENCES.length >= 7 && FOOD.length >= 6 && PLACES.length > 50);
   for (const item of EXPERIENCES) {
     assert.equal(item.example.isExample, true);
     assert.ok(place(item.placeId), `${item.id} anchors to a known place`);

@@ -11,7 +11,7 @@ export function mockScript(messages: ModelMessage[], plan: TripPlan | null, toda
   const last = String(messages[messages.length - 1]?.content ?? "").toLowerCase();
   if (!plan) {
     const start = new Date(`${today}T12:00:00Z`); start.setUTCDate(start.getUTCDate() + 1);
-    return { calls: [[{ tool: "propose_itinerary", input: { startDate: start.toISOString().slice(0, 10), days: 3, locale: "en", boatTrips: 1, interests: ["beach", "sea"] } }]],
+    return { calls: [[{ tool: "propose_itinerary", input: { startDate: start.toISOString().slice(0, 10), days: 3, locale: "en", boatTrips: 1, interests: ["beach", "sea"], arrival: { mode: "ferry", dayIndex: 0, time: "07:30" }, departure: { mode: "flight", time: "17:30" } } }]],
       reply: "Here’s a slow plan. Boat on the calmest day, when the sea is calm." };
   }
   // v3.2: the plan is fixed. No tool calls once a plan exists; the chat only answers questions.

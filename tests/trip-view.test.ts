@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { samplePlan } from "../lib/trip-sample.ts";
 import { planStrings } from "../lib/trip-strings.ts";
 import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayLabel, dayPins, daySummary, imageUrl, seaLine } from "../lib/trip-view.ts";
-import { EXPERIENCES } from "../lib/trip.ts";
+import { EXPERIENCES, experience } from "../lib/trip.ts";
 
 const plan = samplePlan("en");
 const s = planStrings.en;
@@ -11,7 +11,9 @@ const s = planStrings.en;
 test("sample trip keeps the sea outing off the rough day", () => {
   assert.equal(plan.days[1].sea?.status, "rough");
   const seaDays = plan.days.map((d) => d.items.some((i) => i.kind === "experience" && cardView(i, "en", s)?.seaDependent));
-  assert.deepEqual(seaDays, [false, false, true]);
+  // The only full day is rough and arrival/departure days take no tour, so there is no sea outing; the guest is told.
+  assert.deepEqual(seaDays, [false, false, false]);
+  assert.ok(plan.unmet.some((u) => /sea outing/.test(u)));
 });
 
 test("every card in the sample renders from fixture data, with no price anywhere", () => {
@@ -38,7 +40,7 @@ test("contact rule: booking site → nothing; no site + phone/WhatsApp → links
   assert.equal(contactLinks({ name: "A", bookingUrl: "", whatsapp: "", phone: "" }), null);
   assert.deepEqual(contactLinks({ name: "A", bookingUrl: "", whatsapp: "", phone: "+238 970 88 09" }), { whatsapp: null, call: "tel:+2389708809" });
   assert.deepEqual(contactLinks({ name: "A", bookingUrl: "", whatsapp: "+238 970 88 09", phone: "" }), { whatsapp: "https://wa.me/2389708809", call: null });
-  const offroad = EXPERIENCES.find((e) => e.id === "blue-maio-offroad")!;
+  const offroad = experience("blue-maio-offroad")!;
   assert.equal(contactLinks(offroad.operator), null, "has its own site");
   const fishing = EXPERIENCES.find((e) => e.id === "blue-sport-fishing-big-game")!;
   assert.equal(contactLinks(fishing.operator), null, "no contact in data");
@@ -70,4 +72,24 @@ test("every stop image resolves to an absolute http(s) URL or null", () => {
   assert.equal(imageUrl(""), null);
   assert.equal(imageUrl("javascript:x"), null);
   for (const e of EXPERIENCES) { const u = imageUrl(e.image); assert.ok(u === null || /^https?:\/\//.test(u), e.id); }
+});
+
+test("between-stop hint follows transport: drive with a car or rental, walk when close, taxi when far", async () => {
+  const { hopBetween, dayHasVehicle, driveMin } = await import("../lib/trip-view.ts");
+  const { PLACES, distanceKm } = await import("../lib/trip.ts");
+  const at = (id: string) => ({ id, kind: "place" as const, refId: id, start: "10:00", durationMin: 60 });
+  const pts = PLACES.filter((p) => p.lat != null && p.lon != null);
+  const km = distanceKm;
+  let near: [string, string] | null = null, far: [string, string] | null = null;
+  for (const a of pts) for (const b of pts) { const d = km(a, b); if (!near && d > 0.8 && d < 1.4) near = [a.id, b.id]; if (!far && d > 10) far = [a.id, b.id]; }
+  assert.ok(near && far);
+  const n = hopBetween(at(near![0]), at(near![1]), false)!; assert.equal(n.mode, "walk"); assert.ok(n.min <= 30);
+  const f = hopBetween(at(far![0]), at(far![1]), false)!; assert.equal(f.mode, "taxi"); assert.equal(f.min, driveMin(at(far![0]), at(far![1])));
+  assert.equal(hopBetween(at(near![0]), at(near![1]), true), null, "short hop with a car shows nothing, as before");
+  assert.equal(hopBetween(at(far![0]), at(far![1]), true)!.mode, "drive");
+  assert.equal(s.walk(10), "~10 min walk"); assert.match(s.taxi(15), /taxi/);
+  const day = plan.days[0];
+  assert.equal(dayHasVehicle(day, true), true);
+  assert.equal(dayHasVehicle({ ...day, items: [...day.items, { id: "q", kind: "experience", refId: "blue-rental-quad-big-game", start: "09:00", durationMin: 120 }] }, false), true);
+  assert.equal(dayHasVehicle({ ...day, items: day.items.filter((i) => !/rental/.test(i.refId)) }, false), false);
 });
