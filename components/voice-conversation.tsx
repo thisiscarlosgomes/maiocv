@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { t, type MessageKey } from "../lib/i18n";
 import type { Locale } from "../lib/locale";
-import { parseVoiceSources, type VoiceSource } from "../lib/voice-sources";
+import { createVoiceSourceEvidence, parseVoiceSources, type VoiceSource } from "../lib/voice-sources";
 
 type Caption = { id: string; role: "user" | "agent"; text: string };
 type Phase = "ready" | "connecting" | "connected" | "ended" | "error";
@@ -93,6 +93,7 @@ function VoiceSession({ locale, onClose }: { locale: Locale; onClose: () => void
     }
     const attemptId = ++attempt.current;
     const isCurrent = () => active.current && attempt.current === attemptId;
+    const sourceEvidence = createVoiceSourceEvidence();
     active.current = true;
     setError(null);
     setCaptions([]);
@@ -144,8 +145,12 @@ function VoiceSession({ locale, onClose }: { locale: Locale; onClose: () => void
             ? "voice.error.microphone" : "voice.error.connection");
         },
         onMessage: message => {
-          if (!isCurrent() || !message.message.trim()) return;
-          if (message.role === "user") setSources([]);
+          if (!isCurrent()) return;
+          if (message.role === "user") {
+            sourceEvidence.reset();
+            setSources([]);
+          }
+          if (!message.message.trim()) return;
           const caption: Caption = {
             id: `${message.role}-${message.event_id}`,
             role: message.role,
@@ -158,10 +163,13 @@ function VoiceSession({ locale, onClose }: { locale: Locale; onClose: () => void
           setCaptions(previous => previous.map(item => item.id === `agent-${correction.event_id}`
             ? { ...item, text: correction.corrected_agent_response.slice(0, 4000) } : item));
         },
+        onMCPToolCall: event => {
+          if (isCurrent()) sourceEvidence.record(event);
+        },
         clientTools: {
           show_sources: parameters => {
             if (!isCurrent()) return 0;
-            const accepted = parseVoiceSources(parameters);
+            const accepted = parseVoiceSources(parameters, sourceEvidence.urls);
             setSources(accepted);
             return accepted.length;
           },

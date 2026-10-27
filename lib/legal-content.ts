@@ -22,7 +22,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
           "Se optar pelo microfone ou por um ficheiro de áudio, a gravação é enviada ao serviço de transcrição através do Vercel AI Gateway e da OpenAI. O texto transcrito é então usado como pergunta. A entrada por voz é opcional.",
         ] },
         { title: "Conversa por voz em direto", paragraphs: [
-          "Se iniciar a conversa por voz do Ask Maio, a ElevenLabs processa o áudio e as transcrições para ouvir as suas perguntas e responder por voz. A conversa usa o modelo de linguagem configurado, atualmente o Gemini da Google, que recebe o conteúdo necessário para gerar respostas e pode consultar dados públicos através de portal.maio.cv. Esta funcionalidade é opcional.",
+          "Se iniciar a conversa por voz do Ask Maio, a ElevenLabs processa o áudio e as transcrições para ouvir as suas perguntas e responder por voz. A conversa usa o modelo de linguagem configurado, atualmente Nemotron através da ElevenLabs, que recebe o conteúdo necessário para gerar respostas e pode consultar dados públicos através de portal.maio.cv. Esta funcionalidade é opcional.",
           "A configuração do agente ElevenLabs desativa a gravação de áudio e define a retenção das transcrições como um dia. Estas definições não significam ausência de processamento ou de registos técnicos pelos prestadores, que seguem as suas próprias políticas.",
           "As legendas da conversa por voz ficam na memória da página. Fechar o painel de voz remove esta cópia local; não elimina por si só os dados que os prestadores conservem.",
         ] },
@@ -31,7 +31,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
           "O serviço de chat regista contagens de pedidos e, quando a base de dados está disponível, um identificador derivado por hash do endereço de rede ou de dados técnicos do navegador, com datas da primeira e última utilização. Essas contagens não incluem o texto das perguntas.",
         ] },
         { title: "Serviços e conservação", paragraphs: [
-          "A aplicação é alojada na Vercel; o chat por texto é processado pelo portal.maio.cv e pela OpenAI. A conversa por voz usa a ElevenLabs e o modelo Gemini da Google. Os prestadores podem tratar dados noutros países e manter registos técnicos segundo as suas próprias políticas.",
+          "A aplicação é alojada na Vercel; o chat por texto é processado pelo portal.maio.cv e pela OpenAI. A conversa por voz usa a ElevenLabs e o modelo Nemotron disponibilizado através desse serviço. Os prestadores podem tratar dados noutros países e manter registos técnicos segundo as suas próprias políticas.",
           "A conversa local dura apenas enquanto a página permanece aberta. O cookie de idioma dura até um ano. As contagens de utilização do serviço de chat não têm atualmente um prazo de eliminação automática configurado.",
         ] },
         { title: "As suas escolhas e direitos", paragraphs: [
@@ -85,7 +85,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
           "If you choose the microphone or an audio file, the recording is sent for transcription through Vercel AI Gateway and OpenAI. The transcript is then used as your question. Voice input is optional.",
         ] },
         { title: "Live voice conversation", paragraphs: [
-          "If you start an Ask Maio voice conversation, ElevenLabs processes audio and transcripts to hear your questions and speak its answers. The conversation uses the configured language model, currently Google's Gemini, which receives the content needed to generate responses and can query public data through portal.maio.cv. This feature is optional.",
+          "If you start an Ask Maio voice conversation, ElevenLabs processes audio and transcripts to hear your questions and speak its answers. The conversation uses the configured language model, currently Nemotron through ElevenLabs, which receives the content needed to generate responses and can query public data through portal.maio.cv. This feature is optional.",
           "The ElevenLabs agent configuration disables audio recording and sets transcript retention to one day. These settings do not mean that providers perform no processing or keep no technical logs; their own policies also apply.",
           "Voice captions stay in the page's memory. Closing the voice panel removes this local copy; it does not itself delete data retained by providers.",
         ] },
@@ -94,7 +94,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
           "The chat service records request counts and, when its database is available, a hashed identifier derived from a network address or browser details, plus first and last use dates. Those counters do not contain question text.",
         ] },
         { title: "Service providers and retention", paragraphs: [
-          "Vercel hosts the app; portal.maio.cv and OpenAI process text chat requests. Live voice conversation uses ElevenLabs and Google's Gemini model. Providers may process data in other countries and keep technical logs under their own policies.",
+          "Vercel hosts the app; portal.maio.cv and OpenAI process text chat requests. Live voice conversation uses ElevenLabs and the Nemotron model provided through that service. Providers may process data in other countries and keep technical logs under their own policies.",
           "The local conversation lasts only while the page is open. The language cookie lasts up to one year. The chat service's usage counters currently have no automatic deletion period configured.",
         ] },
         { title: "Your choices and rights", paragraphs: [
@@ -148,7 +148,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
           "Si vous choisissez le microphone ou un fichier audio, l'enregistrement est envoyé pour transcription via Vercel AI Gateway et OpenAI. Le texte transcrit sert ensuite de question. La saisie vocale est facultative.",
         ] },
         { title: "Conversation vocale en direct", paragraphs: [
-          "Si vous lancez une conversation vocale avec Ask Maio, ElevenLabs traite l'audio et les transcriptions pour entendre vos questions et répondre à voix haute. La conversation utilise le modèle de langage configuré, actuellement Gemini de Google, qui reçoit le contenu nécessaire pour produire des réponses et peut consulter des données publiques via portal.maio.cv. Cette fonctionnalité est facultative.",
+          "Si vous lancez une conversation vocale avec Ask Maio, ElevenLabs traite l'audio et les transcriptions pour entendre vos questions et répondre à voix haute. La conversation utilise le modèle de langage configuré, actuellement Nemotron via ElevenLabs, qui reçoit le contenu nécessaire pour produire des réponses et peut consulter des données publiques via portal.maio.cv. Cette fonctionnalité est facultative.",
           "La configuration de l'agent ElevenLabs désactive l'enregistrement audio et fixe la conservation des transcriptions à un jour. Ces réglages ne signifient pas que les prestataires ne traitent aucune donnée ou ne conservent aucun journal technique ; leurs propres politiques s'appliquent également.",
           "Les sous-titres de la conversation vocale restent dans la mémoire de la page. Fermer le panneau vocal supprime cette copie locale ; cela ne supprime pas en soi les données conservées par les prestataires.",
         ] },
@@ -157,7 +157,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
           "Le service de chat enregistre le nombre de requêtes et, si sa base de données est disponible, un identifiant haché dérivé de l'adresse réseau ou de données techniques du navigateur, ainsi que les dates de première et de dernière utilisation. Ces compteurs ne contiennent pas le texte des questions.",
         ] },
         { title: "Prestataires et conservation", paragraphs: [
-          "Vercel héberge l'application ; portal.maio.cv et OpenAI traitent les demandes du chat écrit. La conversation vocale en direct utilise ElevenLabs et le modèle Gemini de Google. Les prestataires peuvent traiter des données dans d'autres pays et conserver des journaux techniques selon leurs propres politiques.",
+          "Vercel héberge l'application ; portal.maio.cv et OpenAI traitent les demandes du chat écrit. La conversation vocale en direct utilise ElevenLabs et le modèle Nemotron proposé via ce service. Les prestataires peuvent traiter des données dans d'autres pays et conserver des journaux techniques selon leurs propres politiques.",
           "La conversation locale ne dure que tant que la page reste ouverte. Le cookie de langue dure jusqu'à un an. Aucun délai de suppression automatique n'est actuellement configuré pour les compteurs d'utilisation du service de chat.",
         ] },
         { title: "Vos choix et vos droits", paragraphs: [
