@@ -73,7 +73,7 @@ test("structured data uses translated site descriptions without leaking locale s
 });
 
 test("FAQ structured data keeps the exact displayed questions and answers", () => {
-  const items = [{ question: "How do I start?", answer: "Open the chat and ask about Maio." }];
+  const items = [{ question: "How do I start?", answer: "Open Ask Maio and ask a question." }];
   const schema = faqSchema("en", items);
   assert.equal(schema.url, `${base}/en/faq`);
   assert.equal(schema.inLanguage, "en");
