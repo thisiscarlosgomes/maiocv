@@ -45,7 +45,7 @@ test("contact rule: booking site → nothing; no site + phone/WhatsApp → links
 });
 
 test("day summary counts stops and estimates travel", () => {
-  assert.match(daySummary(plan.days[2], s, false), /^3 stops · \d+ min (driving|walking)$/);
+  assert.match(daySummary(plan.days[2], s, false), /^4 stops · \d+ min (driving|walking)$/);
 });
 
 test("unknown ids render nothing", () => {

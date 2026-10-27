@@ -55,11 +55,11 @@ test("PT and FR variants give the same plan structure in their own language", as
   assert.equal((await run("3 days calm water one boat trip (pt)")).plan!.locale, "pt");
 });
 
-test("rough sea on day 2: no sea outing that day, both moved to safe days", async () => {
+test("rough sea on day 2: no sea outing that day, one sea outing (one experience per trip) on a safe day", async () => {
   const { plan, toolEvents } = await run("rough sea day 2");
   assert.equal(plan!.days[1].sea?.status, "rough");
   assert.equal(seaItems(plan!).filter((i) => i.day === 1).length, 0);
-  assert.equal(seaItems(plan!).length, 2);
+  assert.equal(seaItems(plan!).length, 1);
   if (!live) assert.ok(toolEvents.some((e) => e.name === "get_sea_forecast"));
 });
 

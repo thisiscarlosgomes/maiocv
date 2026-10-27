@@ -1754,28 +1754,33 @@ body:has(.chat-screen) { overflow: hidden; }
 @media (min-width: 701px) { .plan-sharebar { align-self: center; width: 560px; } }
 .plan-print { display: none; }
 @media print {
-  @page { size: A4; margin: 14mm 14mm 16mm; }
+  @page { size: A4; margin: 18mm 17mm 18mm; }
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
   body * { visibility: hidden; }
   .plan-print, .plan-print * { visibility: visible; }
   .plan-screen > :not(main), .plan-main > :not(.plan-print), .maio-header, .plan-sheet-backdrop { display: none !important; }
   .plan-main { display: block; padding: 0; max-width: none; }
-  .plan-print { display: block; position: absolute; left: 0; top: 0; width: 100%; color: #111; font-size: 11pt; }
+  .plan-print { display: block; position: static; width: auto; max-width: 100%; box-sizing: border-box; padding: 0; margin: 0; color: #111; font-size: 11pt; overflow: visible; }
+  .plan-screen > main, .plan-main { margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; }
   .plan-print-head { border-bottom: 1px solid #111; padding-bottom: 8pt; margin-bottom: 12pt; }
   .plan-print-head h1 { font-size: 24pt; font-weight: 500; margin: 4pt 0 2pt; }
   .plan-print-head p { margin: 0; color: #56565b; }
-  .plan-print-day { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14pt; }
+  .plan-print-day { margin-bottom: 14pt; }
+  .plan-print-dayhead { break-after: avoid; page-break-after: avoid; break-inside: avoid; }
+  .plan-print li { break-inside: avoid; page-break-inside: avoid; }
+  .plan-print-head, .plan-print-foot { break-inside: avoid; }
   .plan-print-dayhead h2 { font-size: 15pt; font-weight: 500; margin: 0; }
   .plan-print-dayhead p { margin: 2pt 0 6pt; color: #56565b; font-size: 10pt; }
   .plan-print-rough { color: #9d4c36 !important; }
-  .plan-print-grid { display: grid; grid-template-columns: 1fr 52mm; gap: 8mm; align-items: start; }
+  .plan-print-grid { display: block; }
   .plan-print ol { list-style: none; margin: 0; padding: 0; }
-  .plan-print li { display: grid; grid-template-columns: 12mm 6mm 1fr; gap: 2mm; padding: 5pt 0; border-top: 1px solid #e5e5e7; }
+  .plan-print li { display: grid; grid-template-columns: 12mm 6mm minmax(0, 1fr); gap: 2mm; padding: 5pt 0; border-top: 1px solid #e5e5e7; }
   .plan-print li strong { display: block; font-weight: 500; }
   .plan-print li span { display: block; color: #56565b; font-size: 9.5pt; }
   .plan-print-time { font-variant-numeric: tabular-nums; color: #111 !important; font-size: 11pt !important; }
   .plan-print-n { font-weight: 500; color: #111 !important; }
   .plan-print-desc { margin-top: 2pt; }
-  .plan-print .plan-map { border: 1px solid #e5e5e7; border-radius: 8pt; }
+  .plan-print .plan-map { display: none !important; }
   .plan-print .plan-map-sea { fill: #f5f5f7; } .plan-print .plan-map-island { fill: #e5e5e7; stroke: #dedee1; }
   .plan-print-foot { border-top: 1px solid #e5e5e7; padding-top: 6pt; color: #6e6e73; font-size: 9pt; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

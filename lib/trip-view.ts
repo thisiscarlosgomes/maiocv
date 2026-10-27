@@ -49,7 +49,7 @@ export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardVi
   if (item.kind === "food") {
     const f = food(item.refId); if (!f) return null;
     const p = place(f.placeId)!;
-    return { kind: item.kind, title: f.title, meta: `${s.lunch} · ${f.location}`, description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
+    return { kind: item.kind, title: f.title, meta: `${item.start >= "19:00" ? s.evening : s.lunch} · ${f.location}`, description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
       image: f.image, lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "place") {

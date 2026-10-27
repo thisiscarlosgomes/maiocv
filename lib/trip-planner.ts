@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { enforcePlanRules } from "./plan-rules.ts";
 import type { DailySea } from "./agora.ts";
 import type { Sailing } from "./essentials.ts";
 import {
@@ -136,5 +137,5 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     return { date, sea: s ? { status: status[i], waveHeightM: s.waveHeightM, windKmh: s.windKmh, tempMaxC: s.tempMaxC, source: forecastSource } : null, items };
   });
 
-  return { version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, days, unmet: unmet.slice(0, 5) };
+  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, days, unmet: unmet.slice(0, 5) }, { requested: req.include });
 }

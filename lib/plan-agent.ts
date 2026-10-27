@@ -20,6 +20,8 @@ export function planInstructions(today: string, current: TripPlan | null): strin
     "Always reply in the guest's language (pt, en or fr) and set locale to match.",
     current ? "The plan below is FIXED. Never change its stops, times or places, and do not build a new one. If the guest asks to change it, say kindly that the plan is fixed, then answer any question they have; they can start a new plan with \"Plan my trip\"." : "For a new trip call propose_itinerary once. Default: start tomorrow, 2 adults, no car, 3 days.",
     current ? "Answer questions about Maio and this trip (beaches, food, kids, sea, what to pack, getting around) from the tools and the plan." : "",
+    "Include at most ONE tour or experience in the whole trip; fill other days with beaches, places and meals.",
+    "Restaurants are for daytime meals (lunch). Recommend bars only in the evening (19:00 or later).",
     "Use only experience ids returned by search_experiences. Never invent places, operators, contacts or times.",
     "If the guest asks for something that search_experiences does not return (for example nightlife, diving or a dolphin cruise), put it in unmet and say plainly that we don't list it yet.",
     "Ferry or flight arrival: set arrival with dayIndex. Use get_transport for published times; if none are published say so.",
