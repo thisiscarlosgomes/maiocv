@@ -24,7 +24,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
         { title: "Conversa por voz em direto", paragraphs: [
           "Se iniciar a conversa por voz do Ask Maio, a ElevenLabs processa o áudio e as transcrições para ouvir as suas perguntas e responder por voz. A conversa usa o modelo de linguagem configurado, atualmente Nemotron através da ElevenLabs, que recebe o conteúdo necessário para gerar respostas e pode consultar dados públicos através de portal.maio.cv. Esta funcionalidade é opcional.",
           "A configuração do agente ElevenLabs desativa a gravação de áudio e define a retenção das transcrições como um dia. Estas definições não significam ausência de processamento ou de registos técnicos pelos prestadores, que seguem as suas próprias políticas.",
-          "As legendas da conversa por voz ficam na memória da página. Fechar o painel de voz remove esta cópia local; não elimina por si só os dados que os prestadores conservem.",
+          "O painel de voz não apresenta uma transcrição da chamada. Fechar o painel não elimina por si só os dados que os prestadores conservem.",
         ] },
         { title: "Preferências e utilização", paragraphs: [
           "Usamos um cookie de idioma, com duração máxima de um ano, para apresentar o site no idioma escolhido. A rotação das sugestões de perguntas usa o armazenamento da sessão do navegador. O serviço offline guarda apenas ficheiros da interface, não conversas ou respostas da API.",
@@ -87,7 +87,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
         { title: "Live voice conversation", paragraphs: [
           "If you start an Ask Maio voice conversation, ElevenLabs processes audio and transcripts to hear your questions and speak its answers. The conversation uses the configured language model, currently Nemotron through ElevenLabs, which receives the content needed to generate responses and can query public data through portal.maio.cv. This feature is optional.",
           "The ElevenLabs agent configuration disables audio recording and sets transcript retention to one day. These settings do not mean that providers perform no processing or keep no technical logs; their own policies also apply.",
-          "Voice captions stay in the page's memory. Closing the voice panel removes this local copy; it does not itself delete data retained by providers.",
+          "The voice panel does not display a call transcript. Closing it does not itself delete data retained by providers.",
         ] },
         { title: "Preferences and usage", paragraphs: [
           "A language cookie, lasting up to one year, keeps the site in your chosen language. Rotating question suggestions use browser session storage. The offline service caches interface files only, not conversations or API answers.",
@@ -150,7 +150,7 @@ export const legalContent: Record<Locale, LegalCopy> = {
         { title: "Conversation vocale en direct", paragraphs: [
           "Si vous lancez une conversation vocale avec Ask Maio, ElevenLabs traite l'audio et les transcriptions pour entendre vos questions et répondre à voix haute. La conversation utilise le modèle de langage configuré, actuellement Nemotron via ElevenLabs, qui reçoit le contenu nécessaire pour produire des réponses et peut consulter des données publiques via portal.maio.cv. Cette fonctionnalité est facultative.",
           "La configuration de l'agent ElevenLabs désactive l'enregistrement audio et fixe la conservation des transcriptions à un jour. Ces réglages ne signifient pas que les prestataires ne traitent aucune donnée ou ne conservent aucun journal technique ; leurs propres politiques s'appliquent également.",
-          "Les sous-titres de la conversation vocale restent dans la mémoire de la page. Fermer le panneau vocal supprime cette copie locale ; cela ne supprime pas en soi les données conservées par les prestataires.",
+          "Le panneau vocal n’affiche pas de transcription de l’appel. Le fermer ne supprime pas en soi les données conservées par les prestataires.",
         ] },
         { title: "Préférences et utilisation", paragraphs: [
           "Un cookie de langue, conservé jusqu'à un an, garde le site dans la langue choisie. La rotation des suggestions utilise le stockage de session du navigateur. Le service hors ligne ne met en cache que des fichiers d'interface, jamais les conversations ou les réponses de l'API.",

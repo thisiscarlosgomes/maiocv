@@ -11,10 +11,11 @@ import { isPopulationTotalQuestion, populationAnswer, POPULATION_DATA_URL } from
 import { declaredCitations, type Citation } from "../lib/chat-citations";
 import { t, type MessageKey } from "../lib/i18n";
 import type { Locale } from "../lib/locale";
+import { VoiceDialog, preloadVoiceConversation } from "./voice-dialog";
 
 const OpenUIBusiness = dynamic(() => import("./openui-business").then(module => module.OpenUIBusiness));
 const OpenUIPlaces = dynamic(() => import("./openui-places").then(module => module.OpenUIPlaces));
-const VoiceConversation = dynamic(() => import("./voice-conversation").then(module => module.VoiceConversation), { ssr: false });
+
 
 type Message = {
   role: "user" | "assistant";
@@ -521,6 +522,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
       <div className="chat-composer-wrap">
         <div className="chat-voice-launcher-wrap">
           <button ref={voiceLauncher} type="button" className="chat-voice-launcher" disabled={busy || recording || transcribing}
+            onPointerEnter={preloadVoiceConversation} onFocus={preloadVoiceConversation} onPointerDown={preloadVoiceConversation}
             onClick={() => setVoiceOpen(true)} aria-haspopup="dialog">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
               <path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4" />
@@ -574,7 +576,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
         {voiceError && <p role="alert" className="chat-voice-error">{voiceError}</p>}
         <p className="chat-note">{copy("chat.note")}</p>
       </div>
-      {voiceOpen && <VoiceConversation locale={locale} onClose={() => {
+      {voiceOpen && <VoiceDialog locale={locale} onClose={() => {
         setVoiceOpen(false);
         requestAnimationFrame(() => voiceLauncher.current?.focus());
       }} />}

@@ -373,6 +373,7 @@
   "meta.title.search": "Pesquisar lugares no Maio | MaioCV",
   "meta.description.search": "Encontre praias e lugares da ilha do Maio nos dados públicos e consulte a fonte de cada resultado.",
   "meta.image.alt": "MaioCV — Maio no digital ao alcance de todos. Ilha do Maio, Cabo Verde.",
+  "voice.loading": "A preparar o agente…",
   "voice.launch": "Ligar a um agente do Maio",
   "voice.label": "Chamada de voz",
   "voice.close": "Fechar chamada e voltar ao texto",

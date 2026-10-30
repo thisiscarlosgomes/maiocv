@@ -2,7 +2,7 @@
 
 Ask Maio uses ElevenLabs for a live voice conversation and queries `https://portal.maio.cv/api/mcp` directly for public island data. The existing text chat continues to use the Maio chat backend. Voice has its own reviewed instructions and tool permissions; it does not automatically inherit the text backend's prompt, citation logic or rate limits.
 
-The browser starts a conversation only after the visitor chooses to speak and grants microphone access. `/api/voice/session` checks that the request comes from the app's own origin, applies the issuance cooldown, and obtains a short-lived ElevenLabs WebRTC conversation token on the server. The ElevenLabs API key is never sent to the browser. The agent can query approved MCP tools and call the `show_sources` client tool to display links beside the transcript.
+The browser starts a conversation only after the visitor chooses to speak and grants microphone access. `/api/voice/session` checks that the request comes from the app's own origin, applies the issuance cooldown, and obtains a short-lived ElevenLabs WebRTC conversation token on the server. The ElevenLabs API key is never sent to the browser. The agent can query approved MCP tools and call the `show_sources` client tool to display links below the call status.
 
 ## Local setup
 
@@ -38,11 +38,13 @@ Open `/pt/chat`, `/en/chat` or `/fr/chat` and choose the voice option. HTTPS or 
 
 ## Voice and language
 
+The configured default is **Mariza — Cold and Calm** (`zKjRewuiqTkXNUVAMwat`), a female voice verified by ElevenLabs for European Portuguese (`pt-PT`) with `eleven_turbo_v2_5`. The live agent and local `ELEVENLABS_VOICE_ID` use this voice. Portuguese responses are instructed to use Portugal vocabulary, grammar and pronunciation.
+
 The configuration starts in Portuguese; the website supplies a localized first message and `pt`, `en` or `fr` language override. Only these two agent fields may be overridden by clients. System prompts, models, tools, voices and duration cannot be replaced by a browser override. The name remains **Ask Maio** in every language. The greeting occurs once at the start of the session; later answers begin directly and identify the assistant only if asked. Sentences stay in the selected language, without mixing a Portuguese greeting and English introduction.
 
 By default, setup chooses an available premade or professional account voice with verified Portuguese, English and French coverage, preferring a conversational voice. The account used during development offered **River — Relaxed, Neutral, Informative**. It never automatically selects a personal cloned voice. Set `ELEVENLABS_VOICE_ID` before setup to use an explicitly reviewed voice instead. Existing managed agents retain their selected voice; changing a provisioned configuration requires a deliberate review rather than an implicit overwrite.
 
-Speech uses multilingual `eleven_flash_v2_5`; the conversation model is `nemotron-35-super-vl-nvfp4`, served through ElevenLabs. Verified language metadata is not a listening test. Check Cape Verdean accents, Maio place names, interruptions and pronunciation with real audio before release. Cape Verdean Creole is not promised as a supported language.
+Speech uses multilingual `eleven_turbo_v2_5`; the conversation model is `nemotron-35-super-vl-nvfp4`, served through ElevenLabs. Verified language metadata is not a listening test. Check Cape Verdean accents, Maio place names, interruptions and pronunciation with real audio before release. Cape Verdean Creole is not promised as a supported language.
 
 ## Tool and source permissions
 
@@ -101,7 +103,7 @@ The dedicated agent was provisioned and its full desired configuration read back
 
 Before the model switch, a real authenticated WebSocket session using Gemini 2.5 Flash, typed input and no microphone, connected to all 29 MCP tools. It called `get_tourism_population` for Maio successfully in approximately 1.2 seconds. The source returned empty 2026 rows; the agent correctly explained that the current-year figure was unavailable, did not interpret a returned zero national aggregate as zero inhabitants, and called `show_sources` with an empty list rather than inventing a source link. The session used its English greeting once and did not repeat its identity in later responses. The test client acknowledged the source-display call; this was not a browser rendering test.
 
-After switching to `nemotron-35-super-vl-nvfp4`, another authenticated WebSocket session called `get_codigo_postura_stats` successfully and correctly reported one document, 268 articles and pages 1–87. The model nevertheless supplied a fabricated source URL absent from the MCP result. That source-attribution check failed. The browser now requires exact URL evidence from successful MCP results, with regression coverage for fabricated links on approved domains. This protects displayed links; it does not establish that every spoken claim is grounded. The new model also repeated an answer around `show_sources` with the same event ID; the caption handler replaces repeated IDs, but audio repetition still needs a listening check.
+After switching to `nemotron-35-super-vl-nvfp4`, another authenticated WebSocket session called `get_codigo_postura_stats` successfully and correctly reported one document, 268 articles and pages 1–87. The model nevertheless supplied a fabricated source URL absent from the MCP result. That source-attribution check failed. The browser now requires exact URL evidence from successful MCP results, with regression coverage for fabricated links on approved domains. This protects displayed links; it does not establish that every spoken claim is grounded. The new model also repeated an answer around `show_sources` with the same event ID; captions have since been removed from the modal, and audio repetition still needs a listening check.
 
 An official text simulation also returned HTTP 200, but in that run it did not invoke MCP and answered from model memory. It is **not** evidence of data grounding. The real WebSocket exchanges above establish tool access, with the documented source-attribution limitation. The prompt explicitly prohibits memory-based facts when a data lookup has not succeeded, and asks for the source client tool before the final answer to avoid repeating an answer around the tool response.
 
@@ -111,7 +113,7 @@ No automated test opened the microphone or assessed pronunciation/audio quality.
 - PT, EN and FR all receive a localized greeting and keep the brand name Ask Maio.
 - A question about population, weather and a municipal article invokes the expected data tool and preserves the returned year, units and source caveats.
 - A boat/flight question handles empty or stale data honestly.
-- The transcript updates, interruptions work, valid source links appear, and invalid or unsupported links are rejected.
+- The call shows no transcript, interruptions work, valid source links appear, and invalid or unsupported links are rejected.
 - Ending the conversation releases the microphone; denied microphone permission, provider failure and network loss leave a usable retry path.
 - The provider enforces authentication, duration/concurrency/day limits and disabled recording; arbitrary prompt and duration overrides are rejected.
 
