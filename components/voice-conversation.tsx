@@ -170,19 +170,22 @@ function VoiceSession({ locale, onClose }: { locale: Locale; onClose: () => void
   return (
     <div className="voice-panel">
       <header className="voice-header">
-        <div><span className="voice-eyebrow">{copy("voice.label")}</span><h2 id="voice-title">Ask Maio</h2></div>
+        <h2 id="voice-title">Ask Maio</h2>
         <button type="button" className="voice-close" onClick={() => { stop(); onClose(); }} aria-label={copy("voice.close")}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
         </button>
       </header>
       <div className="voice-stage">
-        <div className={`voice-orb${connected ? " voice-orb-active" : ""}${conversation.isSpeaking ? " voice-orb-speaking" : ""}`} aria-hidden="true">
+        <button type="button" className={`voice-orb voice-orb-trigger${connected ? " voice-orb-active" : ""}`}
+          disabled={connected || connecting || conversation.status === "connecting"}
+          onClick={() => { void start(); }}
+          aria-label={copy(connected || connecting ? statusKey : phase === "ready" ? "voice.start" : "voice.restart")}>
           <span className="voice-orb-gradient" />
           <span className="voice-orb-grain" />
-          <span className="voice-orb-phone">
+          <span className="voice-orb-phone" aria-hidden="true">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 2.5c.7-.2 1.4.2 1.7.9l1.4 3.3c.3.6.1 1.3-.4 1.7l-1.6 1.3a14.2 14.2 0 0 0 6.6 6.6l1.3-1.6c.4-.5 1.1-.7 1.7-.4l3.3 1.4c.7.3 1.1 1 .9 1.7l-.6 2.7c-.2.8-.9 1.4-1.7 1.4C10 21.5 2.5 14 2.5 4.8c0-.8.6-1.5 1.4-1.7l2.7-.6Z" /></svg>
           </span>
-        </div>
+        </button>
         <p className="voice-state" role="status">{copy(statusKey)}</p>
         <p className="voice-description">{copy("voice.description")}</p>
         {connected && <p className="voice-time" aria-label={copy("voice.remaining")}>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</p>}

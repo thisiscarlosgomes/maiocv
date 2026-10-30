@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { essentialsPath, essentialsSlug, LANG_COOKIE, isLocale, localize, localeFromPath, preferredLocale, routeAlias, stripLocale } from "./lib/locale";
+import { essentialsPath, essentialsSlug, LANG_COOKIE, DEFAULT_LOCALE, localize, localeFromPath, routeAlias, stripLocale } from "./lib/locale";
 
 const essentialsPages = new Set(Object.values(essentialsSlug));
 
@@ -42,11 +42,9 @@ export function proxy(request: NextRequest) {
   }
 
   const destination = request.nextUrl.clone();
-  const cookie = request.cookies.get(LANG_COOKIE)?.value;
-  const locale = isLocale(cookie) ? cookie : preferredLocale(request.headers.get("accept-language"));
+  const locale = DEFAULT_LOCALE;
   destination.pathname = pathname === "/" ? localize(locale, "/") : localize(locale, pathname);
   const response = NextResponse.redirect(destination, 307);
-  response.headers.set("Vary", "Accept-Language, Cookie");
   return response;
 }
 

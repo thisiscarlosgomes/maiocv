@@ -5,8 +5,7 @@
     fr: ["Vous êtes hors connexion.", "Le chat et les données de Maio nécessitent une connexion internet. Reconnectez-vous et réessayez.", "Réessayer", "Hors connexion · maio.cv"],
   };
   const segment = window.location.pathname.split("/")[1];
-  const preferred = navigator.language.slice(0, 2);
-  const locale = Object.hasOwn(copy, segment) ? segment : Object.hasOwn(copy, preferred) ? preferred : "pt";
+  const locale = Object.hasOwn(copy, segment) ? segment : "pt";
   const [heading, description, retry, title] = copy[locale];
   document.documentElement.lang = locale;
   document.title = title;

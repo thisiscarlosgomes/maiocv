@@ -22,17 +22,7 @@ export function localeHreflang(locale: Locale): string {
   return hreflang[locale];
 }
 
-export function preferredLocale(acceptLanguage: string | null): Locale {
-  if (!acceptLanguage) return "pt";
-  for (const part of acceptLanguage.split(",")) {
-    const tag = part.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!tag || tag === "*") continue;
-    if (tag.startsWith("pt")) return "pt";
-    if (tag.startsWith("fr")) return "fr";
-    return "en";
-  }
-  return "pt";
-}
+export const DEFAULT_LOCALE: Locale = "pt";
 
 export function localeFromPath(pathname: string): Locale | null {
   const segment = pathname.split("/").filter(Boolean)[0];

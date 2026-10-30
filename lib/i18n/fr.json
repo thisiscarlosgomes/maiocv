@@ -395,7 +395,7 @@
   "voice.captions": "Transcription de l’appel",
   "voice.sources": "Sources de cette réponse",
   "voice.remaining": "Temps restant",
-  "voice.privacy": "Vous parlez avec un agent d’IA. ElevenLabs traite votre voix. Les appels durent jusqu’à 1 minute.",
+  "voice.privacy": "Vous parlez avec un agent d’IA. Les appels durent jusqu’à 1 minute.",
   "voice.greeting": "Bonjour ! Que souhaitez-vous savoir sur l’île de Maio ?",
   "voice.error.microphone": "Autorisez l’accès au microphone dans votre navigateur pour appeler un agent de Maio.",
   "voice.error.connection": "La connexion vocale a été interrompue. Vérifiez votre connexion et les autorisations du microphone, puis réessayez.",

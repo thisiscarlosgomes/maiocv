@@ -395,7 +395,7 @@
   "voice.captions": "Call transcript",
   "voice.sources": "Sources from this answer",
   "voice.remaining": "Time remaining",
-  "voice.privacy": "You’re speaking with an AI agent. ElevenLabs processes your voice. Calls last up to 1 minute.",
+  "voice.privacy": "You’re speaking with an AI agent. Calls last up to 1 minute.",
   "voice.greeting": "Hi! What would you like to know about Maio?",
   "voice.error.microphone": "Allow microphone access in your browser to call a Maio agent.",
   "voice.error.connection": "The voice connection was interrupted. Check your connection and microphone permissions, then try again.",
