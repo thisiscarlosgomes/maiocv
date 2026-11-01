@@ -1,3 +1,4 @@
+import { THEME_INIT_SCRIPT } from "../lib/theme";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Geist_Mono } from "next/font/google";
@@ -33,7 +34,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
-  colorScheme: "light",
+  colorScheme: "light dark",
   themeColor: "#ffffff",
 };
 export default async function RootLayout({
@@ -41,7 +42,8 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const locale = await currentLocale();
   return (
-    <html lang={localeHtmlLang(locale)} className={`${sans.variable} ${mono.variable}`}>
+    <html suppressHydrationWarning lang={localeHtmlLang(locale)} className={`${sans.variable} ${mono.variable}`}>
+      <head><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /></head>
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchemaFor(locale)).replace(/</g, "\\u003c") }} />
         {children}

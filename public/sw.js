@@ -1,6 +1,6 @@
 const CACHE_PREFIX = "maio-offline-";
 // Bump this version whenever the offline shell changes.
-const CACHE_NAME = `${CACHE_PREFIX}v2`;
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 const OFFLINE_URL = "/offline.html";
 const OFFLINE_ASSETS = [OFFLINE_URL, "/offline.css", "/offline.js"];
 

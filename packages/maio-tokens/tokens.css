@@ -71,6 +71,10 @@
   --space-88: 88px;
   --space-120: 120px;
 
+  --maio-link: #1763b6;
+  --maio-header: #ffffffed;
+  --maio-hover: #ededf0;
+  --maio-soft-blue: #eaf2ff;
   color-scheme: light;
 }
 
@@ -89,5 +93,54 @@
 }
 
 [data-theme="dark"] {
+  --maio-ink: #f2f2f5;
+  --maio-muted: #aaaab3;
+  --maio-paper: #141416;
+  --maio-line: #37373d;
+  --maio-blue: #f2f2f5;
+  --maio-lime: #37373d;
+  --maio-focus: #8bc4ff;
+  --maio-focus-on-blue: #141416;
+  --maio-surface-data: #222226;
+  --maio-border-data: #414149;
+  --maio-text-data: #c4c4cd;
+  --maio-chip-bg: #2b2b30;
+  --maio-chip-fg: #c4c4cd;
+  --maio-estimate-bg: #303036;
+  --maio-estimate-fg: #c4c4cd;
+  --maio-error: #ffad99;
+  --maio-error-bg: #452722;
+  --maio-link: #8bc4ff;
+  --maio-header: #141416ed;
+  --maio-hover: #303036;
+  --maio-soft-blue: #303036;
   color-scheme: dark;
+}
+
+/* Printed pages retain the light palette regardless of screen preference. */
+@media print {
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --maio-ink: #111111;
+    --maio-muted: #6e6e73;
+    --maio-paper: #ffffff;
+    --maio-line: #e5e5e7;
+    --maio-blue: #111111;
+    --maio-lime: #e5e5e7;
+    --maio-focus: #111111;
+    --maio-focus-on-blue: #ffffff;
+    --maio-surface-data: #f5f5f7;
+    --maio-border-data: #dedee1;
+    --maio-text-data: #56565b;
+    --maio-chip-bg: #f5f5f7;
+    --maio-chip-fg: #5c5c61;
+    --maio-estimate-bg: #ededf0;
+    --maio-estimate-fg: #4e4e53;
+    --maio-error: #9d4c36;
+    --maio-error-bg: #f6ebe7;
+    --maio-link: #1763b6;
+    --maio-header: #ffffffed;
+    --maio-hover: #ededf0;
+    --maio-soft-blue: #eaf2ff;
+  }
 }

@@ -19,9 +19,9 @@
   align-items: center;
   gap: 56px;
   padding: 0 max(48px, calc((100vw - 1184px) / 2));
-  background: #ffffffed;
+  background: var(--maio-header);
   backdrop-filter: blur(16px);
-  border-bottom: 1px solid #17181708;
+  border-bottom: 1px solid var(--line);
 }
 .maio-header > .maio-header-nav {
   display: flex;
@@ -56,7 +56,7 @@
   justify-content: center;
   gap: 24px;
   background: var(--ink);
-  color: white;
+  color: var(--paper);
   border: 1px solid transparent;
   min-height: 64px;
   padding: 18px 30px;
@@ -74,14 +74,14 @@
   font-size: 13px;
 }
 .maio-button-light {
-  background: #f5f5f7;
+  background: var(--maio-surface-data);
   color: var(--ink);
 }
 .maio-button-light:hover {
-  background: #e5e5e7;
+  background: var(--maio-hover);
 }
 .maio-button-white {
-  background: white;
+  background: var(--paper);
   color: var(--ink);
 }
 .maio-button-white:hover {
@@ -94,7 +94,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   overflow: hidden;
-  background: #fff;
+  background: var(--paper);
 }
 
 .maio-eyebrow {
@@ -124,7 +124,7 @@
 }
 
 .maio-footer {
-  background: #f5f5f7;
+  background: var(--maio-surface-data);
   color: var(--ink);
   padding: 90px 32px 40px;
   text-align: center;
@@ -143,7 +143,7 @@
   font-weight: 400;
 }
 .maio-footer-links a:hover {
-  color: #6e6e73;
+  color: var(--muted);
 }
 .maio-footer-wordmark {
   font-size: clamp(80px, 23vw, 330px);
@@ -158,12 +158,12 @@
   gap: 24px;
   margin-top: 40px;
   font-size: 14px;
-  color: #6e6e73;
+  color: var(--muted);
 }
 .maio-footer-meta a { color: var(--ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 .maio-footer-legal { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px 24px; margin-top: 18px; font-size: 14px; font-weight: 500; }
 .maio-footer-legal a { text-decoration: underline; text-underline-offset: 3px; }
-.maio-footer-legal a:hover { color: #6e6e73; }
+.maio-footer-legal a:hover { color: var(--muted); }
 .maio-footer-credit {
   margin: 40px 0 0;
   font-size: 16px;

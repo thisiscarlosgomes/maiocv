@@ -1,4 +1,8 @@
 {
+  "theme.label": "Apparence",
+  "theme.system": "Système",
+  "theme.light": "Clair",
+  "theme.dark": "Sombre",
   "nav.home": "MaioCV — accueil",
   "nav.primary": "Principal",
   "nav.initiatives": "Initiatives",

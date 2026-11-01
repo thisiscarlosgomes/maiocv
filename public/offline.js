@@ -1,4 +1,9 @@
 (() => {
+  let theme;
+  try { theme = localStorage.getItem("maio-theme"); } catch {}
+  const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#141416" : "#ffffff");
   const copy = {
     pt: ["Está sem ligação à internet.", "O chat e os dados do Maio precisam de internet. Volte a ligar-se e tente novamente.", "Tentar novamente", "Sem ligação à internet · maio.cv"],
     en: ["You’re offline.", "Maio’s chat and data need an internet connection. Reconnect and try again.", "Try again", "You’re offline · maio.cv"],

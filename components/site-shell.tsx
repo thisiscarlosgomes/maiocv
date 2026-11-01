@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { SiteFooter, SiteHeader } from "maio-ui";
 import { Reveal } from "./motion";
+import { ThemeSwitch } from "./theme-switch";
 import { LangSwitch } from "./lang-switch";
-import { InstallApp } from "./install-app";
 import { CHATGPT_URL } from "../lib/content";
 import { t } from "../lib/i18n";
 import { localize } from "../lib/locale";
@@ -34,7 +34,7 @@ export async function Header({ active = "home" }: { active?: "home" | "faq" | "e
         { href: localize(locale, "/faq"), label: copy("footer.faq"), current: active === "faq" },
         { href: localize(locale, "/chat"), label: copy("nav.chat"), current: active === "chat" },
       ]}
-      tools={<LangSwitch locale={locale} path={path} />}
+      tools={<><ThemeSwitch locale={locale} /><LangSwitch locale={locale} path={path} /></>}
       action={{ href: localize(locale, "/chat"), label: copy("cta.ask"), shortLabel: copy("cta.ask.short") }}
     />
   );
@@ -69,7 +69,6 @@ export async function Footer() {
           { href: localize(locale, "/terms"), label: copy("footer.terms") },
         ],
       }}
-      tools={<InstallApp locale={locale} />}
     />
   );
 }
