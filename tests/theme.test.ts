@@ -17,12 +17,17 @@ test("saved appearance takes precedence over the operating system before paint",
   assert.deepEqual(bootstrap("dark", false), { theme: "dark", color: "#141416" });
   assert.deepEqual(bootstrap("light", true), { theme: "light", color: "#ffffff" });
 });
-test("system, missing and invalid preferences follow the operating system", () => {
-  for (const value of [null, "system", "invalid"]) {
+test("missing and invalid preferences default to dark", () => {
+  for (const value of [null, "invalid"]) {
     assert.equal(bootstrap(value, true).theme, "dark");
-    assert.equal(bootstrap(value, false).theme, "light");
+    assert.equal(bootstrap(value, false).theme, "dark");
   }
 });
-test("blocked local storage still allows system theme without breaking rendering", () => {
-  assert.equal(bootstrap(null, true, true).theme, "dark");
+test("blocked local storage defaults to dark without breaking rendering", () => {
+  assert.equal(bootstrap(null, false, true).theme, "dark");
+});
+
+test("explicit system preference follows the operating system", () => {
+  assert.equal(bootstrap("system", true).theme, "dark");
+  assert.equal(bootstrap("system", false).theme, "light");
 });

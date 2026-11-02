@@ -5,11 +5,11 @@ import { t } from "../lib/i18n";
 import type { Locale } from "../lib/locale";
 
 type Theme = "system" | "light" | "dark";
-const valid = (value: string | null): Theme => value === "light" || value === "dark" ? value : "system";
+const valid = (value: string | null): Theme => value === "light" || value === "dark" || value === "system" ? value : "dark";
 
 export function ThemeSwitch({ locale }: { locale: Locale }) {
   const menu = useRef<HTMLDetailsElement>(null);
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("dark");
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = (choice: Theme) => {
@@ -19,8 +19,8 @@ export function ThemeSwitch({ locale }: { locale: Locale }) {
       setTheme(choice);
     };
     const read = () => {
-      let choice: Theme = "system";
-      try { choice = valid(localStorage.getItem("maio-theme")); } catch { /* System works without storage. */ }
+      let choice: Theme = "dark";
+      try { choice = valid(localStorage.getItem("maio-theme")); } catch { /* Default to dark without storage. */ }
       apply(choice);
     };
     const onStorage = (event: StorageEvent) => { if (event.key === "maio-theme" || event.key === null) read(); };

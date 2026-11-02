@@ -35,14 +35,14 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
   colorScheme: "light dark",
-  themeColor: "#ffffff",
+  themeColor: "#141416",
 };
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const locale = await currentLocale();
   return (
-    <html suppressHydrationWarning lang={localeHtmlLang(locale)} className={`${sans.variable} ${mono.variable}`}>
+    <html data-theme="dark" suppressHydrationWarning lang={localeHtmlLang(locale)} className={`${sans.variable} ${mono.variable}`}>
       <head><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /></head>
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchemaFor(locale)).replace(/</g, "\\u003c") }} />

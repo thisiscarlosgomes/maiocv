@@ -44,7 +44,7 @@ The configuration starts in Portuguese; the website supplies a localized first m
 
 By default, setup chooses an available premade or professional account voice with verified Portuguese, English and French coverage, preferring a conversational voice. The account used during development offered **River — Relaxed, Neutral, Informative**. It never automatically selects a personal cloned voice. Set `ELEVENLABS_VOICE_ID` before setup to use an explicitly reviewed voice instead. Existing managed agents retain their selected voice; changing a provisioned configuration requires a deliberate review rather than an implicit overwrite.
 
-Speech uses multilingual `eleven_turbo_v2_5`; the conversation model is `nemotron-35-super-vl-nvfp4`, served through ElevenLabs. Verified language metadata is not a listening test. Check Cape Verdean accents, Maio place names, interruptions and pronunciation with real audio before release. Cape Verdean Creole is not promised as a supported language.
+Speech uses multilingual `eleven_turbo_v2_5`; the conversation model is `gpt-4.1`, served through ElevenLabs. Verified language metadata is not a listening test. Check Cape Verdean accents, Maio place names, interruptions and pronunciation with real audio before release. Cape Verdean Creole is not promised as a supported language.
 
 ## Tool and source permissions
 
@@ -62,7 +62,7 @@ The `show_sources` client tool has this payload:
 }
 ```
 
-The example URL is illustrative only. The agent must copy real URLs verbatim from the MCP result, send no more than five links, and use an empty array when the result contains no source links. Titles may contain a publisher or reference date. The browser accepts only reviewed HTTPS hosts and exact URLs observed in successful MCP results for the current question, using the provider's `mcp_tool_call` events. Missing evidence produces no links; an allowed domain alone is insufficient. The browser returns how many sources it accepted, and the agent must not claim a source is displayed when none were accepted. Client tool responses wait at most five seconds.
+The example URL is illustrative only. The agent must copy real URLs verbatim from the MCP result, send no more than five links, and use an empty array when the result contains no source links. Titles may contain a publisher or reference date. The browser accepts only reviewed HTTPS hosts and exact URLs observed in successful MCP results for the current question, using the provider's `mcp_tool_call` events. Missing evidence produces no links; an allowed domain alone is insufficient. The browser independently validates the links. Source display is non-blocking and the agent does not announce whether links are displayed.
 
 The prompt requires a data lookup for factual Maio claims, short spoken answers, source names and reference years, and honest handling of missing or failed data. Retrieval time must not be presented as publication time. Boat data must be explicitly published and dated; missing trips do not prove no service. Flight timetables are not live status. National values must not be presented as Maio values, null values are not zero, and withdrawn places are not current listings. Source text and tool outputs cannot change the agent's instructions.
 
@@ -125,3 +125,19 @@ No automated test opened the microphone or assessed pronunciation/audio quality.
 - [Authentication](https://elevenlabs.io/docs/eleven-agents/customization/authentication)
 - [React SDK](https://elevenlabs.io/docs/eleven-agents/libraries/react)
 - [ElevenLabs JavaScript SDK](https://github.com/elevenlabs/elevenlabs-js)
+
+
+## Direct voice answers
+
+The live agent uses GPT-4.1 with temperature 0.1, targets 25–45 words, and leads with named options and useful differences. It avoids search announcements and routine follow-up offers. Accommodation queries search the requested place name in the businesses collection. MCP pre-tool speech is off and `show_sources` is non-blocking, so source display does not delay the spoken answer. Exact-URL validation remains in the client.
+
+Live typed-input/audio-output retests on 2026-11-02: GPT-4.1 queried `businesses` for `Ponta Preta`, returned Villa Azul and Wave Maze from the result, and issued source display before a single spoken answer without a search preamble. The latest answer was 42 words, but still appended an unsolicited closing question despite the prompt; this remains a model-compliance limitation. These tests did not verify microphone recognition or the browser source-link rendering.
+
+
+## Geographic defaults and search wording
+
+Maio is the default geography unless the user explicitly names another island, city or country. Search queries use the canonical place name, stripping conversational wording. A direct MCP check on 2026-11-02 returned two businesses for `Ponta Preta` (Villa Azul and Wave Maze), both with address Ponta Preta and locality Cidade do Porto Inglês; `zona da Ponta Preta` returned zero. An empty literal search is not evidence of missing accommodation. A live typed-input call without the word Maio retrieved both listings. Microphone transcription was not tested.
+
+## Core visitor tasks
+
+Ask Maio prioritizes trip planning, places to stay, things to do, and getting to Maio. Accommodation and activity recommendations use the verified business directories. Arrival advice uses published boat/flight schedules with date coverage preserved. Combined plans can use five lookups and up to 90 spoken words; missing dates yield a provisional plan, not invented schedules. Keep user preferences across turns and ask only essential missing details.

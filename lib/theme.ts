@@ -1,2 +1,2 @@
 // Run before the first paint to avoid a light flash for dark-mode users.
-export const THEME_INIT_SCRIPT = `(function(){var t;try{t=localStorage.getItem('maio-theme')}catch(e){}var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=d?'#141416':'#ffffff'})()`;
+export const THEME_INIT_SCRIPT = `(function(){var t;try{t=localStorage.getItem('maio-theme')}catch(e){}var d=t==='system'?matchMedia('(prefers-color-scheme: dark)').matches:t!=='light';document.documentElement.dataset.theme=d?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=d?'#141416':'#ffffff'})()`;

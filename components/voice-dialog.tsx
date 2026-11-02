@@ -32,7 +32,7 @@ export function VoiceDialog({ locale, onClose }: { locale: Locale; onClose: () =
             </button>
           </header>
           <div className="voice-stage" aria-busy="true">
-            <div className="voice-orb" aria-hidden="true"><span className="voice-orb-gradient" /><span className="voice-orb-grain" /></div>
+            <div className="voice-orb" aria-hidden="true"><span className="voice-orb-visual"><span className="voice-orb-gradient" /><span className="voice-orb-grain" /></span></div>
             <p className="voice-state" role="status">{t("voice.loading", undefined, locale)}</p>
           </div>
         </div>
