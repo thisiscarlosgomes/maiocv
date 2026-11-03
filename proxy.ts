@@ -1,3 +1,4 @@
+import { analyticsAuthorized } from "./lib/analytics-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { essentialsPath, essentialsSlug, LANG_COOKIE, DEFAULT_LOCALE, localize, localeFromPath, routeAlias, stripLocale } from "./lib/locale";
 
@@ -13,6 +14,12 @@ function internalPath(pathname: string): string {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const prefixed = localeFromPath(pathname);
+  if (stripLocale(pathname).replace(/\/$/, "") === "/analytics" && !analyticsAuthorized(request.headers.get("authorization"))) {
+    return new NextResponse("Acesso reservado ao administrador.", { status: 401, headers: {
+      "WWW-Authenticate": 'Basic realm="maio.cv Analytics", charset="UTF-8"',
+      "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow",
+    } });
+  }
 
   if (prefixed) {
     const slug = stripLocale(pathname).replace(/^\/|\/$/g, "");

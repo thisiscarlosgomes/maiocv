@@ -1,3 +1,4 @@
+import { SiteAnalytics } from "../components/analytics/tracker";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
@@ -48,6 +49,7 @@ export default async function RootLayout({
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchemaFor(locale)).replace(/</g, "\\u003c") }} />
         {children}
         <ServiceWorkerRegistration />
+        <SiteAnalytics />
       </body>
     </html>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { trackUsage } from "../lib/analytics-client";
+
 import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { t, type MessageKey } from "../lib/i18n";
@@ -106,6 +108,7 @@ function VoiceSession({ locale, onClose }: { locale: Locale; onClose: () => void
           if (!isCurrent()) return;
           setSecondsLeft(limit.current);
           setPhase("connected");
+          trackUsage("voice_connected");
         },
         onDisconnect: details => {
           if (!isCurrent()) return;

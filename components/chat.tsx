@@ -1,5 +1,7 @@
 "use client";
 
+import { trackUsage } from "../lib/analytics-client";
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "framer-motion";
@@ -270,6 +272,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
       }
       if (active.current === controller) {
         const declared = declaredCitations(data);
+        trackUsage("chat_answer");
         setMessages([...conversation, {
           role: "assistant",
           content: publicAnswer,

@@ -1,5 +1,7 @@
 "use client";
 
+import { trackUsage } from "../../lib/analytics-client";
+
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import type { Locale } from "../../lib/locale";
 import { parseTripPlan, type PlanDay, type PlanItem, type TripPlan } from "../../lib/trip";
@@ -73,7 +75,7 @@ export function Planner({ locale }: { locale: Locale }) {
       if (!response.ok) throw new Error();
       // Fixed plan: only the first plan is accepted. Anything the server sends later is ignored.
       const next = !plan && data.plan ? parseTripPlan(data.plan) : null;
-      if (next) setPlan(next);
+      if (next) { setPlan(next); trackUsage("plan_generated"); }
       setMessages([...conversation, { role: "assistant", content: String(data.reply || ""), trip: !!next }]);
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
