@@ -94,9 +94,13 @@ test("departure day: breakfast, short beach, lunch only when leaving late, then 
   const late = plan({ departure: { mode: "flight", time: "17:30" } }).days[2];
   assert.deepEqual(late.items.map((i) => i.slot), ["breakfast", "morning", "lunch", "departure"]);
   assert.equal(late.items.at(-1)!.refId, "depart-airport");
-  assert.equal(late.items.at(-1)!.start, "15:30", "two hours before the flight");
+  assert.equal(late.items.at(-1)!.start, "17:30", "the flight itself, not a buffer invented before it");
+  assert.ok(late.items.some((item) => item.kind === "place" && item.slot === "morning"));
+  assert.ok(late.items.some((item) => item.slot === "lunch"));
   const early = plan({ days: 2, departure: { mode: "ferry", time: "09:00" } });
   assert.deepEqual(early.days[1].items.map((i) => i.refId), ["breakfast-stay", "depart-port"]);
+  assert.equal(early.days[1].items.at(-1)!.start, "09:00");
+  assert.match(early.days[1].items.at(-1)!.note ?? "", /Short day/);
   assert.ok(!early.days[0].items.some((i) => i.slot === "drinks"), "no bar the night before an early exit");
   assert.ok(plan({ days: 2, pace: "normal", departure: { mode: "ferry", time: "18:00" } }).days[0].items.some((i) => i.slot === "drinks"), "packed pace still has a bar when leaving late");
   for (const { p: q } of matrix) for (const day of q.days) if (dayKind(day) === "departure") {

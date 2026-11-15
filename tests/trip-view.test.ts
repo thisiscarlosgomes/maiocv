@@ -49,8 +49,11 @@ test("contact rule: booking site → nothing; no site + phone/WhatsApp → links
 test("day summary counts meals and places, not the departure row", () => {
   const day = plan.days[2];
   const visible = day.items.filter((item) => item.kind === "food" || item.kind === "place" || item.kind === "experience").length;
-  assert.match(daySummary(day, s, false), new RegExp(`^${visible} stops · \\d+ min (driving|walking)$`));
+  const word = visible === 1 ? "stop" : "stops";
+  const travel = visible > 1 ? ` · \\d+ min (driving|walking)` : "";
+  assert.match(daySummary(day, s, false), new RegExp(`^${visible} ${word}${travel}$`));
   assert.ok(visible < day.items.filter((item) => item.kind !== "transport").length);
+  assert.doesNotMatch(daySummary(day, s, false), /depart/i);
 });
 
 test("unknown ids render nothing", () => {

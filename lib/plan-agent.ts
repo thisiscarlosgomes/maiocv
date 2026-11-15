@@ -14,7 +14,7 @@ import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule } from "./essentials.ts";
 import { venueType } from "./plan-rules.ts";
-import { EXPERIENCES, FOOD, experience, food, localizedPlaceName, place, parseTripPlan, type TripPlan } from "./trip.ts";
+import { EXPERIENCES, FOOD, addDays, experience, food, localizedPlaceName, place, parseTripPlan, type TripPlan } from "./trip.ts";
 import { TripRequestSchema, buildPlan, isAdrenalineExperience, seaStatus, type TripRequest } from "./trip-planner.ts";
 
 export type ToolEvent = { name: string; ok: boolean; arguments?: unknown; dropped?: string[] };
@@ -58,6 +58,7 @@ export function planInstructions(today: string, task: Task, recall: string, rebu
     "Write dates as people say them (Mon 16 Nov, seg 16 nov, lun. 16 nov.). Never an ISO date.",
     "Never mention a catalog id, a slug, or a source label such as 'food listing' or 'id …'. Use the place name only.",
     "The task is the authority for who this trip is for. Tool results are the authority for numbers. Never invent a time, a price, an airline, or a walking time.",
+    "If the guest did not name a start date, the first day is tomorrow in Cabo Verde (Atlantic/Cape_Verde). That rule is the same in English, Portuguese and French. Do not use today, and do not invent 09:00.",
     "If a ferry or flight time is not in the tool result, say it is not published. Do not use 14:00 or any other guessed clock. No current rows is not the same as no service, and it is not live status.",
     "get_transport returns published timetables only. Never say a flight is in the air, on time, or delayed.",
     "Include at most ONE tour or experience in the whole trip. Restaurants are for daytime meals. Bars only at 19:00 or later.",
@@ -178,6 +179,7 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
     // A list, a recommendation or a side answer replaces the previous list. One incidental name does not.
     if (found.length >= 2) next = { ...next, lastPlaces: found };
   }
+  if (intent === "side_question") next = { ...task, lastToolFacts: next.lastToolFacts };
   const carChips = isCarPending(next.pendingQuestion) ? CAR_CHIPS[next.locale] : null;
   const chips = (carChips ?? chipsOverride ?? followUpChips(next)).slice(0, 3);
   const ferryRan = toolEvents.some((event) => event.name === "get_transport");
@@ -198,7 +200,7 @@ function requestFromTask(task: Task, today: string): Record<string, unknown> {
     item === "beach" || item === "sea" || item === "nature" || item === "culture" || item === "food" || item === "adventure" || item === "walking"
   ));
   return {
-    startDate: c.dates?.start ?? today,
+    startDate: c.dates?.start ?? addDays(today, 1),
     days: c.dates?.days ?? 3,
     locale: task.locale,
     adults: c.party?.adults ?? 2,
@@ -217,6 +219,18 @@ function requestFromTask(task: Task, today: string): Record<string, unknown> {
     exclude: [],
     unmet: [],
   };
+}
+
+/** Drop a clock the model wrote. A time stays only when the guest said it; the timetable fills the rest. */
+function guestClocksOnly(request: Record<string, unknown>, task: Task): Record<string, unknown> {
+  const next = { ...request };
+  const arrival = task.constraints.arrival;
+  const departure = task.constraints.departure;
+  if (arrival) next.arrival = { mode: arrival.mode, dayIndex: 0, ...(arrival.time ? { time: arrival.time } : {}) };
+  else delete next.arrival;
+  if (departure) next.departure = { mode: departure.mode, ...(departure.time ? { time: departure.time } : {}) };
+  else delete next.departure;
+  return next;
 }
 
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
@@ -252,7 +266,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
   const composeRequest = (modelInput: Record<string, unknown> | null): Record<string, unknown> => {
     const correction = classification.intent === "correction";
-    const merged = correction || !modelInput ? requestFromTask(task, today) : overlayRequest(modelInput, task);
+    let merged = correction || !modelInput ? requestFromTask(task, today) : overlayRequest(modelInput, task);
+    if (!task.constraints.dates?.start) merged = { ...merged, startDate: addDays(today, 1) };
+    merged = guestClocksOnly(merged, task);
     const asked = askedExperiences();
     let include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
     const exclude = new Set(Array.isArray(merged.exclude) ? merged.exclude.filter((id): id is string => typeof id === "string") : []);
@@ -306,27 +322,33 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(hospitalReply(task.locale), current, [{ name: "emergency", ok: true }]);
   }
 
+  const noteTransport = (retrievedAt: string, ok: boolean) => {
+    const pinned = task;
+    task = rememberFact(pinned, { name: "get_transport", retrievedAt, value: ok ? "timetable" : "unavailable" });
+    task = { ...pinned, lastToolFacts: task.lastToolFacts };
+  };
+
   if (classification.intent === "side_question" && isTravelLookup(lastUser)) {
     const table = await loadTimetable(deps.fetchImpl, now);
-    task = rememberFact(task, { name: "get_transport", retrievedAt: table.retrievedAt, value: table.ok ? "timetable" : "unavailable" });
+    noteTransport(table.retrievedAt, table.ok);
     return finish(answerTravelQuestion(lastUser, task.locale, table, today), current, [{ name: "get_transport", ok: table.ok }], task, undefined, true, false, false, "ferries");
   }
 
   if (classification.intent === "side_question" && /\b(in the air|flight status|estado do voo|praia flight)\b/.test(spoken)) {
     const flight = await loadFlightSchedule(deps.fetchImpl, now);
-    task = rememberFact(task, { name: "get_transport", retrievedAt: flight.retrievedAt, value: `flight ${flight.status}` });
+    noteTransport(flight.retrievedAt, true);
     const reply = say(task.locale,
       `The published flight timetable is ${flight.status}, retrieved ${flight.retrievedAt}. That is not live status. No current rows does not mean there is no flight.`,
       `O horário de voos publicado está ${flight.status}, obtido em ${flight.retrievedAt}. Não é um estado ao vivo. Sem registos atuais não quer dizer que não haja voo.`,
       `L'horaire des vols publié est ${flight.status}, récupéré le ${flight.retrievedAt}. Ce n'est pas un statut en direct. Aucune ligne actuelle ne veut pas dire qu'il n'y a pas de vol.`);
-    return finish(reply, current, [{ name: "get_transport", ok: true }]);
+    return finish(reply, current, [{ name: "get_transport", ok: true }], task, undefined, true, false, false, "ferries");
   }
 
   if (classification.intent === "side_question" && /\b(is there a ferry|ha barco|y a-t-il un ferry|ferry timetable|horario do barco|horaire du ferry)\b/.test(spoken)) {
     const boats = await loadBoatSchedule(deps.fetchImpl, now);
     const date = extractConstraints(lastUser, today).dates?.start;
     const rows = (boats.data ?? []).filter((row) => !date || row.date === date);
-    task = rememberFact(task, { name: "get_transport", retrievedAt: boats.retrievedAt, value: boats.status });
+    noteTransport(boats.retrievedAt, true);
     const reply = rows.length
       ? say(task.locale,
         `Published sailing: ${rows.map((row) => `${row.departure} ${row.from} to ${row.to}`).join(", ")}. Retrieved ${boats.retrievedAt}. Not live status.`,
@@ -336,7 +358,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         `No sailing is published (retrieved ${boats.retrievedAt}). That is not the same as no service, and it is not live status.`,
         `Não há saída publicada (obtido em ${boats.retrievedAt}). Isso não é o mesmo que não haver serviço, nem é estado ao vivo.`,
         `Aucune traversée publiée (récupéré le ${boats.retrievedAt}). Ce n'est pas la même chose qu'une absence de service, ni un statut en direct.`);
-    return finish(reply, current, [{ name: "get_transport", ok: true }]);
+    return finish(reply, current, [{ name: "get_transport", ok: true }], task, undefined, true, false, false, "ferries");
   }
 
   if (classification.reference.kind === "directions") {

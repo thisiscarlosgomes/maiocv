@@ -68,17 +68,20 @@ export function humanizePlanDates(text: string, locale: TaskLocale): string {
 }
 
 /** A model that glued "Day 1 — date - 08:10 — …" onto one line. */
+const DAY_HEADING = /\b(?:day|dia|jour)\s+\d+\b\s*[—–-]/i;
+
 export function looksLikeItineraryDump(text: string): boolean {
   const clocks = text.match(/\b\d{1,2}:\d{2}\b/g)?.length ?? 0;
-  const day = /\b(?:day|dia|jour)\s*\d/i.test(text);
+  const heading = DAY_HEADING.test(text);
   const overview = /\boverview\b|\blength\s*:|\bpace\s*:/i.test(text);
   const oneLine = !text.includes("\n");
-  return (day && clocks >= 2) || (overview && (clocks >= 1 || day)) || (oneLine && clocks >= 3) || (oneLine && day && text.length > 140);
+  return (heading && clocks >= 1) || (overview && (clocks >= 1 || heading)) || (oneLine && clocks >= 3) || (oneLine && heading && text.length > 140);
 }
 
+/** Split a glued itinerary. "on day 2" / "o dia 2" / "au jour 2" stay inside the sentence. */
 export function expandRunOn(text: string): string {
   if (text.includes("\n") || text.length < 80) return text;
-  let next = text.replace(/\s+(?=(?:#{1,3}\s*)?(?:day|dia|jour)\s+\d\b)/gi, "\n\n");
+  let next = text.replace(/\s+(?=(?:#{1,3}\s*)?(?:day|dia|jour)\s+\d+\b\s*[—–-])/gi, "\n\n");
   next = next.replace(/\s+[-–—]\s+(?=\d{1,2}:\d{2}\b)/g, "\n- ");
   next = next.replace(/\s+(?=\d{1,2}:\d{2}\s+[—–-])/g, "\n");
   if (!next.includes("\n") && (next.match(/\s+[-–—]\s+/g)?.length ?? 0) >= 3) {
@@ -158,15 +161,21 @@ export function localizeGuestLabels(text: string, locale: TaskLocale): string {
   return next;
 }
 
+function shortDaySentence(plan: TripPlan): string {
+  const note = plan.days.at(-1)?.items.find((item) => item.slot === "departure")?.note ?? "";
+  return /^(?:Short day|Dia curto|Journée courte)\b/.test(note) ? ` ${note}` : "";
+}
+
 /** Two lines under the trip card. The card holds the stops. */
 export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | null): string {
   const n = plan.days.length;
   const relaxed = plan.pace !== "normal";
   const locale = plan.locale;
+  const short = shortDaySentence(plan);
   if (locale === "pt") {
     const pace = relaxed ? "Calmo, " : "Cheio, ";
     const car = plan.hasCar ? "de carro" : "sem carro";
-    const line = `${pace}${n} ${n === 1 ? "dia" : "dias"} ${car}.`;
+    const line = `${pace}${n} ${n === 1 ? "dia" : "dias"} ${car}.${short}`;
     const second = stance === "unsure"
       ? "Assumo um carro alugado. Diga se não for o caso."
       : "Toque no cartão para cada dia. Quer mudanças?";
@@ -175,7 +184,7 @@ export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | nul
   if (locale === "fr") {
     const pace = relaxed ? "Tranquille, " : "Chargé, ";
     const car = plan.hasCar ? "avec une voiture" : "sans voiture";
-    const line = `${pace}${n} ${n === 1 ? "jour" : "jours"} ${car}.`;
+    const line = `${pace}${n} ${n === 1 ? "jour" : "jours"} ${car}.${short}`;
     const second = stance === "unsure"
       ? "Je pars sur une voiture de location. Dites-le si ce n'est pas le cas."
       : "Touchez la carte pour chaque jour. Vous voulez changer quelque chose ?";
@@ -183,7 +192,7 @@ export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | nul
   }
   const pace = relaxed ? "Slow " : "Packed ";
   const car = plan.hasCar ? "with a car" : "without a car";
-  const line = `${pace}${n} ${n === 1 ? "day" : "days"} ${car}.`;
+  const line = `${pace}${n} ${n === 1 ? "day" : "days"} ${car}.${short}`;
   const second = stance === "unsure"
     ? "I'm assuming a rental car. Say if you won't have one."
     : "Tap the card for each day. Want changes?";

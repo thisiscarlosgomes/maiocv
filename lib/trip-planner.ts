@@ -84,6 +84,15 @@ const NOTES = {
   },
 } as const;
 
+function earlyDepartureNote(locale: TripRequest["locale"], mode: "ferry" | "flight", time: string): string {
+  const ride = mode === "flight"
+    ? { en: "flight", pt: "voo", fr: "vol" }
+    : { en: "ferry", pt: "barco", fr: "ferry" };
+  if (locale === "pt") return `Dia curto: o ${ride.pt} sai às ${time}.`;
+  if (locale === "fr") return `Journée courte : le ${ride.fr} part à ${time}.`;
+  return `Short day: the ${ride.en} leaves at ${time}.`;
+}
+
 export type PlannerInput = { request: z.input<typeof TripRequestSchema>; forecast: DailySea[]; sailings: Sailing[]; forecastSource?: string };
 
 export function buildPlan({ request: raw, forecast, sailings, forecastSource = "Open-Meteo" }: PlannerInput): TripPlan {
@@ -123,12 +132,16 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     }
   }
   // Departure: the last day, when the guest leaves on it (and it isn't also the arrival day).
-  // A missing clock stays missing. 16:00 is not a stand-in for an unpublished timetable.
-  const leave = req.departure?.time && req.days > 1 && kinds[req.days - 1] === "full"
-    ? { mode: req.departure.mode, time: req.departure.time }
-    : undefined;
+  // The row uses the published or guest-stated clock. A missing clock stays missing. 09:00 is not a buffer.
+  const departing = req.departure && req.days > 1 && kinds[req.days - 1] === "full" ? req.departure : undefined;
+  const early = !!departing?.time && toMin(departing.time) < toMin("12:00");
+  const leave = departing ? {
+    mode: departing.mode,
+    ...(departing.time ? { time: departing.time } : {}),
+    ...(early && departing.time ? { note: earlyDepartureNote(req.locale, departing.mode, departing.time) } : !departing.time ? { note: NOTES[req.locale].unpublished } : {}),
+  } : undefined;
   if (leave) kinds[req.days - 1] = "departure";
-  const earlyExit = !!leave && toMin(leave.time) < toMin("12:00");
+  const earlyExit = early;
 
   // One tour for the whole trip, on a full day only. Requested first, then a sea outing on the calmest safe day, then a land tour.
   const fullDays = dates.map((_, i) => i).filter((i) => kinds[i] === "full");

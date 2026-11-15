@@ -85,7 +85,9 @@ test("published travel fills arrival and departure clocks and does not invent on
   assert.match(inbound?.note ?? "", /Santiago/);
   const outbound = plan.days[2].items.find((item) => item.slot === "departure");
   assert.equal(outbound?.refId, "depart-port");
-  assert.equal(outbound?.start, "09:00");
+  assert.equal(outbound?.start, "10:00");
+  assert.match(outbound?.note ?? "", /Short day/);
+  assert.equal(plan.days[2].items.some((item) => item.start === "09:00"), false);
 });
 
 test("a down timetable does not invent a clock", async () => {
@@ -148,7 +150,9 @@ test("a plan with dates uses the published ferry, and a failure does not invent 
   );
   const inbound = live.plan?.days[0].items.find((item) => item.kind === "transport");
   assert.equal(inbound?.start, "08:00");
-  assert.equal(live.plan?.days[2].items.find((item) => item.slot === "departure")?.start, "09:00");
+  assert.equal(live.plan?.days[2].items.find((item) => item.slot === "departure")?.start, "10:00");
+  assert.match(live.reply, /Short day/);
+  assert.equal(live.plan?.days[2].items.some((item) => item.start === "09:00"), false);
   assert.doesNotMatch(JSON.stringify(live.plan), /16:00/);
 
   const down = await runPlanAgent(
