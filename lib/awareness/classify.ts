@@ -330,6 +330,13 @@ export function isBusinessLookup(text: string): boolean {
     || /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(n);
 }
 
+/** Hospital, pharmacy, police, or a phone/contact ask. A listings answer, not a new plan. */
+export function isListingsLookup(text: string): boolean {
+  const n = normalizeUtterance(text);
+  return isBusinessLookup(text)
+    || /\b(?:hospital|hospit|hopital|emergenc|urgencia|urgence|police|policia|gendarmerie|contacto|contato|contact)\b/.test(n);
+}
+
 function isFactualAside(text: string): boolean {
   return /\b(?:hospital|hospit|hopital|emergency|emergencia|urgence)\b/.test(text)
     || /\b(?:in the air|flight status|estado do voo|le vol est|praia flight)\b/.test(text)
@@ -480,7 +487,7 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   if ((isTravelLookup(text) || isTimetableQuestion(text)) && !asksForPlan) {
     return { ...side, objective: task.objective ?? undefined };
   }
-  if (isBusinessLookup(text) && !patch.dates?.days && !patch.dates?.start) {
+  if (isListingsLookup(text) && !asksForPlan && !patch.dates?.days && !patch.dates?.start) {
     return { ...side, patch: {}, planShaping: false, objective: task.objective ?? undefined };
   }
   if (isTimetableQuestion(text) || /\bin the air\b|\bflight status\b|\bestado do voo\b/.test(n)) {

@@ -1,6 +1,7 @@
 import { EMERGENCY } from "./emergency.ts";
 import { visibleStopCount } from "./plan-edits.ts";
 import { looksLikeItineraryDump, looksLikeSchedule } from "./plan-reply.ts";
+import { planQuestionKind } from "./plan-router.ts";
 import { EXPERIENCES, FOOD, PLACES, addDays, parseTripPlan, type TripPlan } from "./trip.ts";
 
 /** MongoDB TTL: documents expire 30 days after createdAt. */
@@ -281,6 +282,25 @@ function looksLikePlanSummary(reply: string): boolean {
   return false;
 }
 
+function dayNumbers(text: string): Set<string> {
+  return new Set([...text.matchAll(/\b(?:day|dia|jour)\s+(\d+)\b/gi)].map((match) => match[1] ?? ""));
+}
+
+/** A question about one day of the open trip. Naming that day is the answer, not a re-emitted plan. */
+function oneDayQuestion(text: string): boolean {
+  if (planQuestionKind(text)) return true;
+  const n = fold(text);
+  return /\b(?:day|dia|jour)\s+\d+\b/.test(n) && /\b(?:what|whats|where|which|lunch|almoco|dejeuner|onde|ou )\b/.test(n);
+}
+
+function singleDayAnswer(user: string, reply: string): boolean {
+  if (!oneDayQuestion(user)) return false;
+  if (dayNumbers(reply).size > 1) return false;
+  const text = fold(reply);
+  if (/\b(?:here is the \d+-day plan|aqui esta o plano|voici le plan|plano de \d+|plan de \d+)\b/.test(text)) return false;
+  return true;
+}
+
 function earlierUser(turns: FlagTurn[] | undefined): string {
   if (!turns?.length) return "";
   for (let i = turns.length - 1; i >= 0; i -= 1) {
@@ -371,7 +391,8 @@ export function inspectTurn(turn: TurnForFlags): string[] {
   }
 
   const changedPlan = planKey(turn.planBefore) !== planKey(turn.planAfter) && planKey(turn.planAfter) !== "";
-  if (!turn.planTurn && trimmed && (looksLikePlanSummary(trimmed) || (turn.cardShown ?? changedPlan))) {
+  const oneDay = singleDayAnswer(turn.userMessage ?? "", trimmed);
+  if (!turn.planTurn && trimmed && !oneDay && (looksLikePlanSummary(trimmed) || (turn.cardShown ?? changedPlan))) {
     reasons.push("plan_reemitted");
   }
 
