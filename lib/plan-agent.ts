@@ -1,10 +1,13 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, extractConstraints, normalizeUtterance, type Intent } from "./awareness/classify.ts";
+import { answerIslandQuestion } from "./island-answer.ts";
+import { humanPlanDate, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, type ChatTurn } from "./awareness/context.ts";
 import { emptyTask, followUpChips, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
 import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
+import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule, loadSailings, type Sailing } from "./essentials.ts";
 import { venueType } from "./plan-rules.ts";
 import { EXPERIENCES, FOOD, experience, food, place, parseTripPlan, type TripPlan } from "./trip.ts";
@@ -44,6 +47,10 @@ export function planInstructions(today: string, task: Task, recall: string, rebu
     "You are the Maio island trip concierge on maio.cv. You plan days on Maio, Cabo Verde.",
     `Today in Cabo Verde is ${weekday(today)} ${today}. Resolve relative dates like "Friday" to the next such date.`,
     "Reply in the guest's language (pt, en or fr).",
+    "Lead with the answer. Two or three short sentences. No menu of what you can do, no 'options I can do now', and never say an itinerary is unfinished when a plan is already in the cards.",
+    "When you describe the days, use Markdown: a one-line intro, then a heading per day and one bullet per stop, then a short notes line. Put a real newline between them. Never one long line.",
+    "Write dates as people say them (Mon 16 Nov, seg 16 nov, lun. 16 nov.). Never an ISO date.",
+    "Never mention a catalog id, a slug, or a source label such as 'food listing' or 'id …'. Use the place name only.",
     "The task is the authority for who this trip is for. Tool results are the authority for numbers. Never invent a time, a price, an airline, or a walking time.",
     "If a ferry or flight time is not in the tool result, say it is not published. Do not use 14:00 or any other guessed clock. No current rows is not the same as no service, and it is not live status.",
     "get_transport returns published timetables only. Never say a flight is in the air, on time, or delayed.",
@@ -99,6 +106,7 @@ function overlayRequest(request: Record<string, unknown>, task: Task): Record<st
   if (c.boatTrips !== undefined) next.boatTrips = c.boatTrips;
   if (c.diet) next.diet = c.diet;
   if (c.budget) next.budget = c.budget;
+  if (c.pace === "slow") next.pace = "slow";
   if (c.arrival) {
     const prev = request.arrival && typeof request.arrival === "object" ? request.arrival as { dayIndex?: number } : {};
     next.arrival = { mode: c.arrival.mode, dayIndex: typeof prev.dayIndex === "number" ? prev.dayIndex : 0, ...(c.arrival.time ? { time: c.arrival.time } : {}) };
@@ -135,17 +143,19 @@ function pendingFrom(task: Task, reply: string, intent: Intent): Task {
   return { ...task, pendingQuestion: question ? question.slice(0, 200) : null };
 }
 
-function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent): PlanAgentResult {
+function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[]): PlanAgentResult {
   const next = refreshTask(pendingFrom(task, reply, intent));
   let text = reply.trim();
   const unpublished = plan?.days.some((day) => day.items.some((item) => item.kind === "transport" && !item.start));
-  if (unpublished && !/publish/i.test(text)) {
+  if (unpublished && !/publish/i.test(text) && !/\b(?:day|dia|jour)\s+\d/i.test(text)) {
     const extra = next.locale === "pt" ? "O horário não está publicado, por isso o plano não marca uma hora."
       : next.locale === "fr" ? "L'horaire n'est pas publié, donc le plan ne fixe pas d'heure."
       : "The timetable has no published time, so the plan does not set one.";
     text = `${text} ${extra}`.trim();
   }
-  return { reply: text, plan, toolEvents, task: next, chips: followUpChips(next), intent };
+  text = publicPlanReply(text, next.locale, plan);
+  const chips = (chipsOverride ?? followUpChips(next)).slice(0, 2);
+  return { reply: text, plan, toolEvents, task: next, chips, intent };
 }
 
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
@@ -154,10 +164,11 @@ function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
 
 function hospitalReply(locale: TaskLocale): string {
   const hospital = EMERGENCY.find((item) => item.id === "hospital")!;
+  const verified = verifiedDate(EMERGENCY_VERIFIED_AT, locale);
   return say(locale,
-    `Hospital do Maio: ${hospital.number}. Verified ${EMERGENCY_VERIFIED_AT}.`,
-    `Hospital do Maio: ${hospital.number}. Confirmado em ${EMERGENCY_VERIFIED_AT}.`,
-    `Hôpital de Maio : ${hospital.number}. Vérifié le ${EMERGENCY_VERIFIED_AT}.`);
+    `Hospital do Maio: ${hospital.number}. Verified ${verified}.`,
+    `Hospital do Maio: ${hospital.number}. Confirmado em ${verified}.`,
+    `Hôpital de Maio : ${hospital.number}. Vérifié le ${verified}.`);
 }
 
 function namedRestaurants(): string[] {
@@ -175,7 +186,11 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
 
-  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task) => result(next, reply, plan, toolEvents, classification.intent);
+  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[]) => result(next, reply, plan, toolEvents, classification.intent, chips);
+
+  if (classification.smallTalk) {
+    return finish(smallTalkReply(task.locale, spoken, current), current, [], task, []);
+  }
 
   if (classification.cancelOnly) {
     return finish(say(task.locale, "Okay. We'll leave that.", "Está bem. Deixamos isso.", "D'accord. On laisse ça."), current);
@@ -188,7 +203,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       "Je n'ai pas de chiffre publié de visiteurs dans ce planificateur, donc je n'en invente pas. Le voyage précédent est mis de côté."), null);
   }
 
-  if (classification.intent === "side_question" && /\b(hospital|hospit|emergenc|urgencia|urgence)\b/.test(spoken)) {
+  if (classification.intent === "side_question" && /\b(hospital|hospit|hopital|emergenc|urgencia|urgence)\b/.test(spoken)) {
     task = rememberFact(task, { name: "emergency", retrievedAt: EMERGENCY_VERIFIED_AT, value: "+238 255 11 30" });
     return finish(hospitalReply(task.locale), current, [{ name: "emergency", ok: true }]);
   }
@@ -246,6 +261,11 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if ((classification.reference.kind === "ordinal" || classification.reference.kind === "that-one") && classification.reference.place && !classification.planShaping) {
     const hit = classification.reference.place;
     return finish(say(task.locale, `That is ${hit.name}.`, `É ${hit.name}.`, `C'est ${hit.name}.`), current);
+  }
+
+  if (classification.intent === "side_question" && !classification.planShaping) {
+    const grounded = answerIslandQuestion(lastUser, task.locale);
+    if (grounded) return finish(grounded, current, [], task, []);
   }
 
   if ((classification.patch.diet || classification.patch.budget) && !classification.planShaping && classification.intent !== "side_question") {
@@ -365,18 +385,43 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   return finish(generated.text, safe ?? current, toolEvents);
 }
 
+function smallTalkReply(locale: TaskLocale, spoken: string, plan: TripPlan | null): string {
+  const kind = /^(?:thanks|thank you|obrigado|obrigada|merci|valeu|cheers)$/.test(spoken.replace(/[.!?]+$/g, ""))
+    ? "thanks"
+    : /^(?:ok|okay|fixe|cool|great)$/.test(spoken.replace(/[.!?]+$/g, ""))
+      ? "ok"
+      : "hi";
+  if (kind === "thanks") return say(locale, "You're welcome.", "De nada.", "Avec plaisir.");
+  if (kind === "ok") return say(locale, "Okay.", "Está bem.", "D'accord.");
+  if (plan && plan.days.length) {
+    const n = plan.days.length;
+    return say(locale,
+      `Hi! Your ${n}-day trip is still here. Want to change anything?`,
+      `Olá! A sua viagem de ${n} dias continua aqui. Quer mudar alguma coisa?`,
+      `Bonjour ! Votre voyage de ${n} jours est toujours là. Vous voulez changer quelque chose ?`);
+  }
+  return say(locale,
+    "Hi! How many days do you have on Maio?",
+    "Olá! Quantos dias vai passar no Maio?",
+    "Bonjour ! Combien de jours passez-vous à Maio ?");
+}
+
 function summarize(plan: TripPlan) {
   return {
     title: plan.title,
     unmet: plan.unmet,
     days: plan.days.map((day) => ({
-      date: day.date,
+      date: humanPlanDate(day.date, plan.locale),
       sea: day.sea?.status ?? "unknown",
-      items: day.items.map((item) => `${item.id} ${item.start ?? "unpublished"} ${item.kind}:${item.refId} ${label(item.kind, item.refId)}`),
+      items: day.items.map((item) => `${item.start ?? "unpublished"} ${label(item.kind, item.refId)}`),
     })),
   };
 }
 
 function label(kind: string, id: string) {
-  return kind === "experience" ? experience(id)?.title : kind === "food" ? food(id)?.title : kind === "place" ? place(id)?.name.en : id;
+  if (kind === "experience") return experience(id)?.title ?? "Experience";
+  if (kind === "food") return food(id)?.title ?? "Meal";
+  if (kind === "place") return place(id)?.name.en ?? "Place";
+  if (kind === "transport") return id === "ferry" ? "Ferry" : "Flight";
+  return "Free time";
 }

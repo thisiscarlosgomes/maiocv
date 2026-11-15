@@ -2,7 +2,7 @@
 
 import { trackUsage } from "../../lib/analytics-client";
 
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Locale } from "../../lib/locale";
 import { parseTripPlan, type PlanDay, type PlanItem, type TripPlan } from "../../lib/trip";
 import { planStrings, type PlanStrings } from "../../lib/trip-strings";
@@ -10,6 +10,7 @@ import { samplePlan } from "../../lib/trip-sample";
 import { cardView, dateRange, dayParts, seaLine, timeSpan } from "../../lib/trip-view";
 import { decodeTrip, encodeTrip } from "../../lib/trip-share";
 import { DayMap, DayStops, PlaceDetail, RoughAlert, SafeImg, SeaText } from "./cards";
+import { ChatShell } from "../chat/shell";
 
 // The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
 const TASK_KEY = "maio.plan.task";
@@ -38,7 +39,6 @@ export function Planner({ locale }: { locale: Locale }) {
   const [copied, setCopied] = useState(false);
   const [taskBlob, setTaskBlob] = useState<string | null>(null);
   const [chips, setChips] = useState<string[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   function writeTask(value: string | null) {
     setTaskBlob(value);
@@ -122,7 +122,6 @@ export function Planner({ locale }: { locale: Locale }) {
     window.print();
     document.title = title;
   }
-  function submit(event: FormEvent) { event.preventDefault(); void send(draft); }
   function startOver() {
     writeTask(null);
     setMessages([]);
@@ -142,43 +141,36 @@ export function Planner({ locale }: { locale: Locale }) {
   const suggestions = messages.length === 0 && !plan ? s.startChips : chips;
   const detailDay = detail && plan ? plan.days.find((d) => d.items.some((i) => i.id === detail.id)) : null;
 
-  const composer = !shared && (
-    <div className="plan-dock">
-      <form className="plan-composer" onSubmit={submit}>
-        <label className="sr-only" htmlFor="plan-input">{plan ? s.ask : s.placeholder}</label>
-        <input id="plan-input" ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={plan ? s.ask : s.placeholder} autoComplete="off" />
-        <button type="submit" className="plan-send" disabled={busy || !draft.trim()} aria-label={s.send}>↑</button>
-      </form>
-    </div>
-  );
-
   return (
-    <main id="conteudo" className={`plan-main plan-screen-${screen}${shared ? " is-shared" : ""}`} lang={locale}>
-      {screen === "chat" && !shared && (
-        <section className="plan-chat" aria-label="Concierge">
-          <h1 className="sr-only">{s.title}</h1>
-          {(messages.length > 0 || plan) && <button type="button" className="plan-back" onClick={startOver}>{s.startOver}</button>}
-          <div className="plan-messages" aria-live="polite">
-            {!messages.length && <p className="plan-msg plan-msg-assistant plan-greet">{s.greeting}</p>}
-            {messages.map((m, i) => (
-              <Fragment key={i}>
-                <p className={`plan-msg plan-msg-${m.role}`}>{m.content}</p>
-                {m.trip && plan && <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} />}
-              </Fragment>
-            ))}
-            {busy && !plan && <PlanProgress steps={s.progress} />}
-            {busy && plan && <p className="plan-thinking" role="status"><span className="plan-spinner" aria-hidden="true" />{s.thinking}</p>}
-            {error && <p className="plan-msg is-failed" role="alert">{error}</p>}
-          </div>
-          {!busy && suggestions.length > 0 && (
-            <div className={`plan-chips${plan ? " is-questions" : ""}`} aria-label={plan ? s.ask : s.try}>
-              {suggestions.map((chip) => <button key={chip} type="button" className="plan-chip" onClick={() => void send(chip)}>{chip}</button>)}
-            </div>
-          )}
-        </section>
-      )}
-
-      {screen === "trip" && plan && (
+    <ChatShell
+      id="plan"
+      locale={locale}
+      welcome={s.greeting}
+      logLabel={s.title}
+      placeholder={plan ? s.ask : s.placeholder}
+      thinking={s.thinking}
+      sendLabel={s.send}
+      sendingLabel={s.thinking}
+      inputId="plan-input"
+      note={s.foot}
+      suggestions={suggestions.map((label) => ({ label }))}
+      suggestionsWhen={messages.length > 0 ? "always" : "empty"}
+      messages={messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        extra: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : undefined,
+      }))}
+      draft={draft}
+      busy={busy}
+      error={error ?? undefined}
+      onDraft={setDraft}
+      onSend={(text) => { void send(text); }}
+      onClear={!shared && (messages.length > 0 || plan) ? startOver : undefined}
+      clearLabel={s.startOver}
+      clearVariant="text"
+      composer={!shared}
+      className={`plan-main plan-screen-${screen}${shared ? " is-shared" : ""}`}
+      stage={screen === "trip" && plan ? (
         <section className="plan-trip" aria-label={s.yourTrip}>
           {!shared && <button type="button" className="plan-back" onClick={() => setScreen("chat")}>← {s.backToChat}</button>}
           {shared && <p className="plan-eyebrow">{s.sharedPlan}</p>}
@@ -206,23 +198,19 @@ export function Planner({ locale }: { locale: Locale }) {
           {plan.unmet.length > 0 && <p className="plan-unmet"><strong>{s.unmet}:</strong> {plan.unmet.join(", ")}</p>}
           <p className="plan-foot">{s.foot} · {s.forecast}</p>
         </section>
-      )}
-
-      {composer}
-
+      ) : undefined}
+    >
       {shared && plan && (
         <div className="plan-sharebar">
           <p>{s.wantOwn}</p>
           <a className="plan-primary" href={window.location.pathname}>{s.planMine}</a>
         </div>
       )}
-
       {detail && detailDay && <PlaceDetail item={detail} day={detailDay} locale={locale} s={s}
-        onClose={() => setDetail(null)} onAsk={shared ? undefined : (text) => { setDetail(null); setDraft(text); setTimeout(() => inputRef.current?.focus(), 0); }} />}
+        onClose={() => setDetail(null)} onAsk={shared ? undefined : (text) => { setDetail(null); setDraft(text); setTimeout(() => document.getElementById("plan-input")?.focus(), 0); }} />}
       {mapDay && <DayMap day={mapDay} locale={locale} s={s} onClose={() => setMapDay(null)} />}
-
       {plan && <PrintPlan plan={plan} locale={locale} />}
-    </main>
+    </ChatShell>
   );
 }
 
@@ -234,25 +222,6 @@ function TripCard({ plan, locale, s, onOpen }: { plan: TripPlan; locale: Locale;
       <SafeImg className="plan-tripcard-img" src={img} />
       <div><p className="plan-tripcard-title">{plan.title}</p><p className="plan-tripcard-meta mono">{dateRange(plan.days, locale)} · {stopCount(plan)} {s.stops}</p></div>
       <button type="button" className="plan-primary" onClick={onOpen}>{s.openTrip}</button>
-    </div>
-  );
-}
-
-/** Building state: steps tick off on a timer while the first plan is made, then a cover skeleton. */
-function PlanProgress({ steps }: { steps: string[] }) {
-  const [done, setDone] = useState(0);
-  useEffect(() => { const t = setInterval(() => setDone((n) => Math.min(n + 1, steps.length - 1)), 1200); return () => clearInterval(t); }, [steps.length]);
-  return (
-    <div className="plan-progress" role="status">
-      <ol>
-        {steps.map((step, i) => (
-          <li key={step} className={i < done ? "is-done" : i === done ? "is-now" : ""}>
-            {i < done ? <span className="plan-tick" aria-hidden="true">✓</span> : i === done ? <span className="plan-spinner" aria-hidden="true" /> : <span className="plan-tick" aria-hidden="true" />}
-            {step}
-          </li>
-        ))}
-      </ol>
-      <span className="plan-skel" aria-hidden="true" />
     </div>
   );
 }

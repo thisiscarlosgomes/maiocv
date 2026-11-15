@@ -131,16 +131,16 @@ test("a language switch changes locale only", () => {
   assert.equal(next.objective, start.objective);
 });
 
-test("chips come from remaining work and never repeat a finished boat intent", () => {
+test("chips stay within two and do not ask when you leave once dates are set", () => {
   const task = refreshTask(taskWith({
     constraints: { dates: { start: "2026-10-28", days: 3 }, party: { adults: 2 }, car: false, boatTrips: 1, interests: ["boat"] },
     completed: ["boat"],
     remaining: ["Want a boat trip?", "When do you leave?"],
   }));
   const chips = followUpChips(task);
-  assert.ok(chips.length > 0);
+  assert.ok(chips.length <= 2);
   assert.ok(chips.every((chip) => !/boat trip/i.test(chip)));
-  assert.ok(chips.some((chip) => /leave|part/i.test(chip)));
+  assert.ok(chips.every((chip) => !/leave|partem|partez/i.test(chip)));
 });
 
 test("a pending ferry-or-flight question offers those choices, not a finished intent", () => {

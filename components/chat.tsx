@@ -2,11 +2,10 @@
 
 import { trackUsage } from "../lib/analytics-client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { motion, useReducedMotion } from "framer-motion";
+import { ChatShell } from "./chat/shell";
 import { BUSINESS_DATA_URL, businessMetricProgram } from "../lib/business-visual";
-import { ChatMarkdown } from "./chat-markdown";
 import { PLACE_COLLECTIONS, placeDataUrl, placeVisualProgram } from "../lib/place-visual";
 import { publicChatResponse, publicChatGreeting } from "../lib/chat-answer";
 import { isPopulationTotalQuestion, populationAnswer, POPULATION_DATA_URL } from "../lib/population-answer";
@@ -71,14 +70,7 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   const voiceSession = useRef(0);
   const voiceTimer = useRef<number | null>(null);
   const audioInput = useRef<HTMLInputElement>(null);
-  const conversationPane = useRef<HTMLDivElement>(null);
-  const latestQuestion = useRef<HTMLElement>(null);
-  const scrollTail = useRef<HTMLDivElement>(null);
-  const scrollToQuestion = useRef<number | null>(null);
-  const pendingQuestionScroll = useRef(false);
-  const input = useRef<HTMLTextAreaElement>(null);
   const suggestionsInitialized = useRef(false);
-  const reduced = useReducedMotion();
 
   useEffect(() => {
     if (suggestionsInitialized.current) return;
@@ -96,34 +88,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   }, []);
 
   useEffect(() => {
-    const screen = conversationPane.current?.closest<HTMLElement>(".chat-screen");
-    const viewport = window.visualViewport;
-    if (!screen || !viewport) return;
-    let frame = 0;
-    const syncViewport = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        // iOS keyboards resize the visual viewport. Preserve normal pinch zoom.
-        if (viewport.scale !== 1) return;
-        screen.style.setProperty("--chat-height", `${viewport.height}px`);
-        screen.style.setProperty("--chat-offset-top", `${viewport.offsetTop}px`);
-        screen.dataset.compact = viewport.height < 320 ? "tiny" : viewport.height < 440 ? "true" : "false";
-      });
-    };
-    syncViewport();
-    viewport.addEventListener("resize", syncViewport);
-    viewport.addEventListener("scroll", syncViewport);
-    return () => {
-      cancelAnimationFrame(frame);
-      viewport.removeEventListener("resize", syncViewport);
-      viewport.removeEventListener("scroll", syncViewport);
-      screen.style.removeProperty("--chat-height");
-      screen.style.removeProperty("--chat-offset-top");
-      delete screen.dataset.compact;
-    };
-  }, []);
-
-  useEffect(() => {
     setCanRecord(Boolean(navigator.mediaDevices && "getUserMedia" in navigator.mediaDevices && "MediaRecorder" in window));
     return () => {
       active.current?.abort();
@@ -135,59 +99,17 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
       audioStream.current?.getTracks().forEach(track => track.stop());
     };
   }, []);
-  useEffect(() => {
-    const pane = conversationPane.current;
-    if (!pane) return;
-    const observer = new ResizeObserver(() => updateQuestionSpace());
-    observer.observe(pane);
-    const log = pane.querySelector('[role="log"]');
-    if (log) observer.observe(log);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    const field = input.current;
-    if (!field) return;
-    field.style.height = "auto";
-    field.style.height = `${Math.min(field.scrollHeight, 150)}px`;
-  }, [draft]);
-  useLayoutEffect(() => {
-    const pane = conversationPane.current;
-    if (!pane || scrollToQuestion.current === null || !latestQuestion.current) return;
-    const questionTop = updateQuestionSpace();
-    if (pendingQuestionScroll.current && questionTop !== null) {
-      pendingQuestionScroll.current = false;
-      pane.scrollTo({ top: questionTop - 12, behavior: reduced ? "instant" : "smooth" });
-    }
-  }, [messages, busy, error, reduced]);
-
-  function updateQuestionSpace(): number | null {
-    const pane = conversationPane.current;
-    const question = latestQuestion.current;
-    const tail = scrollTail.current;
-    if (!pane || !tail) return null;
-    tail.style.height = "0px";
-    if (!question || scrollToQuestion.current === null) return null;
-    const questionTop = pane.scrollTop + question.getBoundingClientRect().top - pane.getBoundingClientRect().top;
-    const spaceBelow = pane.scrollHeight - questionTop;
-    tail.style.height = `${Math.max(0, pane.clientHeight + 12 - spaceBelow)}px`;
-    return questionTop;
-  }
-
   async function send(question = draft, suggestedPrompt?: string) {
     const text = question.trim();
     if (!text || active.current) return;
     const greeting = publicChatGreeting(text, locale);
     if (greeting) {
-      scrollToQuestion.current = messages.length;
-      pendingQuestionScroll.current = true;
       setMessages([...messages, { role: "user", content: text }, { role: "assistant", content: greeting, example: true, uncited: true }]);
       setDraft(""); setError("");
       return;
     }
     const controller = new AbortController();
     active.current = controller;
-    scrollToQuestion.current = messages.length;
-    pendingQuestionScroll.current = true;
     const conversation: Message[] = [...messages, { role: "user", content: text }];
     setMessages(conversation); setDraft(""); setError(""); setBusy(true);
     const timeout = window.setTimeout(() => controller.abort(), 90000);
@@ -284,8 +206,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
       }
     } catch (cause) {
       if (active.current === controller) {
-        scrollToQuestion.current = null;
-        pendingQuestionScroll.current = false;
         setMessages(messages);
         setDraft(text);
         setError(controller.signal.aborted
@@ -296,7 +216,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
       window.clearTimeout(timeout);
       if (active.current === controller) {
         active.current = null; setBusy(false);
-        input.current?.focus({ preventScroll: true });
       }
     }
   }
@@ -317,8 +236,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     const controller = active.current;
     active.current = null;
     controller?.abort();
-    scrollToQuestion.current = null;
-    pendingQuestionScroll.current = false;
     setMessages([]);
     setDraft("");
     setError("");
@@ -328,7 +245,6 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
     const nextVariant = (suggestionVariant + 1) % suggestionKeys.length;
     setSuggestionVariant(nextVariant);
     try { window.sessionStorage.setItem(suggestionStorageKey, String((nextVariant + 1) % suggestionKeys.length)); } catch {}
-    input.current?.focus({ preventScroll: true });
   }
 
   async function submitAudio(file: File, session: number, originalDraft: string) {
@@ -464,34 +380,29 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
   }
 
   return (
-    <main className="chat-page" id="conteudo">
-      <div ref={conversationPane} className={`chat-conversation${!messages.length && !busy ? " chat-conversation-empty" : ""}`}>
-        {messages.length || busy ? <h1 className="sr-only">{copy("chat.welcome")}</h1> : null}
-        {!messages.length && !busy && (
-          <div className="chat-welcome">
-            <h1>{copy("chat.welcome")}</h1>
-            <div className="chat-suggestions">
-              {suggestions.map(({ label, prompt }) => (
-                <button key={label} type="button" disabled={recording || transcribing} onClick={() => { void send(label, prompt); }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div role="log" aria-label={copy("chat.log")} aria-live="polite" aria-relevant="additions">
-          {messages.map((message, index) => (
-            <motion.article key={index} ref={message.role === "user" && index === scrollToQuestion.current ? latestQuestion : null}
-              className={`chat-message chat-message-${message.role}`}
-              initial={reduced ? false : message.role === "user" ? { opacity: 0 } : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-              {message.visual?.kind === "business" && <OpenUIBusiness program={message.visual.program} />}
-              {message.visual?.kind === "places" && <OpenUIPlaces program={message.visual.program} locale={locale} />}
-              {!message.visual && (message.role === "assistant"
-                ? <ChatMarkdown content={message.content}
-                    onFollowUp={index === messages.length - 1 ? question => { void send(question); } : undefined}
-                    disabled={busy || recording || transcribing} />
-                : <p>{message.content}</p>)}
+    <>
+      <ChatShell
+        id="ask"
+        locale={locale}
+        welcome={copy("chat.welcome")}
+        logLabel={copy("chat.log")}
+        placeholder={copy("chat.placeholder")}
+        thinking={copy("chat.thinking")}
+        sendLabel={copy("chat.send")}
+        sendingLabel={copy("chat.sending")}
+        inputId="chat-question"
+        note={copy("chat.note")}
+        suggestions={suggestions}
+        messages={messages.map((message, index) => ({
+          role: message.role,
+          content: message.content,
+          body: message.visual?.kind === "business"
+            ? <OpenUIBusiness program={message.visual.program} />
+            : message.visual?.kind === "places"
+              ? <OpenUIPlaces program={message.visual.program} locale={locale} />
+              : undefined,
+          extra: message.role === "assistant" ? (
+            <>
               {message.example ? <p className="chat-example">{copy("chat.example")}</p> : null}
               {message.uncited ? <p className="chat-no-source">{copy("chat.noSource")}</p> : null}
               {message.citations?.map((citation) => (
@@ -500,64 +411,54 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
                   {citation.kind ? ` · ${citation.kind}` : ""}
                 </p>
               ))}
-              {message.role === "assistant" && (
-                <div className="chat-answer-actions">
-                  <button type="button" className="chat-pdf-button" onClick={() => { void downloadAnswer(index); }}
-                    disabled={savingPdf !== null} aria-label={copy("chat.savePdf")} title={copy("chat.savePdf")}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3" />
-                    </svg>
-                    <span>{savingPdf === index ? copy("chat.savingPdf") : "PDF"}</span>
-                  </button>
-                  {pdfError === index && <span role="alert" className="chat-pdf-error">{copy("chat.pdfError")}</span>}
-                </div>
-              )}
-            </motion.article>
-          ))}
-        </div>
-        {busy && <div role="status" className="chat-status chat-thinking">
-          <span className="thinking-dots" aria-hidden="true"><span /><span /><span /></span>
-          <span className="thinking-label">{copy("chat.thinking")}</span>
-        </div>}
-        {error && <p role="alert" className="chat-error">{error}</p>}
-        <div ref={scrollTail} aria-hidden="true" />
-      </div>
-      <div className="chat-composer-wrap">
-        <div className="chat-voice-launcher-wrap">
-          <button ref={voiceLauncher} type="button" className="chat-voice-launcher" disabled={busy || recording || transcribing}
-            onPointerEnter={preloadVoiceConversation} onFocus={preloadVoiceConversation} onPointerDown={preloadVoiceConversation}
-            onClick={() => setVoiceOpen(true)} aria-haspopup="dialog">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-              <path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4" />
-            </svg>
-            {copy("voice.launch")}
-          </button>
-        </div>
-        {recording && <p role="status" className="chat-voice-status">{copy("chat.voice.listening")}</p>}
-        {transcribing && <p role="status" className="chat-voice-status">{copy("chat.voice.transcribing")}</p>}
-        <form className="chat-composer" onSubmit={event => { event.preventDefault(); if (!recording && !transcribing) void send(); }}>
+              <div className="chat-answer-actions">
+                <button type="button" className="chat-pdf-button" onClick={() => { void downloadAnswer(index); }}
+                  disabled={savingPdf !== null} aria-label={copy("chat.savePdf")} title={copy("chat.savePdf")}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3" />
+                  </svg>
+                  <span>{savingPdf === index ? copy("chat.savingPdf") : "PDF"}</span>
+                </button>
+                {pdfError === index && <span role="alert" className="chat-pdf-error">{copy("chat.pdfError")}</span>}
+              </div>
+            </>
+          ) : undefined,
+        }))}
+        draft={draft}
+        busy={busy}
+        error={error}
+        inputLocked={recording || transcribing}
+        onDraft={setDraft}
+        onSend={(text, prompt) => { if (!recording && !transcribing) void send(text, prompt); }}
+        onFollowUp={(question) => { if (!recording && !transcribing) void send(question); }}
+        onClear={clearChat}
+        clearLabel={copy("chat.clear")}
+        clearVariant="icon"
+        aboveComposer={(
+          <>
+            <div className="chat-voice-launcher-wrap">
+              <button ref={voiceLauncher} type="button" className="chat-voice-launcher" disabled={busy || recording || transcribing}
+                onPointerEnter={preloadVoiceConversation} onFocus={preloadVoiceConversation} onPointerDown={preloadVoiceConversation}
+                onClick={() => setVoiceOpen(true)} aria-haspopup="dialog">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                  <path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4" />
+                </svg>
+                {copy("voice.launch")}
+              </button>
+            </div>
+            {recording && <p role="status" className="chat-voice-status">{copy("chat.voice.listening")}</p>}
+            {transcribing && <p role="status" className="chat-voice-status">{copy("chat.voice.transcribing")}</p>}
+          </>
+        )}
+        composerLeading={(
           <input ref={audioInput} hidden type="file" accept="audio/*" capture="user" tabIndex={-1}
             onChange={event => {
               const file = event.target.files?.[0];
               event.target.value = "";
               if (file) void submitAudio(file, ++voiceSession.current, draft.trim());
             }} />
-          <label className="sr-only" htmlFor="chat-question">{copy("chat.label")}</label>
-          <textarea id="chat-question" ref={input} value={draft} maxLength={2000} enterKeyHint="send"
-            placeholder={copy("chat.placeholder")} rows={1} readOnly={busy || recording || transcribing}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault(); if (!recording && !transcribing) void send();
-              }
-            }} />
-          <button type="button" className="chat-clear" onClick={clearChat}
-            disabled={!messages.length && !draft && !busy && !error && !recording && !transcribing}
-            aria-label={copy("chat.clear")} title={copy("chat.clear")}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6" />
-            </svg>
-          </button>
+        )}
+        composerExtras={(
           <button type="button" className={`chat-voice${recording ? " chat-voice-active" : ""}`}
             onClick={() => { void toggleVoice(); }} disabled={busy || transcribing}
             aria-label={copy(recording ? "chat.voice.stop" : canRecord ? "chat.voice.start" : "chat.voice.upload")}
@@ -568,21 +469,13 @@ export function Chat({ locale = "pt" }: { locale?: Locale }) {
               <path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" />
             </svg>
           </button>
-          <button type="submit" className="chat-send" disabled={busy || recording || transcribing || !draft.trim()} aria-label={busy ? copy("chat.sending") : copy("chat.send")}>
-            {busy ? <span className="chat-spinner" aria-hidden="true" /> : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 19V5m-6 6 6-6 6 6" />
-              </svg>
-            )}
-          </button>
-        </form>
-        {voiceError && <p role="alert" className="chat-voice-error">{voiceError}</p>}
-        <p className="chat-note">{copy("chat.note")}</p>
-      </div>
+        )}
+        belowComposer={voiceError ? <p role="alert" className="chat-voice-error">{voiceError}</p> : undefined}
+      />
       {voiceOpen && <VoiceDialog locale={locale} onClose={() => {
         setVoiceOpen(false);
         requestAnimationFrame(() => voiceLauncher.current?.focus());
       }} />}
-    </main>
+    </>
   );
 }

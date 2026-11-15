@@ -14,7 +14,7 @@ export default async function PlanPage() {
   return (
     <>
       <SkipLink href="#conteudo">{t("skip.content", undefined, locale)}</SkipLink>
-      <div className="plan-screen">
+      <div className="chat-screen plan-screen">
         <Header active="chat" />
         <Planner locale={locale} />
       </div>

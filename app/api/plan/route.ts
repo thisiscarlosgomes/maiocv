@@ -5,6 +5,7 @@ import { maioClock } from "../../../lib/agora";
 import { runPlanAgent } from "../../../lib/plan-agent";
 import { planEnabled } from "../../../lib/plan-flag";
 import { isProductionEnv, readTask, signTask, taskSecret } from "../../../lib/awareness/sign";
+import { emptyTask } from "../../../lib/awareness/task";
 import { parseTripPlan } from "../../../lib/trip";
 
 export const runtime = "nodejs";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const messages = body.data.messages as ModelMessage[];
   const current = body.data.plan ? parseTripPlan(body.data.plan) : null;
   const locale = body.data.locale ?? current?.locale ?? "en";
-  const task = body.data.task ? readTask(body.data.task, process.env, locale) : null;
+  const task = body.data.task ? readTask(body.data.task, process.env, locale) : current ? null : emptyTask(locale);
   try {
     let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
     // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.

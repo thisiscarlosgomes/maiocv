@@ -1281,6 +1281,7 @@ body:has(.chat-screen) { overflow: hidden; }
 .chat-welcome h1 { font-size: var(--page-title-size); line-height: 1.12; margin-bottom: clamp(28px, 4vw, 44px); }
 .chat-welcome > p { margin: 24px 0 32px; color: var(--muted); }
 .chat-suggestions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.chat-suggestions-dock { padding: 0 0 8px; }
 .chat-suggestions button { border: 1px solid var(--maio-border-data); border-radius: 20px; padding: 14px 18px; background: var(--paper); font: inherit; font-size: 15px; cursor: pointer; }
 .chat-message { margin: 0 0 28px; max-width: 92%; }
 .chat-message-user { margin-left: auto; background: var(--maio-surface-data); border-radius: 22px; padding: 18px 22px; width: fit-content; }
