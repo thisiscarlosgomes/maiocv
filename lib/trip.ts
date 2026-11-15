@@ -77,6 +77,12 @@ export const experience = (id: string) => experienceById.get(id);
 export const food = (id: string) => foodById.get(id);
 export const place = (id: string) => placeById.get(id);
 
+/** French listings are not in the dataset. Portuguese is the fallback, then English. */
+export function localizedPlaceName(names: { pt: string; en: string }, locale: "pt" | "en" | "fr"): string {
+  if (locale === "en") return names.en;
+  return names.pt || names.en;
+}
+
 /** Ids in a plan that do not exist in the fixture. A valid plan returns []. */
 export function unknownRefs(plan: TripPlan): string[] {
   const missing: string[] = [];

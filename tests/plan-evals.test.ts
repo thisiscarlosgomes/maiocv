@@ -95,6 +95,7 @@ test("out-of-data request: says so, invents nothing", async () => {
   assert.ok(!items(plan!).some((i) => /dolphin|night/i.test(i.refId)));
   if (!live) {
     assert.deepEqual(toolEvents.find((e) => e.name === "propose_itinerary")?.dropped, ["dolphin-cruise"]);
-    assert.match(reply, /don't list/);
+    assert.ok(reply.split("\n").filter((line) => line.trim()).length <= 2, reply);
+    assert.doesNotMatch(reply, /dolphin|nightclub|08:/i);
   }
 });

@@ -56,7 +56,7 @@ async function expectClean(page: Page, opts: { long?: boolean; short?: boolean }
   const chips = page.locator("[data-testid='suggestions'] button");
   expect(await chips.count()).toBeLessThanOrEqual(3);
   const leave = await chips.allInnerTexts();
-  expect(leave.join(" ")).not.toMatch(/When do you leave|Quando partem|Quand partez/i);
+  expect(leave.join(" ")).not.toMatch(/When do you leave|Quando partem|Quand partez|When do you arrive|Who is coming|Will you have a car|Quem vem|Quand arrivez/i);
   expect(await overflow(page)).toBeLessThanOrEqual(1);
   return text;
 }

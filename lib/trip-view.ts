@@ -1,4 +1,4 @@
-import { PLACES, distanceKm, experience, food, place, type PlanDay, type PlanItem, type SeaDay } from "./trip.ts";
+import { PLACES, distanceKm, experience, food, localizedPlaceName, place, type PlanDay, type PlanItem, type SeaDay } from "./trip.ts";
 import { inferSlot, itemPoint } from "./full-day.ts";
 import type { Locale } from "./locale.ts";
 import type { PlanStrings } from "./trip-strings.ts";
@@ -99,23 +99,26 @@ export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardVi
   if (item.kind === "experience") {
     const e = experience(item.refId); if (!e) return null;
     const p = place(e.placeId)!;
-    return { kind: item.kind, title: e.title, meta: withNote(`${s.tags.activity} · ${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, item), description: locale === "pt" ? e.description.pt : e.description.en,
+    return { kind: item.kind, title: e.title, meta: withNote(`${s.tags.activity} · ${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, item), description: locale === "en" ? e.description.en : e.description.pt,
       location: e.location, image: imageUrl(e.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: e.seaDependent, operator: e.operator ?? null };
   }
   if (item.kind === "food") {
     const f = food(item.refId); if (!f) return null;
     const p = place(f.placeId)!;
-    return { kind: item.kind, title: f.title, meta: withNote(`${rowTag(item, s)} · ${f.location}`, item), description: locale === "pt" ? f.description.pt : f.description.en, location: f.location,
+    return { kind: item.kind, title: f.title, meta: withNote(`${rowTag(item, s)} · ${f.location}`, item), description: locale === "en" ? f.description.en : f.description.pt, location: f.location,
       image: imageUrl(f.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "place") {
     const p = place(item.refId); if (!p) return null;
-    return { kind: item.kind, title: locale === "pt" ? p.name.pt : p.name.en, meta: withNote(`${inferSlot(item) === "sunset" ? s.tags.sunset : p.category === "beach" ? s.beach : s.place} · ${p.location}`, item), description: "", location: p.location,
+    return { kind: item.kind, title: localizedPlaceName(p.name, locale), meta: withNote(`${inferSlot(item) === "sunset" ? s.tags.sunset : p.category === "beach" ? s.beach : s.place} · ${p.location}`, item), description: "", location: p.location,
       image: imageUrl(p.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "free") {
     const title = (s.free as Record<string, string>)[item.refId] ?? s.free["free-time"];
-    return { kind: item.kind, title, meta: withNote(rowTag(item, s), item), description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
+    const departing = item.slot === "departure" || item.refId.startsWith("depart-");
+    const quietNote = departing && item.note && /not set|not published|unpublished|por definir|por publicar|non fixée|pas encore publiée/i.test(item.note);
+    const shown = quietNote ? { ...item, note: undefined } : item;
+    return { kind: item.kind, title, meta: withNote(rowTag(shown, s), shown), description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
   }
   return { kind: "transport", title: item.refId === "ferry" ? s.ferry : s.flight, meta: item.note ?? "", description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
 }
