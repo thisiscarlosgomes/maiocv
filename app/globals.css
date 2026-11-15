@@ -1734,22 +1734,11 @@ body:has(.chat-screen) { overflow: hidden; }
   .plan-cover { aspect-ratio: 5 / 2; }
   .plan-trip-head { flex-direction: row; align-items: flex-end; justify-content: space-between; }
 }
-/* Map inside "View day on map" and the PDF. */
-.plan-map { margin: 0; border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--paper); }
-.plan-map svg { width: 100%; aspect-ratio: 1.8; display: block; }
-.plan-map-sea { fill: var(--maio-surface-data); }
-.plan-map-island { fill: var(--maio-line); stroke: var(--maio-border-data); stroke-linejoin: round; }
-.plan-map-route { fill: none; stroke: var(--ink); }
-.plan-map-pin { fill: var(--ink); }
-.plan-map text { fill: var(--paper); font-size: 11px; font-weight: 500; }
-.plan-map figcaption { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; color: var(--muted); flex-wrap: wrap; border-top: 1px solid var(--line); }
-.plan-link { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; min-height: 44px; display: inline-flex; align-items: center; }
 /* Detail: full-screen sheet on mobile, centred 600px modal on desktop. */
 .plan-sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(17 17 17 / .35); display: flex; align-items: stretch; }
 .plan-sheet { position: relative; width: 100%; height: 100dvh; overflow-y: auto; background: var(--paper); }
 .plan-sheet-close { position: absolute; top: 16px; left: 16px; z-index: 1; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--paper); color: var(--ink); font-size: 22px; cursor: pointer; }
 .plan-sheet-hero { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--maio-surface-data); }
-.plan-sheet-map .plan-sheet-body { padding-top: 76px; }
 .plan-sheet-body { padding: 20px var(--gutter) 32px; display: flex; flex-direction: column; gap: 12px; }
 .plan-sheet-body h2 { margin: 0; font-size: 32px; font-weight: 500; line-height: 1.1; letter-spacing: var(--tracking-display); }
 .plan-sheet-desc { margin: 0; font-size: 17px; line-height: 1.45; color: var(--maio-text-data); }
@@ -1801,7 +1790,6 @@ body:has(.chat-screen) { overflow: hidden; }
   .plan-print .plan-print-time { color: #111; font-size: 9.5pt; }
   .plan-print-unmet { font-size: 9.5pt; }
   .plan-print-foot { margin-top: 10pt; color: #56565b; font-size: 8.5pt; break-inside: avoid; }
-  .plan-print .plan-map { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
