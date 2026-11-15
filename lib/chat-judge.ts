@@ -149,6 +149,77 @@ export function judgeErrorType(error: unknown): string {
   return "model_error";
 }
 
+/** Provider status when the SDK exposes one. 429 stays 429, not the turn text. */
+export function providerErrorCode(error: unknown): string {
+  if (error && typeof error === "object") {
+    const status = (error as { statusCode?: unknown; status?: unknown }).statusCode ?? (error as { status?: unknown }).status;
+    if (typeof status === "number" && status >= 100 && status <= 599) return String(status);
+  }
+  const type = judgeErrorType(error);
+  return type === "rate_limit" ? "429" : type;
+}
+
+export const JUDGE_CONCURRENCY = 2;
+
+let judgeInFlight = 0;
+const judgeWaiters: (() => void)[] = [];
+
+export async function withJudgeSlot<T>(run: () => Promise<T>): Promise<T> {
+  if (judgeInFlight >= JUDGE_CONCURRENCY) {
+    await new Promise<void>((resolve) => { judgeWaiters.push(resolve); });
+  }
+  judgeInFlight += 1;
+  try {
+    return await run();
+  } finally {
+    judgeInFlight -= 1;
+    judgeWaiters.shift()?.();
+  }
+}
+
+export function resetJudgeSlots() {
+  judgeInFlight = 0;
+  judgeWaiters.length = 0;
+}
+
+/**
+ * Try the preferred model. A 429 waits a short jittered beat and tries the cheap model once.
+ * Other errors try the fallback immediately. One retry total.
+ */
+export async function attemptJudgeModels(
+  models: readonly string[],
+  call: (modelId: string) => Promise<JudgeVerdict>,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }),
+  random: () => number = Math.random,
+): Promise<JudgeVerdict> {
+  const preferred = models[0] ?? JUDGE_MODEL;
+  const fallback = models.find((model) => model !== preferred) ?? JUDGE_MODEL_FALLBACK;
+  try {
+    return await call(preferred);
+  } catch (error) {
+    const code = providerErrorCode(error);
+    console.warn(`judge model failed: ${preferred} ${code}`);
+    if (code === "429" || code === "rate_limit") {
+      await wait(200 + Math.floor(random() * 400));
+      try {
+        return await call(fallback);
+      } catch (again) {
+        console.warn(`judge retry failed: ${providerErrorCode(again)}`);
+        throw again;
+      }
+    }
+    if (fallback !== preferred) {
+      try {
+        return await call(fallback);
+      } catch (again) {
+        console.warn(`judge model failed: ${fallback} ${providerErrorCode(again)}`);
+        throw again;
+      }
+    }
+    throw error;
+  }
+}
+
 type JudgeHealth = { day: string; calls: number; failures: number; flags: number; lastError: string | null };
 const judgeHealth: JudgeHealth = { day: "", calls: 0, failures: 0, flags: 0, lastError: null };
 
@@ -205,34 +276,29 @@ export function resetJudgeHealth() {
   judgeHealth.lastError = null;
 }
 
+async function callJudgeModel(modelId: string, prompt: string): Promise<JudgeVerdict> {
+  const result = await generateText({
+    model: gateway(modelId),
+    output: Output.object({
+      schema: JudgeSchema,
+      name: "maio_reply_grade",
+      description: "Whether this Maio reply failed, why, and how serious it is.",
+    }),
+    prompt,
+    temperature: 0,
+    maxRetries: 0,
+    maxOutputTokens: 200,
+    abortSignal: AbortSignal.timeout(8_000),
+  });
+  const verdict = parseJudgeVerdict(result.output);
+  if (!verdict) throw new Error("judge output");
+  return verdict;
+}
+
 export async function gatewayJudge(prompt: string, env: Record<string, string | undefined> = process.env): Promise<JudgeVerdict> {
   const preferred = env.MAIO_JUDGE_MODEL?.trim() || JUDGE_MODEL;
   const models = preferred === JUDGE_MODEL_FALLBACK ? [preferred] : [preferred, JUDGE_MODEL_FALLBACK];
-  let last: unknown = new Error("judge output");
-  for (const modelId of models) {
-    try {
-      const result = await generateText({
-        model: gateway(modelId),
-        output: Output.object({
-          schema: JudgeSchema,
-          name: "maio_reply_grade",
-          description: "Whether this Maio reply failed, why, and how serious it is.",
-        }),
-        prompt,
-        temperature: 0,
-        maxRetries: 0,
-        maxOutputTokens: 200,
-        abortSignal: AbortSignal.timeout(8_000),
-      });
-      const verdict = parseJudgeVerdict(result.output);
-      if (!verdict) throw new Error("judge output");
-      return verdict;
-    } catch (error) {
-      last = error;
-      console.warn(`judge model failed: ${modelId} ${judgeErrorType(error)}`);
-    }
-  }
-  throw last;
+  return withJudgeSlot(() => attemptJudgeModels(models, (modelId) => callJudgeModel(modelId, prompt)));
 }
 
 const mongoBudget: JudgeBudget = { tryConsume: (day, cap) => consumeJudgeBudget(day, cap) };
@@ -276,7 +342,7 @@ export async function reviewWithJudge(turn: TurnForFlags, deps: ReviewDeps = {})
     noteJudgeFlag(deps.now);
     recordFlag(buildFlag(turn, { source: "judge", reasons, severity: verdict.severity, now: deps.now }), deps.store);
   } catch (error) {
-    const type = judgeErrorType(error);
+    const type = providerErrorCode(error);
     noteJudgeFailure(type, deps.now);
     console.warn(`judge failed: ${type}`);
   }

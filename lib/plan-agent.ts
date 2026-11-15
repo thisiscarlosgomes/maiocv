@@ -44,7 +44,7 @@ export type PlanReplyTurn = {
   toolFacts: string;
   appliedEdit: string | null;
 };
-export type PlanDeps = { model: LanguageModel; fetchImpl: typeof fetch; now?: Date; onReply?: (turn: PlanReplyTurn) => void };
+export type PlanDeps = { model: LanguageModel; sideModel?: LanguageModel; fetchImpl: typeof fetch; now?: Date; onReply?: (turn: PlanReplyTurn) => void };
 
 function observeFetch(fetchImpl: typeof fetch, sink: string[]): typeof fetch {
   return async (input, init) => {
@@ -298,6 +298,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
   let appliedEdit: string | null = null;
+  const t0 = Date.now();
+  let modelMs = 0;
+  let fetchMs = 0;
 
   const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => {
     const changed = Boolean(plan && !samePlanShape(plan, current));
@@ -318,6 +321,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     }
     const returned = changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan;
     const out = result(next, text, returned, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built && changed, work ?? turnWork(lastUser, seeded, today));
+    console.info(`plan.timing intent=${classification.intent} built=${built && changed ? 1 : 0} modelMs=${modelMs} fetchMs=${fetchMs} totalMs=${Date.now() - t0}`);
     safeReplyHook(deps.onReply, {
       userMessage: lastUser,
       previousTurns: history.slice(0, -1).slice(-4),
@@ -579,14 +583,34 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   let builtRequest: TripRequest | null = null;
   const toolEvents: ToolEvent[] = [];
 
+  async function loadPieces(start: string, days: number) {
+    const tFetch = Date.now();
+    const [table, sea] = await Promise.all([
+      loadTimetable(deps.fetchImpl, now),
+      forecast(start, days),
+    ]);
+    fetchMs += Date.now() - tFetch;
+    return { table, sea };
+  }
+
+  async function seaFor(start: string, days: number, sea: DailySea[]): Promise<DailySea[]> {
+    if (sea.length === days && sea[0]?.date === start) return sea;
+    const t = Date.now();
+    const rows = await forecast(start, days);
+    fetchMs += Date.now() - t;
+    return rows;
+  }
+
   async function rebuildPlan(nextTask: Task): Promise<{ plan: TripPlan; task: Task; events: ToolEvent[] } | null> {
     try {
       const base = requestFromTask(nextTask, today);
-      const table = await loadTimetable(deps.fetchImpl, now);
+      base.include = includeFromConstraints(nextTask, lastUser);
+      const { table, sea } = await loadPieces(String(base.startDate), Number(base.days));
       const withTravel = attachPublishedTravel(base, table);
+      const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
       const built = annotateMissingTravel(buildPlan({
         request: withTravel as z.input<typeof TripRequestSchema>,
-        forecast: await forecast(String(withTravel.startDate), Number(withTravel.days)),
+        forecast: rows,
         sailings: table.sailings,
         forecastSource: forecastSourceName,
       }), table);
@@ -594,7 +618,11 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       return {
         plan: built,
         task: syncTask(nextTask, request, built),
-        events: [{ name: "get_transport", ok: table.ok }, { name: "propose_itinerary", ok: true, arguments: withTravel }],
+        events: [
+          { name: "get_transport", ok: table.ok },
+          { name: "get_sea_forecast", ok: rows.length > 0 },
+          { name: "propose_itinerary", ok: true, arguments: withTravel },
+        ],
       };
     } catch {
       return null;
@@ -621,14 +649,23 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         ...(intent.kids !== undefined ? { kids: intent.kids } : {}),
         ...(intent.youngestAge !== undefined ? { youngestAge: intent.youngestAge } : {}),
       };
-      const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { party }) });
+      const constraints = mergeConstraints(task.constraints, { party });
+      if (party.kids === 0 && constraints.party) delete constraints.party.youngestAge;
+      const nextTask = refreshTask({ ...task, constraints });
       const prior = { adults: open.party.adults, kids: open.party.kids, ...(open.party.youngestAge !== undefined ? { youngestAge: open.party.youngestAge } : {}) };
       const baselineTask = refreshTask({ ...nextTask, constraints: { ...nextTask.constraints, party: prior } });
       const [baseline, rebuilt] = await Promise.all([rebuildPlan(baselineTask), rebuildPlan(nextTask)]);
       if (!rebuilt) return { reply: say(locale, "I couldn't update the party.", "Não consegui atualizar o grupo.", "Je n'ai pas pu mettre le groupe à jour."), plan: open, events: [], task: nextTask, work: "moment" };
       const baby = /\b(?:baby|bebe)\b/.test(spoken);
       const stopsChanged = Boolean(baseline && itinerarySig(baseline.plan) !== itinerarySig(rebuilt.plan));
-      const reply = partyEditReply(locale, rebuilt.plan.party, stopsChanged, baby);
+      const sameParty = rebuilt.plan.party.adults === open.party.adults
+        && rebuilt.plan.party.kids === open.party.kids
+        && rebuilt.plan.party.youngestAge === open.party.youngestAge;
+      const reply = stopsChanged
+        ? partyEditReply(locale, rebuilt.plan.party, true, baby)
+        : sameParty
+          ? say(locale, "Nothing on the plan changes.", "Nada muda no plano.", "Rien ne change sur le plan.")
+          : partyEditReply(locale, rebuilt.plan.party, false, baby);
       return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
     }
     if (intent.kind === "add_activity" && /boat|barco|bateau/i.test(`${intent.activity ?? ""} ${lastUser}`)) {
@@ -784,6 +821,12 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   const offerPlan = (classification.planShaping || Boolean(lengthEdit)) && task.scope.mode !== "research" && classification.intent !== "side_question";
+  const exotic = /\b(?:dolphin|nightlife|nightclub|golfinho|dauphin|boite|diving|mergulho|plongee)\b/.test(spoken);
+  const freshPlan = !current && offerPlan && typeof task.constraints.car === "boolean" && (task.constraints.dates?.days ?? 0) > 0 && !exotic;
+  if (freshPlan) {
+    const rebuilt = await rebuildPlan(task);
+    if (rebuilt) return finish("", rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, true, "forecast");
+  }
 
   const tools = {
     search_experiences: tool({
@@ -792,7 +835,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       execute: async ({ kind, query }) => {
         const q = query?.toLowerCase();
         const match = (text: string) => !q || q.split(/\s+/).some((word) => word.length > 2 && text.toLowerCase().includes(word));
+        const tFetch = Date.now();
         const catalog = await loadBusinesses(deps.fetchImpl);
+        fetchMs += Date.now() - tFetch;
         const phoneFor = (title: string) => catalog.source === "api" ? searchBusinesses(catalog.records, title).find((item) => item.phone)?.phone : undefined;
         const exps = kind === "food" ? [] : EXPERIENCES.filter((item) => (kind === "any" || item.kind === kind) && match(`${item.title} ${item.description.en} ${item.description.pt}`))
           .map((item) => ({ id: item.id, title: item.title, kind: item.kind, location: item.location, seaDependent: item.seaDependent, boat: item.boat, minAge: item.example.minAge, slots: item.example.slots, durationMin: item.example.durationMin, ...(phoneFor(item.title) ? { phone: phoneFor(item.title) } : {}) }));
@@ -805,7 +850,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       description: "Daily wave height and wind for Maio (Open-Meteo), up to 7 days.",
       inputSchema: z.object({ startDate: z.string(), days: z.number().int().min(1).max(7) }),
       execute: async ({ startDate, days }) => {
+        const tFetch = Date.now();
         const rows = await forecast(startDate, days);
+        fetchMs += Date.now() - tFetch;
         toolEvents.push({ name: "get_sea_forecast", ok: rows.length > 0, arguments: { startDate, days } });
         return clipToolBody(rows.map((row) => ({ ...row, status: seaStatus(row) })));
       },
@@ -814,7 +861,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       description: "Published ferry sailings and the published flight timetable for a date. Not live status. No current rows does not mean no service.",
       inputSchema: z.object({ date: z.string() }),
       execute: async ({ date }) => {
+        const tFetch = Date.now();
         const [boats, flight] = await Promise.all([loadBoatSchedule(deps.fetchImpl, now), loadFlightSchedule(deps.fetchImpl, now)]);
+        fetchMs += Date.now() - tFetch;
         const rows = (boats.data ?? []).filter((row) => row.date === date);
         toolEvents.push({ name: "get_transport", ok: true, arguments: { date } });
         task = rememberFact(task, { name: "get_transport", retrievedAt: boats.retrievedAt, value: rows.length ? `${rows.length} sailing(s)` : boats.status });
@@ -833,9 +882,12 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
         const dropped = include.filter((id) => !experience(id));
         const clean: Record<string, unknown> = { ...merged, include: include.filter((id) => experience(id)) };
-        const table = await loadTimetable(deps.fetchImpl, now);
+        const askedStart = String(clean.startDate ?? task.constraints.dates?.start ?? addDays(today, 1));
+        const askedDays = Number(clean.days ?? task.constraints.dates?.days ?? 3);
+        const { table, sea } = await loadPieces(askedStart, askedDays);
         const withTravel = attachPublishedTravel(clean, table);
-        const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: await forecast(String(withTravel.startDate), Number(withTravel.days)), sailings: table.sailings, forecastSource: forecastSourceName }), table);
+        const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
+        const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: rows, sailings: table.sailings, forecastSource: forecastSourceName }), table);
         builtRequest = TripRequestSchema.parse(withTravel);
         plan = built;
         toolEvents.push({ name: "get_transport", ok: table.ok });
@@ -847,21 +899,25 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   const { propose_itinerary, ...readOnly } = tools;
   const activeTools = offerPlan ? tools : readOnly;
+  const tModel = Date.now();
   const generated = await generateText({
-    model: deps.model,
+    model: offerPlan ? deps.model : (deps.sideModel ?? deps.model),
     instructions: planInstructions(today, task, windowed.recall, offerPlan),
     messages: windowed.messages,
     tools: activeTools,
-    stopWhen: stepCountIs(6),
+    stopWhen: stepCountIs(offerPlan ? 6 : 3),
     temperature: 0,
+    ...(offerPlan ? {} : { abortSignal: AbortSignal.timeout(4_000) }),
   } as Parameters<typeof generateText>[0]);
+  modelMs += Date.now() - tModel;
 
   if (offerPlan && !builtRequest) {
     const fallback = composeRequest(null);
     try {
-      const table = await loadTimetable(deps.fetchImpl, now);
+      const { table, sea } = await loadPieces(String(fallback.startDate), Number(fallback.days));
       const withTravel = attachPublishedTravel(fallback, table);
-      const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: await forecast(String(withTravel.startDate), Number(withTravel.days)), sailings: table.sailings, forecastSource: forecastSourceName }), table);
+      const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
+      const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: rows, sailings: table.sailings, forecastSource: forecastSourceName }), table);
       builtRequest = TripRequestSchema.parse(withTravel);
       plan = built;
       toolEvents.push({ name: "get_transport", ok: table.ok });

@@ -160,7 +160,7 @@ function specificDay(n: string, plan: TripPlan, today: string): number | null {
 }
 
 function mentionsParty(n: string): boolean {
-  return /\b(?:adults?|adultos?|adultes?|kids?|children|child|criancas?|enfants?|filho|filha|baby|bebe|toddler|family of|familia de|famille de|year-old|years? old|anos|ans)\b/.test(n);
+  return /\b(?:adults?|adultos?|adultes?|kids?|children|child|criancas?|enfants?|filho|filha|baby|bebe|toddler|family of|familia de|famille de|year-old|years? old|anos|ans|couple|casal|no kids|sem criancas|sem filhos|sans enfants)\b/.test(n);
 }
 
 /**
@@ -252,7 +252,7 @@ export function shiftFromIntent(intent: EditIntent): DateShift | "ask" | null {
 
 export function partyEditReply(locale: TaskLocale, party: { adults: number; kids: number; youngestAge?: number }, stopsChanged: boolean, baby = false): string {
   const label = partyLabel(locale, party, baby);
-  if (!stopsChanged) return say(locale, `Noted: ${label}.`, `Anotado: ${label}.`, `Noté : ${label}.`);
+  if (!stopsChanged) return say(locale, `Noted: ${label}. The days stay as they are.`, `Anotado: ${label}. Os dias ficam como estão.`, `Noté : ${label}. Les jours restent comme ils sont.`);
   return say(locale,
     `${label}. I adjusted the days so they stay suitable.`,
     `${label}. Ajustei os dias para ficarem adequados.`,
@@ -290,6 +290,7 @@ function partyLabel(locale: TaskLocale, party: { adults: number; kids: number; y
       `${adults} adultos e ${kids} crianças${age === "" ? "" : `, a mais nova com ${age}`}`,
       `${adults} adultes et ${kids} enfants${age === "" ? "" : `, le plus jeune a ${age} ans`}`);
   }
+  if (party.kids === 0) return say(locale, `${adults} adults, no kids`, `${adults} adultos, sem crianças`, `${adults} adultes, sans enfants`);
   return say(locale, `${adults} adults`, `${adults} adultos`, `${adults} adultes`);
 }
 

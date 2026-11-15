@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { judgeCap, judgeEnabled, judgeErrorType, judgeHealthSnapshot, judgePrompt, judgeRate, memoryJudgeBudget, resetJudgeHealth, reviewWithJudge, scheduleTurnReview, type JudgeVerdict } from "../lib/chat-judge.ts";
+import { JUDGE_CONCURRENCY, attemptJudgeModels, judgeCap, judgeEnabled, judgeErrorType, judgeHealthSnapshot, judgePrompt, judgeRate, memoryJudgeBudget, providerErrorCode, resetJudgeHealth, resetJudgeSlots, reviewWithJudge, scheduleTurnReview, withJudgeSlot, type JudgeVerdict } from "../lib/chat-judge.ts";
 import { handleFlagHealth } from "../lib/chat-flags-http.ts";
 import { memoryFlagStore } from "../lib/chat-flags-store.ts";
 import { handleMaioChat } from "../lib/maio-chat-proxy.ts";
@@ -191,4 +191,50 @@ test("a judge error is logged as a type, without the turn, and counted on the he
     process.env.FLAGS_ADMIN_KEY = previous;
     resetJudgeHealth();
   }
+});
+
+test("a 429 retries the cheap model once after jitter and health stores 429", async () => {
+  const calls: string[] = [];
+  const waits: number[] = [];
+  const limited = Object.assign(new Error("Too many requests"), { statusCode: 429 });
+  const verdict = await attemptJudgeModels(
+    ["openai/gpt-5-nano", "openai/gpt-4.1-nano"],
+    async (modelId) => {
+      calls.push(modelId);
+      if (modelId === "openai/gpt-5-nano") throw limited;
+      return { ok: true, reasons: [], severity: "low", confidence: "low" };
+    },
+    async (ms) => { waits.push(ms); },
+    () => 0.25,
+  );
+  assert.deepEqual(calls, ["openai/gpt-5-nano", "openai/gpt-4.1-nano"]);
+  assert.deepEqual(waits, [300]);
+  assert.equal(verdict.ok, true);
+  assert.equal(providerErrorCode(limited), "429");
+  assert.equal(providerErrorCode(new Error("rate limit from the provider")), "429");
+
+  resetJudgeHealth();
+  await reviewWithJudge(clean(), {
+    env,
+    store: memoryFlagStore(),
+    budget: memoryJudgeBudget(),
+    judge: async () => { throw limited; },
+  });
+  assert.equal(judgeHealthSnapshot().lastError, "429");
+  assert.equal(JSON.stringify(judgeHealthSnapshot()).includes("Too many requests"), false);
+  resetJudgeHealth();
+});
+
+test("judge calls stay within a small concurrency cap", async () => {
+  resetJudgeSlots();
+  let active = 0;
+  let max = 0;
+  await Promise.all(Array.from({ length: 4 }, () => withJudgeSlot(async () => {
+    active += 1;
+    max = Math.max(max, active);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    active -= 1;
+  })));
+  assert.ok(max <= JUDGE_CONCURRENCY, `saw ${max} in flight`);
+  assert.ok(max >= 1);
 });

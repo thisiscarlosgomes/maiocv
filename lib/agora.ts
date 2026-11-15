@@ -238,8 +238,22 @@ function stringList(value: unknown): string[] {
 
 export type DailySea = { date: string; waveHeightM: number | null; windKmh: number | null; tempMaxC: number | null; sunset?: string | null };
 
-/** Daily marine and wind forecast for trip planning (Open-Meteo, up to 7 days). */
+const FORECAST_TTL_MS = 10 * 60 * 1000;
+const forecastCache = new WeakMap<object, Map<string, { at: number; rows: DailySea[] }>>();
+
+/** Daily marine and wind forecast for trip planning (Open-Meteo, up to 7 days). Cached 10 minutes per fetch. */
 export async function loadDailyForecast(fetchImpl: typeof fetch, startDate: string, days: number): Promise<DailySea[]> {
+  const key = `${startDate}:${days}`;
+  const bucket = forecastCache.get(fetchImpl) ?? new Map<string, { at: number; rows: DailySea[] }>();
+  if (!forecastCache.has(fetchImpl)) forecastCache.set(fetchImpl, bucket);
+  const hit = bucket.get(key);
+  if (hit && Date.now() - hit.at < FORECAST_TTL_MS && hit.rows.length) return hit.rows;
+  const rows = await fetchDailyForecast(fetchImpl, startDate, days);
+  if (rows.length) bucket.set(key, { at: Date.now(), rows });
+  return rows;
+}
+
+async function fetchDailyForecast(fetchImpl: typeof fetch, startDate: string, days: number): Promise<DailySea[]> {
   const end = new Date(`${startDate}T12:00:00Z`);
   end.setUTCDate(end.getUTCDate() + Math.max(0, days - 1));
   const range = `start_date=${startDate}&end_date=${end.toISOString().slice(0, 10)}&timezone=Atlantic%2FCape_Verde`;
