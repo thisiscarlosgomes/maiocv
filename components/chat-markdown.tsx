@@ -25,7 +25,14 @@ export function ChatMarkdown({ content, onFollowUp, disabled = false }: {
     <div className="chat-markdown">
       <ReactMarkdown
         remarkPlugins={onFollowUp ? interactivePlugins : plugins}
-        disallowedElements={["img"]}
+        disallowedElements={["img", "script", "style", "iframe", "object", "embed", "form"]}
+        urlTransform={(url) => {
+          const value = url.trim();
+          if (/^(https?:|mailto:|tel:)/i.test(value)) return value;
+          if (value.startsWith("/") && !value.startsWith("//")) return value;
+          if (value.startsWith("#")) return value;
+          return "";
+        }}
         components={{
           li: ({ node, children }) => {
             const question = node?.properties["data-follow-up"];

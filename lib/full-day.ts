@@ -44,7 +44,7 @@ export function itemPoint(i: PlanItem): Pt | null {
   return ref ? { lat: ref.lat, lon: ref.lon } : null;
 }
 
-export type Pools = { hasCar: boolean; locale: Locale; drinks: boolean };
+export type Pools = { hasCar: boolean; locale: Locale; drinks: boolean; pace?: "slow" };
 
 /** Trip-wide state: what has been used, so later days prefer new places and each day allows one repeat. */
 export class Picker {
@@ -93,8 +93,9 @@ export function buildDay(args: {
   };
   const free = (slot: Slot, refId: string, start: number, durationMin: number, note?: string) => add(slot, { kind: "free", refId, start: toTime(start), durationMin, ...(note ? { note } : {}) });
   const foodPt = (f: { placeId: string }) => place(f.placeId)!;
+  const slow = pools.pace === "slow";
   const meal = (slot: Slot, start: number, dur: number, fallback: string) => {
-    const r = picker.pick(picker.restaurants(), foodPt, from, day, "meal");
+    const r = picker.pick(picker.restaurants(), foodPt, from, day, "meal", slow);
     if (r) add(slot, { kind: "food", refId: r.id, start: toTime(start), durationMin: dur, ...(r.note ? { note: r.note } : {}) });
     else free(slot, fallback, start, dur);
   };
@@ -144,9 +145,9 @@ export function buildDay(args: {
 
   // Full day. The trip's single tour goes at 16:00 when its slots allow, else in the morning instead of the beach.
   const tour = args.tour ?? null;
-  const pm = tour?.example.slots.find((s) => toMin(s) >= toMin("14:30") && toMin(s) <= toMin("16:30") && toMin(s) + tour.example.durationMin <= sunsetStart + 15);
-  const am = !pm ? tour?.example.slots.find((s) => toMin(s) >= toMin("07:00") && toMin(s) <= toMin("10:00")) : undefined;
-  const breakfastAt = am ? Math.min(toMin(T.breakfast), Math.max(toMin("06:30"), toMin(am) - 50)) : toMin(T.breakfast);
+  const pm = tour?.example.slots.find((s) => toMin(s) >= toMin(slow ? "13:00" : "14:30") && toMin(s) <= toMin("16:30") && toMin(s) + tour.example.durationMin <= sunsetStart + 15);
+  const am = !pm ? tour?.example.slots.find((s) => toMin(s) >= toMin(slow ? "10:30" : "07:00") && toMin(s) <= toMin("10:00")) : undefined;
+  const breakfastAt = !slow && am ? Math.min(toMin(T.breakfast), Math.max(toMin("06:30"), toMin(am) - 50)) : toMin(T.breakfast);
   const cafe = picker.pick(picker.cafes(), foodPt, from, day, "meal", true);
   if (cafe) add("breakfast", { kind: "food", refId: cafe.id, start: toTime(breakfastAt), durationMin: 45, ...(cafe.note ? { note: cafe.note } : {}) });
   else free("breakfast", "breakfast-stay", breakfastAt, 45);
@@ -167,7 +168,7 @@ export function buildDay(args: {
   sunsetAndDinner(clock);
   const dinnerEnd = toMin(items[items.length - 1].start) + items[items.length - 1].durationMin;
   if (pools.drinks && !args.quietNight) {
-    const bar = picker.pick(picker.bars(), foodPt, from, day, "venue");
+    const bar = picker.pick(picker.bars(), foodPt, from, day, "venue", slow);
     if (bar) add("drinks", { kind: "food", refId: bar.id, start: toTime(Math.max(toMin(T.drinks), dinnerEnd)), durationMin: 90, ...(bar.note ? { note: bar.note } : {}) });
   }
   return items.sort((a, b) => toMin(a.start) - toMin(b.start));

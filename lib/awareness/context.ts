@@ -115,15 +115,37 @@ function beachLike(placeItem: LastPlace): boolean {
   return /praia|beach|plage/.test(norm(`${placeItem.id} ${placeItem.name}`));
 }
 
+/** An open question about a subject, not a finger pointed at the last list. */
+export function isOpenQuestion(text: string): boolean {
+  const n = norm(text);
+  const words = n.split(/\s+/).filter(Boolean);
+  if (/\b(?:what can you|tell me|fale-me|fala-me|fala me|parle-moi|parle moi|dis-moi|dis moi)\b/.test(n)) return true;
+  if (/\b(?:about|sobre|propos de)\s+(?:the\s+)?(?:maio|island|ilha|ile|beach|praia|plage|town|vila)\b/.test(n)) return true;
+  if (/^(?:what|whats|what's|why|how|who|o que|qual|quais|porque|por que|pourquoi|comment est|qu'est|quest-ce|c'est quoi)\b/.test(n)) return true;
+  return /\?/.test(text) && words.length > 6;
+}
+
+/** "the second beach" / "that one" / "o primeiro". Not a sentence that merely contains "first". */
+export function isShortPointer(text: string): boolean {
+  const n = norm(text).replace(/[.!?…]+$/g, "").trim();
+  if (!n || isOpenQuestion(text)) return false;
+  const words = n.split(/\s+/).filter(Boolean);
+  if (words.length > 7) return false;
+  if (/\b(?:maio|island|ilha)\b/.test(n)) return false;
+  if (/\b(?:first|primeir\w*|premi\w*)\s+(?:time|vez|fois)\b/.test(n)) return false;
+  return true;
+}
+
 /**
  * Point "the second beach", "a segunda praia", "la deuxième", "that one",
  * "around there" and "directions to X from Y" at lastPlaces or known places.
+ * Ordinals and deictics only fire for a short pointer, never for an open question.
  */
 export function resolveReference(text: string, lastPlaces: LastPlace[]): ReferenceHit {
   const n = norm(text);
   const empty: ReferenceHit = { kind: null, place: null, from: null, to: null };
   const directions = n.match(/\b(?:directions? to|como chegar a|itineraire (?:jusqu'a|pour|vers)) (.+?) \b(?:from|desde|depuis)\b (.+)$/);
-  if (/\b(directions?|como chegar|itineraire)\b/.test(n)) {
+  if (/\b(directions?|como chegar|itineraire)\b/.test(n) && !isOpenQuestion(text)) {
     const toQuery = directions?.[1] ?? (n.match(/\b(?:to|a|vers|ate) ([a-z0-9' ]+)$/)?.[1] ?? "");
     const fromQuery = directions?.[2] ?? "";
     const to = lookupPlace(toQuery) ?? lastPlaces.find((item) => n.includes(norm(item.name))) ?? null;
@@ -133,18 +155,23 @@ export function resolveReference(text: string, lastPlaces: LastPlace[]): Referen
   const wantsBeach = /\b(beach|praia|plage)\b/.test(n);
   const pool = wantsBeach ? lastPlaces.filter(beachLike) : lastPlaces;
   const list = pool.length ? pool : lastPlaces;
-  if (!/\bsegunda-feira\b|\bsegunda feira\b/.test(n)) {
-    for (const ordinal of ORDINALS) {
-      if (ordinal.pattern.test(n)) {
-        return { kind: "ordinal", place: list[ordinal.index] ?? null, from: null, to: null };
+  const pointer = isShortPointer(text);
+  if (pointer && !/\bsegunda-feira\b|\bsegunda feira\b/.test(n)) {
+    const leading = /^(?:please |por favor |s'il vous plait )?(?:the |a |o |os |as |le |la |les )?(?:first|second|third|fourth|fifth|primeir[oa]s?|segund[oa]s?|terceir[oa]s?|quart[oa]s?|quint[oa]s?|premi(?:er|ere)|deuxieme|seconde|troisieme|quatrieme|cinquieme|\d(?:st|nd|rd|er|re|a))\b/;
+    if (leading.test(n)) {
+      for (const ordinal of ORDINALS) {
+        if (ordinal.pattern.test(n)) {
+          return { kind: "ordinal", place: list[ordinal.index] ?? null, from: null, to: null };
+        }
       }
     }
   }
-  if (/\b(that one|this one|esse|essa|aquele|aquela|celui-la|celle-la|celui la|celle la)\b/.test(n)) {
-    const placeHit = list[list.length - 1] ?? null;
-    return { kind: "that-one", place: placeHit, from: null, to: null };
+  if (pointer && /^(?:that one|this one|esse|essa|aquele|aquela|celui-la|celle-la|celui la|celle la|o primeiro|a primeira|le premier|la premiere)$/.test(n.replace(/[.!?…]+$/g, "").trim())) {
+    const placeHit = /^(?:that one|this one|esse|essa|aquele|aquela|celui)/.test(n) ? (list[list.length - 1] ?? null) : (list[0] ?? null);
+    const kind = /primeiro|premiere|premier|primeira/.test(n) ? "ordinal" as const : "that-one" as const;
+    return { kind, place: placeHit, from: null, to: null };
   }
-  if (/\b(around there|over there|near there|por ali|la-bas|la bas|pres de la|autour)\b/.test(n)) {
+  if (pointer && /\b(around there|over there|near there|por ali|la-bas|la bas|pres de la)\b/.test(n) && !/\b(?:island|ilha|ile|maio)\b/.test(n)) {
     const placeHit = list[list.length - 1] ?? null;
     return { kind: "around-there", place: placeHit, from: null, to: null };
   }

@@ -182,7 +182,7 @@ test("a hospital question keeps the objective, dates and pending question", asyn
   assert.equal(result.intent, "side_question");
   assert.equal(result.toolEvents.some((event) => event.name === "propose_itinerary"), false);
   assert.match(result.reply, /\+238 255 11 30/);
-  assert.match(result.reply, new RegExp(EMERGENCY_VERIFIED_AT));
+  assert.match(result.reply, /11 October 2026|2026-10-11/);
   assert.equal(result.task.objective, "3 days on Maio");
   assert.equal(result.task.pendingQuestion, "How many days?");
   assert.equal(result.task.constraints.dates?.start, "2026-10-30");
@@ -430,8 +430,9 @@ test("chips do not offer a boat trip that is already chosen", async () => {
     reply: "The boat is on the calmest day.",
   });
   assert.ok(result.task.completed.includes("boat"));
+  assert.ok(result.chips.length <= 2);
   assert.ok(result.chips.every((chip) => !/boat trip|saída de barco|sortie en bateau/i.test(chip)));
-  assert.ok(result.chips.some((chip) => /leave|part/i.test(chip)));
+  assert.ok(result.chips.every((chip) => !/leave|partem|partez/i.test(chip)));
 });
 
 test("a 30000-character tool body is clipped and the objective survives", async () => {

@@ -11,7 +11,8 @@
     "test": "node --test tests/*.test.ts tests/*.test.mjs tests/awareness/*.test.ts",
     "eval:plan": "node --test --test-reporter=spec tests/plan-evals.test.ts",
     "eval:plan:live": "PLAN_EVAL_LIVE=1 node --test --test-reporter=spec tests/plan-evals.test.ts",
-    "check:plan-layout": "node scripts/check-plan-layout.mjs"
+    "check:plan-layout": "node scripts/check-plan-layout.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.122",
@@ -36,6 +37,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19"

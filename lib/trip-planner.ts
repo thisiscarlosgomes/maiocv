@@ -25,6 +25,7 @@ export const TripRequestSchema = z.object({
   arrival: z.object({ mode: z.enum(["ferry", "flight"]), dayIndex: z.number().int().min(0).max(6).default(0), time: time.optional() }).optional(),
   departure: z.object({ mode: z.enum(["ferry", "flight"]), time: time.optional().describe("Departure time of the ferry or flight, HH:MM") }).optional().describe("Set when the guest leaves Maio on the last day"),
   drinks: z.boolean().default(true).describe("false if the guest wants quiet evenings (no bar)"),
+  pace: z.enum(["slow", "normal"]).optional().describe("slow keeps breakfast and the next stop from stacking"),
   diet: z.string().max(60).optional().describe("Diet in the guest's words. Listings have no diet flags; never claim a menu."),
   budget: z.string().max(60).optional().describe("Budget in the guest's words. No prices are stored; never invent an amount."),
   include: z.array(z.string()).max(5).default([]).describe("Experience ids from search_experiences the guest asked for"),
@@ -121,7 +122,7 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   if (req.boatTrips > 1 || req.include.length > 1) unmet.push("one tour per trip");
   if (req.boatTrips > 0 && !tour?.exp.seaDependent) unmet.push("sea outing: no safe sea day");
 
-  const pools = { hasCar: req.hasCar, locale: req.locale, drinks: req.drinks };
+  const pools = { hasCar: req.hasCar, locale: req.locale, drinks: req.drinks, ...(req.pace === "slow" ? { pace: "slow" as const } : {}) };
   const picker = new Picker(pools);
   const days: PlanDay[] = dates.map((date, i) => {
     const items = buildDay({

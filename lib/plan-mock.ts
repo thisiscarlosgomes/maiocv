@@ -11,13 +11,17 @@ export function mockScript(messages: ModelMessage[], plan: TripPlan | null, toda
   const last = String(messages[messages.length - 1]?.content ?? "").toLowerCase();
   if (!plan) {
     const start = new Date(`${today}T12:00:00Z`); start.setUTCDate(start.getUTCDate() + 1);
-    return { calls: [[{ tool: "propose_itinerary", input: { startDate: start.toISOString().slice(0, 10), days: 3, locale: "en", boatTrips: 1, interests: ["beach", "sea"], arrival: { mode: "ferry", dayIndex: 0, time: "07:30" }, departure: { mode: "flight", time: "17:30" } } }]],
-      reply: "Here’s a slow plan. Boat on the calmest day, when the sea is calm." };
+    return { calls: [[{ tool: "propose_itinerary", input: { startDate: start.toISOString().slice(0, 10), days: 3, locale: "en", boatTrips: 0, interests: ["beach"], hasCar: false, adults: 2, pace: "slow" } }]],
+      reply: "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Enzo (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18" };
   }
   // A change rebuilds the plan from the trip we already have. Questions stay read-only.
-  if (/laz|sunset|swap|move|remove|change|add|replace|calm|tranq|mud|troc|chang|ajout|car|carro|voiture/.test(last))
+  if (/laz|sunset|swap|move|remove|change|add|replace|calm|tranq|mud|troc|chang|ajout|car|carro|voiture|friday|saturday|sexta|sabado|vendredi|samedi|adult|dias|jours|days|pace|slow|calmo/.test(last))
     return { calls: [[{ tool: "propose_itinerary", input: { startDate: plan.days[0].date, days: plan.days.length, locale: plan.locale, adults: plan.party.adults, kids: plan.party.kids, hasCar: /no car|sem carro|sans voiture/.test(last) ? false : plan.hasCar || /car|carro|voiture/.test(last), drinks: /laz|quiet|calm|tranq/.test(last) ? false : true, ...(plan.party.youngestAge !== undefined ? { youngestAge: plan.party.youngestAge } : {}) } }]],
-      reply: "I rebuilt the plan from that change." };
+      reply: /\b(jours|plage|voiture|vendredi|samedi|loue)\b/.test(last)
+        ? "J'ai mis le plan à jour."
+        : /\b(dias|praia|carro|sexta|sabado|alugamos)\b/.test(last) || /[ãõç]/.test(last)
+          ? "Atualizei o plano."
+          : "I rebuilt the plan from that change." };
   if (/kid|child|crian|enfant/.test(last)) return { calls: [], reply: "Yes. The water is shallow near the shore. Go before 17:00, when the wind picks up." };
   if (/eat|food|comer|manger/.test(last)) return { calls: [], reply: "In Calheta, try the grilled fish places by the beach. Lunch runs 12:00 to 15:00." };
   if (/pack|mala|valise/.test(last)) return { calls: [], reply: "Sunscreen, a hat, water shoes for the rocks and a light layer for the boat." };

@@ -28,6 +28,8 @@ export const TaskConstraintsSchema = z.object({
   diet: z.string().max(60).nullable().optional(),
   budget: z.string().max(60).nullable().optional(),
   quietEvenings: z.boolean().optional(),
+  /** Slow pace keeps meals and the next stop from stacking. */
+  pace: z.enum(["slow"]).optional(),
   interests: z.array(z.string().max(40)).max(8).optional(),
   boatTrips: z.number().int().min(0).max(3).optional(),
   arrival: z.object({
@@ -122,6 +124,7 @@ export function mergeConstraints(base: TaskConstraints, patch: TaskConstraints):
   if (patch.diet !== undefined) next.diet = patch.diet;
   if (patch.budget !== undefined) next.budget = patch.budget;
   if (patch.quietEvenings !== undefined) next.quietEvenings = patch.quietEvenings;
+  if (patch.pace) next.pace = patch.pace;
   if (patch.interests?.length) {
     next.interests = [...new Set([...(base.interests ?? []), ...patch.interests])].slice(0, 8);
   }
@@ -151,7 +154,6 @@ export function refreshTask(task: Task): Task {
   if (c.quietEvenings) completed.add("quiet");
   if (c.arrival) completed.add("arrival");
   if (c.departure) completed.add("departure");
-  else if (completed.has("dates") && safe.scope.mode === "planning" && safe.objective) remaining.push(copy.departure);
   return {
     ...safe,
     completed: [...completed].slice(0, 20),
@@ -178,7 +180,7 @@ export function followUpChips(task: Task): string[] {
     return !task.completed.includes(item);
   });
   const chips = (pending.length ? pending : open.length ? open : task.pendingQuestion ? [task.pendingQuestion] : []);
-  return [...new Set(chips.filter((item) => !(boatDone && BOAT_CHIP.test(item))))].slice(0, 3);
+  return [...new Set(chips.filter((item) => !(boatDone && BOAT_CHIP.test(item))))].slice(0, 2);
 }
 
 export function rememberFact(task: Task, fact: ToolFact): Task {

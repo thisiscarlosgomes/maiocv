@@ -15,6 +15,8 @@ export type Classification = {
   reference: ReferenceHit;
   /** The utterance is only "never mind" (or the pt/fr equivalent). */
   cancelOnly: boolean;
+  /** hi / olá / bonjour / thanks / ok. The task stays as it is. */
+  smallTalk: boolean;
   /** Dates, party, car, quiet evenings, or arrival changed — the plan must be rebuilt. */
   planShaping: boolean;
   research: boolean;
@@ -131,10 +133,12 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const party = extractParty(n);
   if (party) patch.party = party;
 
-  if (/\b(?:no car|sem carro|sans voiture|without a car)\b/.test(n)) patch.car = false;
+  const howTo = /\b(?:how|como|comment)\b/.test(n);
+  if (!howTo && /\b(?:no car|sem carro|sans voiture|without a car)\b/.test(n)) patch.car = false;
   else if (/\b(?:rented a car|rent(?:ed)? a car|we have a car|with a car|alugamos(?: um)? carro|temos carro|com carro|loue une voiture|avec une voiture|on a loue)\b/.test(n)) patch.car = true;
 
   if (/\bquiet\b|\bnoite calma\b|\bsoiree calme\b|\blazier\b|\bno bar\b|\bsem bar\b|\bsans bar\b/.test(n)) patch.quietEvenings = true;
+  if (/\b(?:slow pace|relaxed pace|easy pace|ritmo calmo|ritmo lento|sem pressa|rythme lent|rythme calme)\b/.test(n)) patch.pace = "slow";
 
   const diet = n.match(/\b(vegetarian|vegan|vegetariano|vegetariana|vegetarien|vegetarienne)\b/);
   if (diet) patch.diet = diet[1];
@@ -223,7 +227,7 @@ function isTimetableQuestion(text: string): boolean {
 }
 
 function isFactualAside(text: string): boolean {
-  return /\b(?:hospital|hospit|emergency|emergencia|urgence)\b/.test(text)
+  return /\b(?:hospital|hospit|hopital|emergency|emergencia|urgence)\b/.test(text)
     || /\b(?:in the air|flight status|estado do voo|le vol est|praia flight)\b/.test(text)
     || /\b(?:what should i pack|o que levar|que mettre dans)\b/.test(text)
     || /\b(?:pay by card|posso pagar|carte bancaire|card payment)\b/.test(text)
@@ -233,6 +237,24 @@ function isFactualAside(text: string): boolean {
 
 function explicitCorrection(text: string): boolean {
   return /\b(?:not friday|nao sexta|pas vendredi|i meant|actually|na verdade|en fait|rented a car|alugamos(?: um)? carro|instead)\b/.test(text);
+}
+
+const SMALL_TALK = /^(?:hi|hello|hey|hiya|yo|ola|oi|bom dia|boa tarde|boa noite|bonjour|salut|bonsoir|coucou|thanks|thank you|obrigado|obrigada|merci|ok|okay|cool|great|cheers|valeu|fixe|tudo bem|ca va)(?: there| maio)?$/;
+
+export function isSmallTalk(text: string): boolean {
+  return SMALL_TALK.test(bare(text));
+}
+
+/** Visitor questions about the island itself, not a request to build or change a plan. */
+export function isGeneralIslandQuestion(text: string): boolean {
+  const n = normalizeUtterance(text);
+  const aboutIsland = /\b(?:maio|island|ilha|ile)\b/.test(n) && /\b(?:tell|about|what|whats|how|like|fale|fala|conta|o que|como|parle|comment|quel|quelle|c'est|qu'est|quest)\b/.test(n);
+  const beaches = /\b(?:beach|beaches|praia|praias|plage|plages)\b/.test(n) && /\b(?:best|which|where|qual|quais|melhor(?:es)?|meilleures?|tell|about|sobre|what|quais sao|where are)\b/.test(n);
+  const safe = /\b(?:safe|safety|seguro|segura|seguranca|securite|surete)\b/.test(n) || /\b(?:c'est|est-ce|est ce)\s+sur\b/.test(n);
+  const services = /\b(?:pharmacy|pharmacies|farmacia|pharmacie|atm|atms|multibanco|caixas? automatic[oa]s?|distributeurs?)\b/.test(n);
+  const eat = /\b(?:where (?:to|should|can) (?:we |i )?(?:eat|have)|onde comer|ou manger|où manger)\b/.test(n);
+  const around = /\b(?:get around|getting around|desloc|deplacer|aluguer)\b/.test(n);
+  return aboutIsland || beaches || safe || services || eat || around;
 }
 
 function newObjectiveCue(text: string): boolean {
@@ -250,18 +272,26 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   const research = isResearchQuestion(text);
   const patch = extractConstraints(text, ctx.today);
   const referenceOnly = Boolean(reference.kind) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined;
-  const planShaping = hasPlanSignal(patch) && !referenceOnly;
+  const asking = isGeneralIslandQuestion(text) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined && !patch.pace;
+  const planShaping = hasPlanSignal(patch) && !referenceOnly && !asking;
   const dietOnly = Boolean(patch.diet || patch.budget) && !planShaping;
-  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research) };
+  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false };
+  const side = { ...base, intent: "side_question" as const, planShaping: false, patch: {}, research: false, reference: { kind: null, place: null, from: null, to: null } as ReferenceHit };
 
   if (CANCEL_EXACT.test(n)) {
     return { ...base, intent: "cancel_pending", cancelOnly: true, planShaping: false, objective: task.objective ?? undefined };
+  }
+  if (isSmallTalk(n)) {
+    return { ...side, smallTalk: true, objective: task.objective ?? undefined };
   }
   if (isTimetableQuestion(text) || /\bin the air\b|\bflight status\b|\bestado do voo\b/.test(n)) {
     return { ...base, intent: "side_question", planShaping: false, patch: {}, research: false };
   }
   if (newObjectiveCue(n) || (research && task.objective)) {
     return { ...base, intent: "new_objective", planShaping: !research && planShaping, objective: clipObjective(text) };
+  }
+  if (isGeneralIslandQuestion(text) && !planShaping && !research) {
+    return { ...side, objective: task.objective ?? undefined };
   }
   if (!task.objective) {
     if (research || (isQuestion(n) && !planShaping)) {
@@ -302,10 +332,13 @@ export function applyClassification(task: Task, result: Classification): Task {
     const next = { ...task, locale: result.locale ?? task.locale };
     return result.reference.place ? rememberPlace(next, result.reference.place) : next;
   }
+  const leavingResearch = result.planShaping && task.scope.mode === "research";
   const merged = refreshTask({
     ...task,
     locale: result.locale ?? task.locale,
-    objective: task.objective ?? result.objective ?? null,
+    objective: leavingResearch ? null : (task.objective ?? result.objective ?? null),
+    scope: leavingResearch ? { ...task.scope, mode: "planning" } : task.scope,
+    pendingQuestion: leavingResearch ? null : task.pendingQuestion,
     constraints: mergeConstraints(task.constraints, result.patch),
   });
   return result.reference.place ? rememberPlace(merged, result.reference.place) : merged;
