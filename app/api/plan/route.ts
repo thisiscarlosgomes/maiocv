@@ -56,13 +56,16 @@ export async function POST(request: Request) {
   const deps = flagDeps();
   try {
     let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
+    let sideModel: LanguageModel = gateway(process.env.PLAN_SIDE_MODEL ?? "openai/gpt-5-nano");
     // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.
     if (process.env.PLAN_MOCK === "1") {
       const { mockModel, mockScript } = await import("../../../lib/plan-mock");
       model = mockModel(mockScript(messages, current, maioClock(new Date()).date));
+      sideModel = model;
     }
     const result = await runPlanAgent(messages, current, {
       model,
+      sideModel,
       fetchImpl: fetch,
       onReply: (turn) => reviewPlan(turn, body.data.messages, deps),
     }, task);

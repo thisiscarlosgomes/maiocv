@@ -477,3 +477,41 @@ for (const item of FAST) {
     }
   });
 }
+
+const COUPLES = [
+  { phrase: "we're just a couple, no kids", locale: "en" as const },
+  { phrase: "somos um casal, sem crianças", locale: "pt" as const },
+  { phrase: "nous sommes un couple, sans enfants", locale: "fr" as const },
+];
+
+for (const item of COUPLES) {
+  test(`party stays a couple: ${item.phrase}`, async () => {
+    const started = Date.now();
+    const { plan, reply } = await ask(item.phrase, item.locale);
+    assert.ok(Date.now() - started < 3_000, reply);
+    assert.equal(plan?.party.adults, 2, reply);
+    assert.equal(plan?.party.kids, 0, reply);
+    assert.equal(plan?.party.youngestAge, undefined);
+    assert.match(reply, /nothing on the plan changes|nada muda no plano|rien ne change/i);
+    assert.doesNotMatch(reply, UNCHANGED);
+  });
+}
+
+test("a couple with no kids drops a child's boat and shows the new card", async () => {
+  const withChild = await ask("We're two adults and a 6 year old", "en", true);
+  assert.equal(withChild.plan?.party.kids, 1);
+  const started = Date.now();
+  const result = await runPlanAgent(
+    [{ role: "user", content: "we're just a couple, no kids" }],
+    withChild.plan,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    withChild.task,
+  );
+  assert.ok(Date.now() - started < 3_000, result.reply);
+  assert.equal(result.plan?.party.adults, 2);
+  assert.equal(result.plan?.party.kids, 0);
+  assert.equal(result.plan?.party.youngestAge, undefined);
+  assert.notEqual(result.plan, withChild.plan);
+  assert.match(result.reply, /no kids|suitable|days stay/i);
+  assert.doesNotMatch(result.reply, UNCHANGED);
+});

@@ -17,11 +17,12 @@ export type BusinessCatalog = {
   source: "api" | "fallback";
 };
 
-type Cache = { at: number; value: BusinessCatalog };
-let cache: Cache | null = null;
+type Cache = { epoch: number; at: number; value: BusinessCatalog };
+const businessCaches = new WeakMap<object, Cache>();
+let businessEpoch = 0;
 
 export function clearBusinessCache(): void {
-  cache = null;
+  businessEpoch += 1;
 }
 
 function norm(text: string): string {
@@ -71,9 +72,10 @@ async function fetchPage(fetchImpl: typeof fetch, offset: number): Promise<unkno
   return features;
 }
 
-/** Businesses from api.maio.cv, cached for 10 minutes. Falls back to the trip fixture. */
+/** Businesses from api.maio.cv, cached for 10 minutes per fetch. Falls back to the trip fixture. */
 export async function loadBusinesses(fetchImpl: typeof fetch = fetch): Promise<BusinessCatalog> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+  const hit = businessCaches.get(fetchImpl);
+  if (hit && hit.epoch === businessEpoch && Date.now() - hit.at < TTL_MS) return hit.value;
   try {
     const features: unknown[] = [];
     for (let offset = 0; offset < 500; offset += 100) {
@@ -87,7 +89,7 @@ export async function loadBusinesses(fetchImpl: typeof fetch = fetch): Promise<B
     });
     if (!records.length) throw new Error("Maio API returned no businesses");
     const value: BusinessCatalog = { records, source: "api" };
-    cache = { at: Date.now(), value };
+    businessCaches.set(fetchImpl, { epoch: businessEpoch, at: Date.now(), value });
     return value;
   } catch {
     return { records: fallbackBusinesses(), source: "fallback" };

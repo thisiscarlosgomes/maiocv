@@ -187,7 +187,7 @@ export function extractConstraints(text: string, today: string): TaskConstraints
     || /\b(?:sem|sans|no)\s+(?:um\s+|uma\s+|o\s+|a\s+)?(?:passeio de\s+|saida de\s+|sortie en\s+)?(?:boat|barco|bateau)\b/.test(n)
     || /\b(?:boat|barco|bateau)\b.{0,24}\b(?:off|out)\b/.test(n);
   if (refusesBoat) patch.boatTrips = 0;
-  else if (/\b(?:boat trip|boat|barco|bateau|sea outing|saida de barco|sortie en bateau)\b/.test(n)) {
+  else if (/\b(?:boat trip|boats?|barco|bateau|sea outings?|saida de barco|sortie en bateau)\b/.test(n)) {
     interests.push("boat");
     const count = wordNumber(boatCount?.[1]);
     if (count) patch.boatTrips = count;
@@ -248,18 +248,22 @@ function extractParty(text: string): TaskConstraints["party"] | undefined {
   const total = wordNumber(text.match(/\b(?:nous sommes|somos|we are|family of|familia de|famille de)\s+(\d+|two|three|four|five|six|dois|duas|tres|quatro|deux|trois|quatre)\b(?!\s+(?:adults?|adultos?|adultes?))/)?.[1]);
   const adults = wordNumber(text.match(/\b(\d+|two|three|four|dois|duas|tres|deux|trois|quatre)\s+(?:adults?|adultos?|adultes?)\b/)?.[1]);
   const ofUs = /\b(?:two of us|somos dois|deux personnes)\b/.test(text) ? 2 : undefined;
-  const countedKids = wordNumber(text.match(/\b(one|two|three|four|five|six|um|uma|dois|duas|tres|quatro|cinco|un|une|deux|trois|quatre|cinq|\d+)\s+(?:kids?|children|criancas?|enfants?|filhos?|bebes?)\b/)?.[1]);
-  const ages = extractAges(text);
-  const baby = /\b(?:baby|bebe)\b/.test(text);
-  const oneChild = baby || /\b(?:dont un enfant|com uma crianca|com um filho|with one child|with a child|with one kid|a baby|um bebe|un bebe)\b/.test(text);
-  const child = oneChild || countedKids !== undefined || ages.length > 0 || /\b(?:kid|kids|child|children|toddler|crianca|criancas|enfant|enfants|filho|filha|bb)\b/.test(text);
+  const noKids = /\b(?:no kids|no children|without kids|without children|sem criancas|sem filhos|sans enfants|pas d'enfants|pas denfants)\b/.test(text);
+  const couple = /\b(?:just a couple|a couple|we're a couple|casal|en couple|un couple)\b/.test(text);
+  const countedKids = noKids ? undefined : wordNumber(text.match(/\b(one|two|three|four|five|six|um|uma|dois|duas|tres|quatro|cinco|un|une|deux|trois|quatre|cinq|\d+)\s+(?:kids?|children|criancas?|enfants?|filhos?|bebes?)\b/)?.[1]);
+  const ages = noKids ? [] : extractAges(text);
+  const baby = !noKids && /\b(?:baby|bebe)\b/.test(text);
+  const oneChild = !noKids && (baby || /\b(?:dont un enfant|com uma crianca|com um filho|with one child|with a child|with one kid|a baby|um bebe|un bebe)\b/.test(text));
+  const child = !noKids && (oneChild || countedKids !== undefined || ages.length > 0 || /\b(?:kid|kids|child|children|toddler|crianca|criancas|enfant|enfants|filho|filha|bb)\b/.test(text));
   const youngest = ages.length ? Math.min(...ages) : baby ? 1 : /\btoddler\b/.test(text) ? 2 : undefined;
   if (adults !== undefined) party.adults = adults;
+  else if (couple) party.adults = 2;
   else if (total !== undefined && oneChild) party.adults = Math.max(1, total - 1);
   else if (total !== undefined && child) party.adults = Math.max(1, total - Math.max(1, total - 2));
   else if (ofUs !== undefined) party.adults = ofUs;
   else if (total !== undefined && !child) party.adults = total;
-  if (countedKids !== undefined) party.kids = countedKids;
+  if (noKids) party.kids = 0;
+  else if (countedKids !== undefined) party.kids = countedKids;
   else if (oneChild) party.kids = 1;
   else if (total !== undefined && child && party.adults !== undefined) party.kids = Math.max(0, total - party.adults);
   else if (child && party.adults !== undefined) party.kids = ages.length > 1 ? ages.length : 1;
@@ -364,6 +368,7 @@ export function experienceIdsMentioned(text: string): string[] {
     if (title.length > 4 && n.includes(title)) ids.push(exp.id);
     else if (/\bquads?\b/.test(n) && exp.id.includes("quad")) ids.push(exp.id);
     else if (/\bjet ?skis?\b/.test(n) && exp.id.includes("jetski")) ids.push(exp.id);
+    else if (/\bsurf\b/.test(n) && /surf|ondaazul/.test(`${exp.id} ${title}`)) ids.push(exp.id);
   }
   return ids;
 }

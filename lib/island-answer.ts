@@ -1,5 +1,6 @@
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
+import { isWestCoast } from "./full-day.ts";
 import { FOOD, PLACES, distanceKm, food, place } from "./trip.ts";
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
@@ -97,6 +98,10 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   const morroName = locale === "pt" ? morro?.name.pt : morro?.name.en;
 
   const about = /\b(?:maio|island|ilha|ile)\b/.test(n) && /\b(?:tell|about|what|whats|how|like|fale|fala|conta|o que|como|parle|comment|quel|quelle|c'est|qu'est|quest)\b/.test(n);
+  const turtles = /\b(?:turtles?|tartarugas?|tortues?)\b/.test(n);
+  const coffee = /\b(?:coffee|cafe|espresso|bica)\b/.test(n);
+  const sunset = /\b(?:sunset|por do sol|coucher)\b/.test(n);
+  const airportTown = /\b(?:airport|aeroporto|aeroport)\b/.test(n) && /\b(?:town|vila|porto|cidade|ville|centre|center)\b/.test(n);
   const beachQ = /\b(?:beach|beaches|praia|praias|plage|plages)\b/.test(n);
   const safe = (/\b(?:safe|safety|seguro|segura|seguranca|surete|securite)\b/.test(n) || /\b(?:c'est|est-ce|est ce)\s+sur\b/.test(n)) && !/\b(?:beach|praia|plage)\b/.test(n);
   const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(n);
@@ -105,6 +110,34 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
     && !/\b(?:around there|por ali|la-bas|la bas|pres de la)\b/.test(n);
   const around = /\b(?:get around|getting around|desloc\w*|deplac\w*|aluguer|without a car|sem carro|sans voiture|bus|autocarro)\b/.test(n);
 
+  if (turtles) {
+    return say(locale,
+      `I don't list turtle trips, so I won't invent one. Beaches in the Visit Maio list include ${listed}.`,
+      `Não tenho passeios de tartarugas nas listas, por isso não invento. As praias do Visit Maio incluem ${listed}.`,
+      `Je ne liste pas de sorties tortues, donc je n'en invente pas. Les plages Visit Maio comprennent ${listed}.`);
+  }
+  if (coffee) {
+    const cafes = FOOD.filter((item) => /caf[eé]|coffee|breakfast|bakery|pastelaria/i.test(`${item.title} ${item.description.en}`)).slice(0, 3).map((item) => item.title);
+    const names = cafes.length ? cafes.join(", ") : restaurantNames().join(", ");
+    return say(locale,
+      `Places for coffee in the Visit Maio listings include ${names}. The listings have no menus and no prices.`,
+      `Sítios para um café nas listas do Visit Maio incluem ${names}. As listas não têm menus nem preços.`,
+      `Les adresses pour un café dans les listes Visit Maio comprennent ${names}. Les listes n'ont ni menus ni prix.`);
+  }
+  if (sunset && !/\b(?:days?|dias?|jours?)\b/.test(n)) {
+    const west = PLACES.filter((item) => item.category === "beach" && isWestCoast(item)).slice(0, 3);
+    const names = west.map((item) => locale === "pt" ? item.name.pt : item.name.en).join(", ");
+    return say(locale,
+      `Sunset on Maio is on the west coast. Beaches that face it include ${names}. I don't rank a single best one.`,
+      `O pôr do sol no Maio é na costa oeste. Praias viradas para ele incluem ${names}. Não escolho uma única melhor.`,
+      `Le coucher de soleil à Maio est sur la côte ouest. Les plages qui y font face comprennent ${names}. Je n'en classe pas une seule comme la meilleure.`);
+  }
+  if (airportTown) {
+    return say(locale,
+      "The airport sits outside Vila do Maio, between the port and Morro. People make that ride by aluguer taxi. I don't have a published transfer time or fare, so I won't invent one.",
+      "O aeroporto fica fora da Vila do Maio, entre o porto e o Morro. Esse percurso faz-se de táxi aluguer. Não tenho tempo nem preço publicado, por isso não invento.",
+      "L'aéroport est hors de Vila do Maio, entre le port et Morro. On fait ce trajet en taxi aluguer. Je n'ai pas de durée ni de tarif publié, donc je n'en invente pas.");
+  }
   if (pharmacy) {
     return say(locale,
       `I don't have a pharmacy in the Visit Maio listings, so I won't invent one. For urgent care, Hospital do Maio is ${hospital.number} (verified ${verified}).`,
