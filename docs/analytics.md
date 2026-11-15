@@ -26,3 +26,9 @@ Vercel Web Analytics is also installed for its own traffic dashboard. Its totals
 ## Verification
 
 Run `node --test tests/analytics.test.ts`, `npm run typecheck`, and `npm run build`. Verify unauthenticated `/pt/analytics` returns 401 with a Basic challenge; authenticated requests return the dashboard. Invalid/cross-origin collection requests are rejected. Check an accepted event increments its matching daily row. Keep QA traffic in the development database.
+
+## Failure log
+
+`chat_flags` in the same database stores only flagged planner (`/api/plan`) and Ask Maio (`/api/maio-chat`) turns, for 30 days. A turn that passes the checks is not written. The document has no IP, user agent, cookie, or user id. Thumbs-down uses `POST /api/flags`. Reading and triage use `GET /api/flags` and `PATCH /api/flags/:id` with `Authorization: Bearer $FLAGS_ADMIN_KEY`.
+
+The grader (`MAIO_JUDGE`, default on when `NODE_ENV=production`) runs after the response. `MAIO_JUDGE_RATE` (default `1`) and `MAIO_JUDGE_DAILY_CAP` (default `2000`, counted in `chat_flag_budget`) bound it. A grade of `ok: true`, a grader error, or a missing Mongo URI stores nothing. `MAIO_JUDGE_MODEL` defaults to `openai/gpt-5-nano`. `VERCEL_GIT_COMMIT_SHA` is copied onto a flag when Vercel sets it.

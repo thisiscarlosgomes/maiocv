@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { PlanSummary } from "../../lib/chat-flags";
 import type { Locale } from "../../lib/locale";
 
 export type ChatShellMessage = {
@@ -10,6 +11,12 @@ export type ChatShellMessage = {
   lead?: ReactNode;
   /** Citations, PDF, and other notes. Rendered under the text. */
   extra?: ReactNode;
+  /** Plan summaries and chips for a thumbs-down flag. Text comes from the transcript. */
+  flag?: {
+    planBefore: PlanSummary | null;
+    planAfter: PlanSummary | null;
+    chips?: string[];
+  };
 };
 
 export type ChatSuggestion = { label: string; prompt?: string };

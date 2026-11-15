@@ -30,7 +30,38 @@ export type PlanAgentResult = {
   /** Loading line for this turn. Empty when the turn does no visible work. */
   status: string;
 };
-export type PlanDeps = { model: LanguageModel; fetchImpl: typeof fetch; now?: Date };
+/** Snapshot handed to the failure log after the reply is chosen. Does not affect the reply. */
+export type PlanReplyTurn = {
+  userMessage: string;
+  previousTurns: ChatTurn[];
+  reply: string;
+  planBefore: TripPlan | null;
+  planAfter: TripPlan | null;
+  chips: string[];
+  intent: Intent;
+  locale: TaskLocale;
+  planTurn: boolean;
+  toolFacts: string;
+};
+export type PlanDeps = { model: LanguageModel; fetchImpl: typeof fetch; now?: Date; onReply?: (turn: PlanReplyTurn) => void };
+
+function observeFetch(fetchImpl: typeof fetch, sink: string[]): typeof fetch {
+  return async (input, init) => {
+    const response = await fetchImpl(input, init);
+    try {
+      if (sink.length < 6) {
+        const text = await response.clone().text();
+        if (text) sink.push(text.slice(0, 4000));
+      }
+    } catch { /* tool text is only for the failure log */ }
+    return response;
+  };
+}
+
+function safeReplyHook(hook: PlanDeps["onReply"], turn: PlanReplyTurn) {
+  if (!hook) return;
+  try { hook(turn); } catch { /* the failure log must not change the reply */ }
+}
 
 function weekday(date: string) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
@@ -254,6 +285,8 @@ function namedRestaurants(): string[] {
 }
 
 export async function runPlanAgent(messages: ModelMessage[], current: TripPlan | null, deps: PlanDeps, taskInput?: Task | null): Promise<PlanAgentResult> {
+  const toolFacts: string[] = [];
+  deps = { ...deps, fetchImpl: observeFetch(deps.fetchImpl, toolFacts) };
   const now = deps.now ?? new Date();
   const today = maioClock(now).date;
   const history = turns(messages);
@@ -281,7 +314,21 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
           : sayRouter(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan.");
       }
     }
-    return result(next, text, changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built && changed, work ?? turnWork(lastUser, seeded, today));
+    const returned = changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan;
+    const out = result(next, text, returned, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built && changed, work ?? turnWork(lastUser, seeded, today));
+    safeReplyHook(deps.onReply, {
+      userMessage: lastUser,
+      previousTurns: history.slice(0, -1).slice(-4),
+      reply: out.reply,
+      planBefore: current,
+      planAfter: out.plan,
+      chips: out.chips,
+      intent: out.intent,
+      locale: out.task.locale,
+      planTurn: (classification.planShaping === true && classification.intent !== "side_question" && !classification.smallTalk) || changed,
+      toolFacts: toolFacts.join("\n").slice(0, 8000),
+    });
+    return out;
   };
 
   const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
