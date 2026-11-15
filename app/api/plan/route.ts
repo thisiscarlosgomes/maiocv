@@ -8,7 +8,8 @@ import { scheduleTurnReview, type ReviewDeps } from "../../../lib/chat-judge";
 import { runPlanAgent, type PlanReplyTurn } from "../../../lib/plan-agent";
 import { planEnabled } from "../../../lib/plan-flag";
 import { isProductionEnv, readTask, signTask, taskSecret } from "../../../lib/awareness/sign";
-import { emptyTask } from "../../../lib/awareness/task";
+import { emptyTask, type TaskLocale } from "../../../lib/awareness/task";
+import { sideQuestionFallback } from "../../../lib/island-answer";
 import { parseTripPlan } from "../../../lib/trip";
 
 export const runtime = "nodejs";
@@ -89,6 +90,20 @@ export async function POST(request: Request) {
         failure: "model_error",
       }, deps);
     } catch { /* the error response still returns */ }
-    return Response.json({ error: "Planner unavailable" }, { status: 502 });
+    const fallbackLocale: TaskLocale = locale === "pt" || locale === "fr" ? locale : "en";
+    let signed: string | undefined;
+    if (typeof body.data.task === "string") signed = body.data.task;
+    else if (task) {
+      try { signed = signTask(task); } catch { signed = undefined; }
+    }
+    return Response.json({
+      reply: sideQuestionFallback(fallbackLocale),
+      plan: current,
+      toolEvents: [],
+      ...(signed ? { task: signed } : {}),
+      chips: [],
+      intent: "side_question",
+      status: "ready",
+    });
   }
 }

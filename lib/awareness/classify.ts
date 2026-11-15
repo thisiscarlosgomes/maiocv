@@ -382,7 +382,14 @@ export function isGeneralIslandQuestion(text: string): boolean {
   const services = /\b(?:pharmacy|pharmacies|farmacia|pharmacie|atm|atms|multibanco|caixas? automatic[oa]s?|distributeurs?)\b/.test(n);
   const eat = /\b(?:where (?:to |should |can )?(?:we |i )?(?:eat|have)|onde comer|ou manger)\b/.test(n);
   const around = /\b(?:get around|getting around|desloc\w*|deplac\w*|aluguer)\b/.test(n);
-  return aboutIsland || beaches || safe || services || eat || around;
+  return aboutIsland || beaches || safe || services || eat || around || isFourByFourQuestion(text);
+}
+
+/** A 4x4 or dirt-road question. Answered from the listings, not the model. */
+export function isFourByFourQuestion(text: string): boolean {
+  const n = normalizeUtterance(text);
+  return /\b(?:4\s*[x×]\s*4|4wd|four[- ]wheel)\b/.test(n)
+    || /\b(?:dirt roads?|dirt tracks?|unpaved|estrada de terra|caminho de terra|chemin de terre|piste en terre)\b/.test(n);
 }
 
 const HOW_AROUND = /\b(?:how|como|comment)\b.*\b(?:around|desloc|deplacer|car|carro|voiture)\b/;

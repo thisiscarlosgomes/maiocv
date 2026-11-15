@@ -426,6 +426,7 @@ test("the edit-intent model call is capped under the edit-turn budget", () => {
   const chatRoute = readFileSync(new URL("../app/api/maio-chat/route.ts", import.meta.url), "utf8");
   assert.match(planRoute, /after\(/);
   assert.match(chatRoute, /after\(/);
+  assert.doesNotMatch(planRoute, /status:\s*502/);
 });
 
 const FAST: { phrase: string; locale: "en" | "pt" | "fr"; kind: "boat" | "ferry" | "afternoon" | "land" }[] = [

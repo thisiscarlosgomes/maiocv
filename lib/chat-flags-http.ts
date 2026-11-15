@@ -99,11 +99,12 @@ export async function handleFlagHealth(request: Request, read: (day: string) => 
   const day = new Date().toISOString().slice(0, 10);
   const memory = judgeHealthSnapshot();
   const remote = await read(day).catch(() => null);
-  const health = remote ?? { calls: memory.calls, failures: memory.failures, flags: memory.flags, lastError: memory.lastError };
+  const health = remote ?? memory;
   return Response.json({
     judgeCallsToday: health.calls,
     judgeFailuresToday: health.failures,
     flagsWrittenToday: health.flags,
+    judgeSkippedToday: health.skips ?? 0,
     lastErrorType: health.lastError,
   }, { headers: NO_STORE });
 }

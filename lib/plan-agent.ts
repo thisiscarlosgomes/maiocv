@@ -1,8 +1,8 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
-import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
+import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isFourByFourQuestion, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
 import { applyDateShift, applyLength, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, isCarRentalQuestion, isTravelChoice, parseDateShift, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
-import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
+import { answerIslandQuestion, answerPlaceList, fourByFourReply, sideQuestionFallback } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, looksLikeItineraryDump, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
@@ -517,6 +517,17 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
   }
 
+  if (classification.intent === "side_question" && !classification.planShaping && isFourByFourQuestion(lastUser)) {
+    let rentals: { name: string; phone: string }[] | null = null;
+    let api = false;
+    try {
+      const catalog = await loadBusinesses(deps.fetchImpl);
+      api = catalog.source === "api";
+      rentals = api ? carRentalRecords(catalog.records) : null;
+    } catch { /* the road answer still stands without a rental name */ }
+    return finish(fourByFourReply(task.locale, rentals), current, [{ name: "maio-businesses", ok: api }], task);
+  }
+
   if (classification.intent === "side_question" && !classification.planShaping) {
     const listed = answerPlaceList(lastUser, task.locale);
     if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, undefined);
@@ -822,7 +833,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   const offerPlan = (classification.planShaping || Boolean(lengthEdit)) && task.scope.mode !== "research" && classification.intent !== "side_question";
   const exotic = /\b(?:dolphin|nightlife|nightclub|golfinho|dauphin|boite|diving|mergulho|plongee)\b/.test(spoken);
-  const freshPlan = !current && offerPlan && typeof task.constraints.car === "boolean" && (task.constraints.dates?.days ?? 0) > 0 && !exotic;
+  const anchored = (task.constraints.dates?.days ?? 0) > 0 || Boolean(task.constraints.dates?.start);
+  const freshPlan = !current && offerPlan && typeof task.constraints.car === "boolean" && anchored && !exotic;
   if (freshPlan) {
     const rebuilt = await rebuildPlan(task);
     if (rebuilt) return finish("", rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, true, "forecast");
@@ -900,15 +912,26 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const { propose_itinerary, ...readOnly } = tools;
   const activeTools = offerPlan ? tools : readOnly;
   const tModel = Date.now();
-  const generated = await generateText({
-    model: offerPlan ? deps.model : (deps.sideModel ?? deps.model),
-    instructions: planInstructions(today, task, windowed.recall, offerPlan),
-    messages: windowed.messages,
-    tools: activeTools,
-    stopWhen: stepCountIs(offerPlan ? 6 : 3),
-    temperature: 0,
-    ...(offerPlan ? {} : { abortSignal: AbortSignal.timeout(4_000) }),
-  } as Parameters<typeof generateText>[0]);
+  let generated: { text: string };
+  try {
+    generated = await generateText({
+      model: offerPlan ? deps.model : (deps.sideModel ?? deps.model),
+      instructions: planInstructions(today, task, windowed.recall, offerPlan),
+      messages: windowed.messages,
+      tools: activeTools,
+      stopWhen: stepCountIs(offerPlan ? 6 : 3),
+      temperature: 0,
+      ...(offerPlan ? {} : { abortSignal: AbortSignal.timeout(4_000) }),
+    } as Parameters<typeof generateText>[0]);
+  } catch {
+    modelMs += Date.now() - tModel;
+    if (offerPlan) {
+      const rebuilt = await rebuildPlan(task);
+      if (rebuilt) return finish("", rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, true, "forecast");
+    }
+    const grounded = answerIslandQuestion(lastUser, task.locale) ?? sideQuestionFallback(task.locale);
+    return finish(grounded, current, toolEvents, task);
+  }
   modelMs += Date.now() - tModel;
 
   if (offerPlan && !builtRequest) {
