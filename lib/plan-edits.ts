@@ -2,7 +2,7 @@ import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { resolveOverlaps } from "./full-day.ts";
 import { applyLength, planQuestionKind, type LengthEdit } from "./plan-router.ts";
 import { humanPlanDate, itemLabel } from "./plan-reply.ts";
-import { EXPERIENCES, food, isExcludedExperience, type PlanItem, type TripPlan } from "./trip.ts";
+import { EXPERIENCES, PLACES, food, isExcludedExperience, localizedPlaceName, type PlanItem, type TripPlan } from "./trip.ts";
 
 /** Meals and anchored places. Free rows and the arrival header are not stops. */
 export function visibleStops(items: PlanItem[]): number {
@@ -47,6 +47,50 @@ export function relaxDay(plan: TripPlan, dayNumber: number, locale: TaskLocale =
     plan: { ...plan, days: plan.days.map((item, i) => i === index ? { ...day, items: nextItems } : item) },
     reply,
     reduced: true,
+  };
+}
+
+/** One extra real stop on a day that should feel fuller. Other days stay. */
+export function busyDay(plan: TripPlan, dayNumber: number, locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; changed: boolean } | null {
+  const index = dayNumber - 1;
+  const day = plan.days[index];
+  if (!day) return null;
+  const before = visibleStops(day.items);
+  const used = new Set(plan.days.flatMap((item) => item.items.map((stop) => stop.refId)));
+  const extra = PLACES.find((item) => item.category === "beach" && !used.has(item.id)) ?? PLACES.find((item) => !used.has(item.id));
+  const when = humanPlanDate(day.date, locale);
+  if (!extra || before >= 6) {
+    return {
+      plan,
+      changed: false,
+      reply: say(locale,
+        `${when} is already a full day.`,
+        `${when} já está cheio.`,
+        `${when} est déjà bien rempli.`),
+    };
+  }
+  const name = localizedPlaceName(extra.name, locale);
+  const added: PlanItem = { id: `d${index}-busy`, kind: "place", refId: extra.id, slot: "activity", start: "15:30", durationMin: 90 };
+  const freeAt = day.items.findIndex((item) => item.kind === "free" && (item.refId === "free-time" || item.slot === "rest") && item.durationMin >= 120);
+  const items = [...day.items];
+  if (freeAt >= 0) items.splice(freeAt, 1, added);
+  else items.push(added);
+  const nextItems = resolveOverlaps(items).slice(0, 9);
+  const after = visibleStops(nextItems);
+  if (after <= before) {
+    return {
+      plan,
+      changed: false,
+      reply: say(locale, `${when} is already a full day.`, `${when} já está cheio.`, `${when} est déjà bien rempli.`),
+    };
+  }
+  return {
+    changed: true,
+    plan: { ...plan, days: plan.days.map((item, i) => i === index ? { ...day, items: nextItems } : item) },
+    reply: say(locale,
+      `${when} is busier now: ${after} stops, including ${name}.`,
+      `${when} ficou mais cheio: ${after} paragens, incluindo ${name}.`,
+      `${when} est plus chargé : ${after} arrêts, dont ${name}.`),
   };
 }
 
@@ -144,6 +188,14 @@ export function noTripReply(locale: TaskLocale): string {
     "There's no trip to change yet.",
     "Ainda não há viagem para mudar.",
     "Il n'y a pas encore de voyage à modifier.");
+}
+
+/** Stops and dates, without the party line. A kid note is earned only when this changes. */
+export function itinerarySig(plan: TripPlan): string {
+  return JSON.stringify(plan.days.map((day) => ({
+    date: day.date,
+    items: day.items.map((item) => ({ kind: item.kind, refId: item.refId, slot: item.slot ?? null, start: item.start ?? null })),
+  })));
 }
 
 export function samePlanShape(a: TripPlan | null, b: TripPlan | null): boolean {
