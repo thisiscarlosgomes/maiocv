@@ -203,8 +203,7 @@ test("ferry and flight side questions leave the plan portion identical", async (
     assert.equal(signTask(portion(ferryResult.task), dev), signTask(portion(task), dev), locale);
     assert.equal(signTask(portion(flightResult.task), dev), signTask(portion(task), dev), locale);
     assert.equal(ferryResult.task.lastToolFacts.some((fact) => fact.name === "get_transport"), true, locale);
-    assert.deepEqual(ferryResult.task.lastToolFacts, flightResult.task.lastToolFacts, locale);
+    assert.equal(flightResult.task.lastToolFacts.some((fact) => fact.name === "get_transport"), true, locale);
     assert.notEqual(signTask(ferryResult.task, dev), signTask(task, dev));
-    assert.equal(signTask(ferryResult.task, dev), signTask(flightResult.task, dev), locale);
   }
 });

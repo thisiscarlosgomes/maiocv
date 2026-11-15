@@ -116,7 +116,8 @@ test("greetings with and without a plan stay one short line in EN, PT and FR", a
     const bare = await ask(hello, { task: emptyTask(locale), skipModel: true });
     assert.equal(bare.intent, "side_question");
     assert.equal(bare.task.objective, null);
-    assert.deepEqual(bare.chips, []);
+    assert.ok(bare.chips.length <= 3);
+    assert.ok(bare.chips.every((chip) => !/when do you|will you have|quem vem|aurez-vous/i.test(chip)));
     assertGuestReply(bare.reply, { max: 180 });
     assert.ok((bare.reply.match(/[.!?]/g) ?? []).length <= 2, bare.reply);
     const { plan, task } = activePlan(locale);
@@ -125,7 +126,8 @@ test("greetings with and without a plan stay one short line in EN, PT and FR", a
     assert.equal(withPlan.task.objective, task.objective);
     assert.equal(withPlan.task.constraints.dates?.start, "2026-11-16");
     assert.equal(withPlan.plan, plan);
-    assert.deepEqual(withPlan.chips, []);
+    assert.ok(withPlan.chips.length <= 3);
+    assert.ok(withPlan.chips.some((chip) => /relax|calmo|calme|boat|barco|bateau|pdf/i.test(chip)));
     assertGuestReply(withPlan.reply, { max: 220 });
     assert.match(withPlan.reply, locale === "pt" ? /3 dias/ : locale === "fr" ? /3 jours/ : /3-day/);
     assert.doesNotMatch(withPlan.reply, /unfinished|options i can|08:10/i);
@@ -141,7 +143,7 @@ for (const item of CASES) {
       assert.equal(result.intent, "side_question");
       assert.equal(result.plan, plan);
       assert.equal(result.task.constraints.dates?.start, task.constraints.dates?.start);
-      assert.deepEqual(result.chips, []);
+      assert.ok(result.chips.length <= 3);
       assertGuestReply(result.reply, { max: 220 });
       return;
     }

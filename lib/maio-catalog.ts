@@ -120,3 +120,13 @@ export function searchBusinesses(records: BusinessRecord[], query: string): Busi
 export function pharmacyRecords(records: BusinessRecord[]): BusinessRecord[] {
   return records.filter((record) => /pharmac|farmac/i.test(`${record.name} ${record.category}`)).slice(0, 3);
 }
+
+/** Car hire only. A quad or jet-ski rental is not a car. */
+export function carRentalRecords(records: BusinessRecord[]): BusinessRecord[] {
+  return records.filter((record) => {
+    const hay = norm(`${record.name} ${record.category}`);
+    if (/quad|jet ?ski|buggy|moto/.test(hay)) return false;
+    return /rent-a-car|rent a car|car rental|aluguer de carro|location de voiture/.test(hay)
+      || (/aluguer|rent-a-car/.test(hay) && /carro|car|voiture|auto/.test(hay));
+  }).slice(0, 3);
+}

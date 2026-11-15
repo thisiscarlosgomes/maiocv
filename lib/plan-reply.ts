@@ -175,7 +175,7 @@ export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | nul
   if (locale === "pt") {
     const pace = relaxed ? "Calmo, " : "Cheio, ";
     const car = plan.hasCar ? "de carro" : "sem carro";
-    const line = `${pace}${n} ${n === 1 ? "dia" : "dias"} ${car}.${short}`;
+    const line = short ? `${pace}${n} ${n === 1 ? "dia" : "dias"} ${car} — ${short.trim()}` : `${pace}${n} ${n === 1 ? "dia" : "dias"} ${car}.`;
     const second = stance === "unsure"
       ? "Assumo um carro alugado. Diga se não for o caso."
       : "Toque no cartão para cada dia. Quer mudanças?";
@@ -184,7 +184,7 @@ export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | nul
   if (locale === "fr") {
     const pace = relaxed ? "Tranquille, " : "Chargé, ";
     const car = plan.hasCar ? "avec une voiture" : "sans voiture";
-    const line = `${pace}${n} ${n === 1 ? "jour" : "jours"} ${car}.${short}`;
+    const line = short ? `${pace}${n} ${n === 1 ? "jour" : "jours"} ${car} — ${short.trim()}` : `${pace}${n} ${n === 1 ? "jour" : "jours"} ${car}.`;
     const second = stance === "unsure"
       ? "Je pars sur une voiture de location. Dites-le si ce n'est pas le cas."
       : "Touchez la carte pour chaque jour. Vous voulez changer quelque chose ?";
@@ -192,7 +192,7 @@ export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | nul
   }
   const pace = relaxed ? "Slow " : "Packed ";
   const car = plan.hasCar ? "with a car" : "without a car";
-  const line = `${pace}${n} ${n === 1 ? "day" : "days"} ${car}.${short}`;
+  const line = short ? `${pace}${n} ${n === 1 ? "day" : "days"} ${car} — ${short.trim()}` : `${pace}${n} ${n === 1 ? "day" : "days"} ${car}.`;
   const second = stance === "unsure"
     ? "I'm assuming a rental car. Say if you won't have one."
     : "Tap the card for each day. Want changes?";

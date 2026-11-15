@@ -1,14 +1,15 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
+import { applyLength, claimsUnappliedEdit, encodeTransportFact, isCarRentalQuestion, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
-import { addBoatTrip, noTripReply, pdfReply, relaxDay } from "./plan-edits.ts";
+import { addBoatTrip, addListedStop, answerAboutPlan, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape } from "./plan-edits.ts";
 import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
-import { loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
+import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
 import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
@@ -172,7 +173,7 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
         : "The timetable has no published time, so the plan does not set one.";
       text = `${text} ${extra}`.trim();
     }
-    text = publicPlanReply(text, next.locale, plan, stance);
+    text = publicPlanReply(text, next.locale, null, stance);
   }
   if (!preservePlaces) {
     const found = presentedPlaces(text, next.locale);
@@ -180,6 +181,7 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
     if (found.length >= 2) next = { ...next, lastPlaces: found };
   }
   if (intent === "side_question") next = { ...task, lastToolFacts: next.lastToolFacts };
+  if (plan && !next.completed.includes("itinerary")) next = refreshTask({ ...next, completed: [...next.completed, "itinerary"] });
   const carChips = isCarPending(next.pendingQuestion) ? CAR_CHIPS[next.locale] : null;
   const chips = (carChips ?? chipsOverride ?? followUpChips(next)).slice(0, 3);
   const ferryRan = toolEvents.some((event) => event.name === "get_transport");
@@ -261,7 +263,14 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
 
-  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built, work ?? turnWork(lastUser, seeded, today));
+  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => {
+    const changed = Boolean(plan && !samePlanShape(plan, current));
+    let text = reply;
+    if (!changed && (claimsUnappliedEdit(text) || /Tap the card|Toque no cartão|Touchez la carte/i.test(text))) {
+      text = sayRouter(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan.");
+    }
+    return result(next, text, changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built && changed, work ?? turnWork(lastUser, seeded, today));
+  };
 
   const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
   const composeRequest = (modelInput: Record<string, unknown> | null): Record<string, unknown> => {
@@ -283,7 +292,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   };
 
   if (classification.smallTalk) {
-    return finish(smallTalkReply(task.locale, spoken, current), current, [], task, [], false, false, false, "thinking");
+    return finish(smallTalkReply(task.locale, spoken, current), current, [], task, undefined, false, false, false, "thinking");
   }
 
   if (classification.chip) {
@@ -306,6 +315,16 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(edited.reply, edited.plan, [], next, undefined, true, false, false, "moment");
   }
 
+  const listedStop = listedStopTarget(spoken, task.lastPlaces);
+  if (current && listedStop) {
+    const edited = addListedStop(current, listedStop.day, listedStop.place, task.locale);
+    return finish(edited.reply, edited.plan, [], task, undefined, true, false, false, "moment");
+  }
+
+  if (current && answerAboutPlan(current, lastUser)) {
+    return finish(answerAboutPlan(current, lastUser)!, current, [], task, undefined, true);
+  }
+
   if (classification.cancelOnly) {
     return finish(say(task.locale, "Okay. We'll leave that.", "Está bem. Deixamos isso.", "D'accord. On laisse ça."), current);
   }
@@ -322,21 +341,22 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(hospitalReply(task.locale), current, [{ name: "emergency", ok: true }]);
   }
 
-  const noteTransport = (retrievedAt: string, ok: boolean) => {
+  const noteTransport = (retrievedAt: string, value: string) => {
     const pinned = task;
-    task = rememberFact(pinned, { name: "get_transport", retrievedAt, value: ok ? "timetable" : "unavailable" });
+    task = rememberFact(pinned, { name: "get_transport", retrievedAt, value: value.slice(0, 240) });
     task = { ...pinned, lastToolFacts: task.lastToolFacts };
   };
 
-  if (classification.intent === "side_question" && isTravelLookup(lastUser)) {
+  const specificFerry = /\b(is there a ferry|ha barco|y a-t-il un ferry|ferry timetable|horario do barco|horaire du ferry)\b/.test(spoken);
+  if (classification.intent === "side_question" && isTravelLookup(lastUser) && !specificFerry) {
     const table = await loadTimetable(deps.fetchImpl, now);
-    noteTransport(table.retrievedAt, table.ok);
+    noteTransport(table.retrievedAt, table.ok ? transportFact(table, today, lastUser) : "unavailable");
     return finish(answerTravelQuestion(lastUser, task.locale, table, today), current, [{ name: "get_transport", ok: table.ok }], task, undefined, true, false, false, "ferries");
   }
 
   if (classification.intent === "side_question" && /\b(in the air|flight status|estado do voo|praia flight)\b/.test(spoken)) {
     const flight = await loadFlightSchedule(deps.fetchImpl, now);
-    noteTransport(flight.retrievedAt, true);
+    noteTransport(flight.retrievedAt, `status ${flight.status}`.slice(0, 240));
     const reply = say(task.locale,
       `The published flight timetable is ${flight.status}, retrieved ${flight.retrievedAt}. That is not live status. No current rows does not mean there is no flight.`,
       `O horário de voos publicado está ${flight.status}, obtido em ${flight.retrievedAt}. Não é um estado ao vivo. Sem registos atuais não quer dizer que não haja voo.`,
@@ -348,7 +368,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const boats = await loadBoatSchedule(deps.fetchImpl, now);
     const date = extractConstraints(lastUser, today).dates?.start;
     const rows = (boats.data ?? []).filter((row) => !date || row.date === date);
-    noteTransport(boats.retrievedAt, true);
+    noteTransport(boats.retrievedAt, rows.length ? encodeTransportFact(rows.slice(0, 3).map((row) => ({ kind: /maio/i.test(row.to) && !/maio/i.test(row.from) ? "in" as const : "out" as const, date: row.date, time: row.departure, from: row.from, to: row.to }))) : "none");
     const reply = rows.length
       ? say(task.locale,
         `Published sailing: ${rows.map((row) => `${row.departure} ${row.from} to ${row.to}`).join(", ")}. Retrieved ${boats.retrievedAt}. Not live status.`,
@@ -389,6 +409,23 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(say(task.locale, `That is ${hit.name}.`, `É ${hit.name}.`, `C'est ${hit.name}.`), current, [], task, undefined, true);
   }
 
+  if (isCarRentalQuestion(lastUser) && !classification.planShaping) {
+    const catalog = await loadBusinesses(deps.fetchImpl);
+    const found = catalog.source === "api" ? carRentalRecords(catalog.records) : [];
+    const listed = found.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ");
+    const reply = found.length
+      ? say(task.locale,
+        `Car rental: ${listed}.`,
+        `Aluguer de carro: ${listed}.`,
+        `Location de voiture : ${listed}.`)
+      : say(task.locale,
+        "The Maio business list has no car-rental listing, so I won't invent a company or a number. Ask your guesthouse who they use.",
+        "A lista de negócios do Maio não tem aluguer de carros, por isso não invento uma empresa nem um número. Pergunte na pousada a quem recorrem.",
+        "La liste des commerces de Maio n'a pas de location de voiture, donc je n'invente ni enseigne ni numéro. Demandez à votre hébergement qui ils utilisent.");
+    const next = refreshTask({ ...task, completed: [...task.completed, "asked-rental"] });
+    return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }], next);
+  }
+
   if (isBusinessLookup(lastUser) && !classification.planShaping) {
     const catalog = await loadBusinesses(deps.fetchImpl);
     const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(spoken);
@@ -415,9 +452,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   if (classification.intent === "side_question" && !classification.planShaping) {
     const listed = answerPlaceList(lastUser, task.locale);
-    if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, []);
+    if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, undefined);
     const grounded = answerIslandQuestion(lastUser, task.locale);
-    if (grounded) return finish(grounded, current, [], task, []);
+    if (grounded) return finish(grounded, current, [], task, undefined);
   }
 
   if ((classification.patch.diet || classification.patch.budget) && !classification.planShaping && classification.intent !== "side_question") {
@@ -434,7 +471,17 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
-  const planning = classification.planShaping
+  const lengthEdit = parseLengthEdit(lastUser);
+  if (lengthEdit) {
+    const baseStart = task.constraints.dates?.start ?? current?.days[0]?.date;
+    const baseDays = task.constraints.dates?.days ?? current?.days.length;
+    if (baseStart && baseDays) {
+      const span = applyLength(baseStart, baseDays, lengthEdit);
+      task = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { dates: { start: span.start, days: span.days } }) });
+    }
+  }
+
+  const planning = (classification.planShaping || Boolean(lengthEdit && task.constraints.dates?.start))
     && classification.intent !== "side_question"
     && !classification.smallTalk
     && !classification.cancelOnly
@@ -455,7 +502,52 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   let plan: TripPlan | null = current;
   let builtRequest: TripRequest | null = null;
   const toolEvents: ToolEvent[] = [];
-  const offerPlan = classification.planShaping && task.scope.mode !== "research" && classification.intent !== "side_question";
+
+  async function rebuildPlan(nextTask: Task): Promise<{ plan: TripPlan; task: Task; events: ToolEvent[] } | null> {
+    try {
+      const base = requestFromTask(nextTask, today);
+      const table = await loadTimetable(deps.fetchImpl, now);
+      const withTravel = attachPublishedTravel(base, table);
+      const built = annotateMissingTravel(buildPlan({
+        request: withTravel as z.input<typeof TripRequestSchema>,
+        forecast: await forecast(String(withTravel.startDate), Number(withTravel.days)),
+        sailings: table.sailings,
+        forecastSource: forecastSourceName,
+      }), table);
+      const request = TripRequestSchema.parse(withTravel);
+      return {
+        plan: built,
+        task: syncTask(nextTask, request, built),
+        events: [{ name: "get_transport", ok: table.ok }, { name: "propose_itinerary", ok: true, arguments: withTravel }],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  if (lengthEdit && current && typeof task.constraints.car === "boolean") {
+    const rebuilt = await rebuildPlan(task);
+    if (!rebuilt) return finish(say(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan."), current);
+    const reply = lengthDiffReply(current, rebuilt.plan, task.locale) ?? lengthUnchangedReply(current, task.locale);
+    return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+  }
+
+  if (!classification.planShaping && /\b(?:weather|forecast|wave|waves|previsao do mar|meteo|houle|sea state)\b/.test(spoken) && !/\b(?:days?|dias?|jours?)\b/.test(spoken)) {
+    const rows = await loadDailyForecast(deps.fetchImpl, today, 2).catch(() => []);
+    const first = rows.find((row) => row.waveHeightM != null || row.tempMaxC != null);
+    const reply = first
+      ? say(task.locale,
+        `Sea forecast for ${first.date}: ${first.waveHeightM ?? "unknown"} m waves, ${first.tempMaxC ?? "unknown"}°C. That's a forecast, not a live reading.`,
+        `Previsão do mar para ${first.date}: ondas de ${first.waveHeightM ?? "sem número"} m, ${first.tempMaxC ?? "sem número"}°C. É previsão, não uma leitura ao vivo.`,
+        `Prévision marine pour le ${first.date} : vagues ${first.waveHeightM ?? "inconnues"} m, ${first.tempMaxC ?? "inconnue"}°C. C'est une prévision, pas une mesure en direct.`)
+      : say(task.locale,
+        "I don't have a sea forecast for that day, so I won't guess the waves.",
+        "Não tenho previsão do mar para esse dia, por isso não vou adivinhar as ondas.",
+        "Je n'ai pas de prévision marine pour ce jour, donc je ne devine pas les vagues.");
+    return finish(reply, current, [{ name: "get_sea_forecast", ok: Boolean(first) }], task, undefined, true, false, false, "forecast");
+  }
+
+  const offerPlan = (classification.planShaping || Boolean(lengthEdit)) && task.scope.mode !== "research" && classification.intent !== "side_question";
 
   const tools = {
     search_experiences: tool({
@@ -544,6 +636,33 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const safe = builtRequest && plan ? parseTripPlan(plan) : current;
   if (builtRequest && safe) task = syncTask(task, builtRequest, safe);
   return finish(generated.text, safe ?? current, toolEvents, task, undefined, false, false, Boolean(builtRequest && safe));
+}
+
+function listedStopTarget(text: string, places: Task["lastPlaces"]): { day: number; place: Task["lastPlaces"][number] } | null {
+  if (!/\b(?:add|acrescenta|ajoute|poe|poes|mets|met)\b/.test(text)) return null;
+  const day = Number(text.match(/\b(?:day|dia|jour)\s+(\d+)\b/)?.[1] ?? "");
+  if (!day || !places.length) return null;
+  const index = /\b(?:second|segund|deuxieme|2e|2nd)\b/.test(text) ? 1 : /\b(?:third|terceir|troisieme|3e|3rd)\b/.test(text) ? 2 : 0;
+  const place = places[index];
+  return place ? { day, place } : null;
+}
+
+function transportFact(table: { sailings: { date: string; departure: string; from: string; to: string }[]; flights: { date: string; departure: string; from: string; to: string }[] }, today: string, text: string): string {
+  const n = normalizeUtterance(text);
+  const wantFlight = /\b(?:flights?|voos?|vols?|avion)\b/.test(n);
+  const focus = spokenDates(text, today).start ?? (shortWeekday(text) !== undefined ? upcomingWeekday(today, shortWeekday(text)!) : null);
+  const byDate = <T extends { date: string; departure: string }>(rows: T[]) => [...rows].filter((row) => focus ? row.date === focus : row.date >= today).sort((a, b) => a.date.localeCompare(b.date) || a.departure.localeCompare(b.departure));
+  const mentions: TransportMention[] = [];
+  if (wantFlight) {
+    const leg = byDate(table.flights.filter((item) => item.from === "MMO"))[0];
+    if (leg) mentions.push({ kind: "flt", date: leg.date, time: leg.departure, from: leg.from, to: leg.to });
+  } else {
+    const inbound = byDate(table.sailings.filter((row) => /maio/i.test(row.to) && !/maio/i.test(row.from)))[0];
+    const outbound = byDate(table.sailings.filter((row) => /maio/i.test(row.from) && /santiago|praia/i.test(row.to)))[0];
+    if (inbound) mentions.push({ kind: "in", date: inbound.date, time: inbound.departure, from: inbound.from, to: inbound.to });
+    if (outbound) mentions.push({ kind: "out", date: outbound.date, time: outbound.departure, from: outbound.from, to: outbound.to });
+  }
+  return mentions.length ? encodeTransportFact(mentions) : "none";
 }
 
 function smallTalkReply(locale: TaskLocale, spoken: string, plan: TripPlan | null): string {

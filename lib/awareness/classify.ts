@@ -1,3 +1,4 @@
+import { deicticDate, isCarRentalQuestion, isTravelChoice, isTravelQuestion, latestTransport, refersToFerry, refersToFlight, shortWeekday, spokenDates } from "../plan-router.ts";
 import { EXPERIENCES, addDays, experience } from "../trip.ts";
 import { resolveReference, type ReferenceHit } from "./context.ts";
 import {
@@ -123,8 +124,9 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const patch: TaskConstraints = {};
   const days = n.match(/\b(\d+)\s*(?:days?|dias?|jours?)\b/);
   if (days) patch.dates = { ...(patch.dates ?? {}), days: Number(days[1]) };
-  if (/\b(?:today|hoje|aujourd'hui|aujourdhui)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: today };
-  if (/\b(?:tomorrow|amanha|demain)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: addDays(today, 1) };
+  const scheduling = /\b(?:\d+\s*(?:days?|dias?|jours?)|from|partir|arriv|stay|fica|plan|plano|voyage|viagem)\b/.test(n);
+  if (scheduling && /\b(?:today|hoje|aujourd'hui|aujourdhui)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: today };
+  if (scheduling && /\b(?:tomorrow|amanha|demain)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: addDays(today, 1) };
 
   // "Saturday night" / "lazier" names a daypart, not a new start date.
   const quietNight = /\bquiet\b|\blazier\b|\bnoite calma\b|\bsoiree calme\b/.test(n);
@@ -141,9 +143,20 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const party = extractParty(n);
   if (party) patch.party = party;
 
-  const stance = carPhrase(n);
+  const stance = carPhrase(text);
   if (stance === "no") patch.car = false;
   else if (stance === "yes" || stance === "unsure") patch.car = true;
+
+  const spelled = spokenDates(text, today);
+  if (spelled.start) patch.dates = { ...(patch.dates ?? {}), start: spelled.start };
+  if (spelled.days) patch.dates = { ...(patch.dates ?? {}), days: spelled.days };
+  const beachOrdinal = /\bsegunda\b\s+(?:praia|beach|plage|one)\b/.test(n) || /^a segunda\b/.test(n);
+  if (!patch.dates?.start && dateContext && !quietNight && !beachOrdinal) {
+    const short = shortWeekday(n);
+    if (short !== undefined && !negated.has(short) && !chosen) {
+      patch.dates = { ...(patch.dates ?? {}), start: upcomingDate(today, short) };
+    }
+  }
 
   if (/\bquiet\b|\bnoite calma\b|\bsoiree calme\b|\blazier\b|\bno bar\b|\bsem bar\b|\bsans bar\b/.test(n)) patch.quietEvenings = true;
   if (/\b(?:packed|action-packed|busy days|full days|ritmo intenso|cheio|corrido|rythme soutenu|journee chargee)\b/.test(n)) patch.pace = "packed";
@@ -173,11 +186,16 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   if (interests.length) patch.interests = interests;
 
   const time = clockOf(n);
-  const ferry = /\b(?:ferry|barco)\b/.test(n) && /\b(?:arriv|chega|arrive)\b/.test(n);
-  const flight = /\b(?:land at|aterr\w*|flight|voo|avion)\b/.test(n);
-  if (ferry || flight) {
-    patch.arrival = { mode: ferry && !flight ? "ferry" : flight ? "flight" : "ferry", verified: false, ...(time ? { time } : {}) };
-  } else if (time && /\b(?:land|aterr|arrive at|chegamos as)\b/.test(n)) {
+  const mentionsFerry = /\b(?:ferrys?|ferries|barcos?|bateaux?)\b/.test(n);
+  const mentionsFlight = /\b(?:flights?|voos?|vols?|avion)\b/.test(n);
+  const arriving = /\b(?:arriv|chega|arrive|land at|aterr\w*|atterr\w*)\b/.test(n);
+  if (isTravelChoice(text) && !isCarRentalQuestion(text)) {
+    const mode = mentionsFlight && !mentionsFerry ? "flight" : "ferry";
+    patch.departure = { mode, ...(time ? { time } : {}) };
+  } else if (arriving && (mentionsFerry || mentionsFlight || /\bland at\b|\baterr|\batterr/.test(n))) {
+    const mode = mentionsFerry && !mentionsFlight ? "ferry" : mentionsFlight || /\bland at\b|\baterr|\batterr/.test(n) ? "flight" : "ferry";
+    patch.arrival = { mode, verified: false, ...(time ? { time } : {}) };
+  } else if (time && /\b(?:land at|aterr\w*|atterr\w*|chegamos as)\b/.test(n)) {
     patch.arrival = { mode: "flight", verified: false, time };
   }
   return patch;
@@ -236,16 +254,14 @@ export function isTimetableQuestion(text: string): boolean {
     && !/\b(?:stay|days|dias|jours|plan)\b/.test(text);
 }
 
-/** "Next ferry to Praia" / "flights from Maio on Wednesday", not a request to build a trip. */
+/** "Next ferry to Praia" / "whens the next flight" / "prochain vol", not a request to build a trip. */
 export function isTravelLookup(text: string): boolean {
   const n = normalizeUtterance(text);
-  if (/\b\d+\s*(?:days?|dias?|jours?)\b/.test(n) || /\b(?:stay|itinerary|roteiro)\b/.test(n)) return false;
-  const ferry = /\b(?:ferry|ferries|barco|barcos|bateau|bateaux)\b/.test(n)
-    && /\b(?:next|when|proxima|proximo|prochain|horario|horaire|what time|que horas|a que horas|quelle heure|to praia|para a praia|para praia|vers praia)\b/.test(n);
-  const flight = /\b(?:flights?|voos?|vols?|avion)\b/.test(n)
-    && /\b(?:from|do maio|de maio|depuis|wednesday|quarta|mercredi|when|next|horario|horaire|que horas)\b/.test(n)
-    && !/\b(?:in the air|flight status|estado do voo)\b/.test(n);
-  return ferry || flight;
+  if (isTravelChoice(text)) return false;
+  if (/\b(?:in the air|flight status|estado do voo)\b/.test(n)) return false;
+  if (/\b(?:stay|itinerary|roteiro)\b/.test(n) && !isTravelQuestion(text)) return false;
+  if (/\b\d+\s*(?:days?|dias?|jours?)\b/.test(n) && !isTravelQuestion(text)) return false;
+  return isTravelQuestion(text);
 }
 
 export function isBusinessLookup(text: string): boolean {
@@ -304,8 +320,8 @@ export function isGeneralIslandQuestion(text: string): boolean {
   const beaches = /\b(?:beach|beaches|praia|praias|plage|plages)\b/.test(n) && /\b(?:best|which|where|qual|quais|melhor(?:es)?|meilleures?|tell|about|sobre|what|quais sao|where are)\b/.test(n);
   const safe = /\b(?:safe|safety|seguro|segura|seguranca|securite|surete)\b/.test(n) || /\b(?:c'est|est-ce|est ce)\s+sur\b/.test(n);
   const services = /\b(?:pharmacy|pharmacies|farmacia|pharmacie|atm|atms|multibanco|caixas? automatic[oa]s?|distributeurs?)\b/.test(n);
-  const eat = /\b(?:where (?:to|should|can) (?:we |i )?(?:eat|have)|onde comer|ou manger|où manger)\b/.test(n);
-  const around = /\b(?:get around|getting around|desloc|deplacer|aluguer)\b/.test(n);
+  const eat = /\b(?:where (?:to |should |can )?(?:we |i )?(?:eat|have)|onde comer|ou manger)\b/.test(n);
+  const around = /\b(?:get around|getting around|desloc\w*|deplac\w*|aluguer)\b/.test(n);
   return aboutIsland || beaches || safe || services || eat || around;
 }
 
@@ -317,6 +333,7 @@ const CAR_UNSURE = /\b(?:not sure(?: yet)?|unsure|ainda nao sei|nao sei|pas enco
 /** Explicit car wording. A how-to ("how do we get around without a car") is not an answer. */
 function carPhrase(text: string): "yes" | "no" | "unsure" | null {
   if (HOW_AROUND.test(text)) return null;
+  if (isCarRentalQuestion(text)) return null;
   if (CAR_UNSURE.test(text)) return "unsure";
   if (CAR_NO.test(text)) return "no";
   if (CAR_YES.test(text)) return "yes";
@@ -351,6 +368,26 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   const reference = resolveReference(text, task.lastPlaces);
   const research = isResearchQuestion(text);
   const patch = extractConstraints(text, ctx.today);
+  if (!patch.dates?.start) {
+    const pointed = deicticDate(text, task);
+    if (pointed) patch.dates = { ...(patch.dates ?? {}), start: pointed };
+  }
+  const remembered = latestTransport(task);
+  if (refersToFerry(text)) {
+    const row = remembered.find((item) => item.kind === "in") ?? remembered.find((item) => item.kind === "out");
+    if (row) {
+      patch.dates = { ...(patch.dates ?? {}), start: patch.dates?.start ?? row.date };
+      if (row.kind === "in") patch.arrival = { mode: "ferry", time: row.time, verified: true };
+      else patch.departure = { mode: "ferry", time: row.time };
+    }
+  } else if (refersToFlight(text)) {
+    const row = remembered.find((item) => item.kind === "flt");
+    if (row) {
+      patch.dates = { ...(patch.dates ?? {}), start: patch.dates?.start ?? row.date };
+      if (/maio|mmo/i.test(row.to) && !/maio|mmo/i.test(row.from)) patch.arrival = { mode: "flight", time: row.time, verified: true };
+      else patch.departure = { mode: "flight", time: row.time };
+    }
+  }
   const carStance = resolveCarStance(text, task.pendingQuestion);
   if (carStance === "no") patch.car = false;
   else if (carStance === "yes" || carStance === "unsure") patch.car = true;
@@ -371,7 +408,8 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   if (chip) {
     return { ...base, intent: "correction", chip, planShaping: false, patch: {}, carStance: null, research: false };
   }
-  if (isTravelLookup(text) || isTimetableQuestion(text)) {
+  const asksForPlan = /\b(?:\d+\s*(?:days?|dias?|jours?)|make me a plan|faz(?:-me)? um plano|fais(?:-moi)? un plan|plan my|planeia|planifie)\b/.test(n);
+  if ((isTravelLookup(text) || isTimetableQuestion(text)) && !asksForPlan) {
     return { ...side, objective: task.objective ?? undefined };
   }
   if (isBusinessLookup(text) && !patch.dates?.days && !patch.dates?.start) {
@@ -396,7 +434,13 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   if (locale && !planShaping && !dietOnly && !research && !isQuestion(n)) {
     return { ...base, intent: "continuation", planShaping: false };
   }
-  if (contradicts(task, patch) || (explicitCorrection(n) && (patch.dates || patch.car !== undefined || patch.party))) {
+  const datesMoved = Boolean(
+    (patch.dates?.start && patch.dates.start !== task.constraints.dates?.start)
+    || (patch.dates?.days && patch.dates.days !== task.constraints.dates?.days)
+    || (patch.departure && (patch.departure.time !== task.constraints.departure?.time || patch.departure.mode !== task.constraints.departure?.mode))
+    || (patch.arrival && (patch.arrival.time !== task.constraints.arrival?.time || patch.arrival.mode !== task.constraints.arrival?.mode)),
+  );
+  if (contradicts(task, patch) || datesMoved || (explicitCorrection(n) && (patch.dates || patch.car !== undefined || patch.party || patch.departure || patch.arrival))) {
     return { ...base, intent: "correction", planShaping: true };
   }
   if (!dietOnly && (isFactualAside(n) || (isQuestion(n) && !planShaping) || (reference.kind && !planShaping))) {
