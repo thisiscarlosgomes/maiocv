@@ -8,7 +8,8 @@ import { venueType } from "./plan-rules.ts";
  *  Slow pace: 08:30 breakfast · 10:30 one beach · lunch · open afternoon · sunset · dinner.
  *  At most 4 anchored stops (a place or a requested tour) plus meals. No second activity, no bar, no default quad.
  *  Arrival: transfer → meal → easy beach → sunset → dinner (3–5 stops, no tour).
- *  Departure: breakfast → short beach → lunch if leaving late → head to the airport/port (2–4 stops, no tour).
+ *  Departure: the row is the real ferry or flight time. Evening or unpublished: morning place, lunch, then depart.
+ *  Early (before 12:00): breakfast, then depart, and the note says the day is short. Never a made-up 09:00 buffer.
  *  Real places only; unfillable slots become generic rows. At most one repeat per day, with the reason in the note. */
 
 export const FULL_DAY_SLOTS: Slot[] = ["breakfast", "morning", "lunch", "rest", "activity", "sunset", "dinner"];
@@ -97,7 +98,7 @@ export type DayState = { ids: Set<string>; repeats: number };
 /** Builds one day's items. `tour` is the trip's single experience when it falls on this (full) day. */
 export function buildDay(args: {
   index: number; kind: DayKind; rough: boolean; sunset?: string | null; picker: Picker; pools: Pools;
-  arrival?: PlanItem | null; arrivalReadyMin?: number; leave?: { mode: "ferry" | "flight"; time: string; note?: string };
+  arrival?: PlanItem | null; arrivalReadyMin?: number; leave?: { mode: "ferry" | "flight"; time?: string; note?: string };
   tour?: Experience | null; quietNight?: boolean;
 }): PlanItem[] {
   const { index: i, kind, rough, picker, pools } = args;
@@ -159,20 +160,31 @@ export function buildDay(args: {
   }
 
   if (kind === "departure") {
-    const lead = args.leave!.mode === "flight" ? 120 : 60;
-    const leave = toMin(args.leave!.time) - lead;
-    if (leave < toMin("09:30")) free("breakfast", "breakfast-stay", Math.max(toMin("06:00"), leave - 60), 45);
-    else {
+    const mode = args.leave?.mode ?? "ferry";
+    const at = args.leave?.time ? toMin(args.leave.time) : null;
+    // The row shows the published or guest-stated clock. A buffer only decides what still fits before it.
+    const early = at !== null && at < toMin("12:00");
+    const buffer = mode === "flight" ? 90 : 45;
+    const freeBy = at === null ? 24 * 60 : at - buffer;
+    const breakfast = () => {
+      if (at !== null && at < toMin("09:30")) {
+        free("breakfast", "breakfast-stay", Math.max(toMin("06:30"), at - 75), 40);
+        return;
+      }
       const cafe = picker.pick(picker.cafes(), foodPt, from, day, "meal", true);
       if (cafe) add("breakfast", { kind: "food", refId: cafe.id, start: T.breakfast, durationMin: 45, ...(cafe.note ? { note: cafe.note } : {}) });
       else free("breakfast", "breakfast-stay", toMin(T.breakfast), 45);
+    };
+    breakfast();
+    if (!early && freeBy >= toMin("11:30")) {
+      const start = toMin(T.morning);
+      const dur = Math.min(120, freeBy - start);
+      if (dur >= 60) { from = TOWN; outing("morning", start, dur, { sheltered: rough, beachOnly: true }); }
     }
-    if (leave >= toMin("11:30")) {
-      const dur = Math.min(120, leave - toMin(T.morning) - (leave >= toMin("14:00") ? 180 : 30));
-      if (dur >= 60) { from = TOWN; outing("morning", toMin(T.morning), dur, { sheltered: rough, beachOnly: true }); }
-    }
-    if (leave >= toMin("14:00")) meal("lunch", toMin(T.lunch), 75, "lunch-free");
-    free("departure", args.leave!.mode === "flight" ? "depart-airport" : "depart-port", leave, lead, args.leave!.note);
+    if (!early && freeBy >= toMin("14:15")) meal("lunch", toMin(T.lunch), 75, "lunch-free");
+    const refId = mode === "flight" ? "depart-airport" : "depart-port";
+    if (at === null) add("departure", { kind: "free", refId, durationMin: 30, ...(args.leave?.note ? { note: args.leave.note } : {}) });
+    else free("departure", refId, at, 30, args.leave?.note);
     return items;
   }
 
@@ -295,11 +307,16 @@ export const restCovered = (items: PlanItem[]) => items.some((x) => x.kind === "
 /** No two stops may overlap. Free time yields to a real stop (trimmed, or dropped if under 30 min left); otherwise the
  *  later stop moves to when the earlier one ends. The arrival transport row is a header and is not checked. */
 export function resolveOverlaps(input: PlanItem[]): PlanItem[] {
-  const sorted = [...input].sort((a, b) => toMin(a.start) - toMin(b.start) || (a.kind === "free" ? 1 : 0) - (b.kind === "free" ? 1 : 0));
+  const rank = (item: PlanItem) => {
+    if (item.start) return toMin(item.start);
+    if (item.slot === "departure" || (item.kind === "free" && item.refId.startsWith("depart-"))) return 24 * 60;
+    return -1;
+  };
+  const sorted = [...input].sort((a, b) => rank(a) - rank(b) || (a.kind === "free" ? 1 : 0) - (b.kind === "free" ? 1 : 0));
   const out: PlanItem[] = [];
   const end = (x: PlanItem) => toMin(x.start) + (x.durationMin ?? 0);
   for (let item of sorted) {
-    if (item.kind === "transport") { out.push(item); continue; }
+    if (item.kind === "transport" || !item.start) { out.push(item); continue; }
     for (;;) {
       const k = out.findLastIndex((x) => x.kind !== "transport");
       const prev = k >= 0 ? out[k] : null;

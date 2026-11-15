@@ -233,9 +233,10 @@ export function attachPublishedTravel(request: Record<string, unknown>, table: T
   if (days > 1 && !departure?.time) {
     const ferry = table.sailings.find((row) => row.date === last && fromIsland(row));
     const flight = table.flights.find((leg) => leg.date === last && leg.from === "MMO");
-    const mode = departure?.mode ?? (ferry ? "ferry" : flight ? "flight" : null);
+    const mode = departure?.mode ?? (ferry ? "ferry" : flight ? "flight" : "ferry");
     if (mode === "ferry" && ferry) next.departure = { mode: "ferry", time: ferry.departure };
     else if (mode === "flight" && flight) next.departure = { mode: "flight", time: flight.departure };
+    else next.departure = { mode };
   }
   return next;
 }

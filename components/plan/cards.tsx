@@ -38,7 +38,7 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
       <span className="plan-stop-m">
         <span className="plan-stop-title">{v.title}</span>
         <span className="plan-stop-meta">{v.meta}</span>
-        <span className="plan-stop-time"><time className="mono">{timeSpan(item)}</time> · {partOfDay(item.start, s)}</span>
+        <span className="plan-stop-time"><time className="mono">{item.start ? timeSpan(item) : (item.slot === "departure" || item.refId.startsWith("depart-") ? s.timeUnpublished : "")}</time> · {partOfDay(item.start, s)}</span>
       </span>
     </>
   );

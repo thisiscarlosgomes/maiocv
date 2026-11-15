@@ -123,6 +123,7 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const patch: TaskConstraints = {};
   const days = n.match(/\b(\d+)\s*(?:days?|dias?|jours?)\b/);
   if (days) patch.dates = { ...(patch.dates ?? {}), days: Number(days[1]) };
+  if (/\b(?:today|hoje|aujourd'hui|aujourdhui)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: today };
   if (/\b(?:tomorrow|amanha|demain)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: addDays(today, 1) };
 
   // "Saturday night" / "lazier" names a daypart, not a new start date.

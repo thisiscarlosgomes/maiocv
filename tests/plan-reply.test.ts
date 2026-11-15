@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { toMin } from "../lib/full-day.ts";
-import { formatItinerary, humanPlanDate, localizeGuestLabels, planBlurb, publicPlanReply, stripPlanLeaks } from "../lib/plan-reply.ts";
+import { expandRunOn, formatItinerary, humanPlanDate, localizeGuestLabels, planBlurb, publicPlanReply, stripPlanLeaks } from "../lib/plan-reply.ts";
 import type { TripPlan } from "../lib/trip.ts";
 
 const DUMP = "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Enzo (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18";
@@ -39,6 +39,27 @@ test("a dumped itinerary becomes a two-line blurb, not the day list", () => {
     assert.match(reply, locale === "pt" ? /Toque no cartão/ : locale === "fr" ? /Touchez la carte/ : /Tap the card/);
     assert.doesNotMatch(reply, /\d{4}-\d{2}-\d{2}|food listing|## |08:10|Free time|Tempo livre/);
   }
+});
+
+test("day, dia and jour are not split mid-sentence", () => {
+  const samples = [
+    ["en", "I added Sport Fishing (Big Game) on day 2. That's the boat trip in the listings, and the afternoon stays open."],
+    ["pt", "Acrescentei Sport Fishing (Big Game) no dia 2. O dia 2 ficou mais leve, com a praia de manhã e a tarde livre."],
+    ["fr", "J'ai ajouté Sport Fishing (Big Game) au jour 2. Le jour 2 reste léger, avec la plage le matin et l'après-midi libre."],
+  ] as const;
+  for (const [locale, text] of samples) {
+    assert.ok(text.length >= 80, `${locale} ${text.length}`);
+    assert.equal(expandRunOn(text), text);
+    assert.doesNotMatch(expandRunOn(text), /\bon\s*\n+\s*day|\bno\s*\n+\s*dia|\bO\s*\n+\s*dia|\bau\s*\n+\s*jour|\bLe\s*\n+\s*jour/i);
+    const reply = publicPlanReply(text, locale, plan(locale));
+    assert.equal(reply, text);
+    assert.doesNotMatch(reply, /Tap the card|Toque no cartão|Touchez la carte/);
+  }
+  const glued = "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast on the shore Day 2 — 2026-11-17 - 10:30 — A beach walk after lunch";
+  const split = expandRunOn(glued);
+  assert.match(split, /slow\n\nDay 1 —/);
+  assert.match(split, /\n\nDay 2 —/);
+  assert.doesNotMatch(split, /on\s*\n+\s*day/i);
 });
 
 test("a short acknowledgement is not rewritten into an itinerary", () => {
