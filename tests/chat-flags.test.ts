@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import type { LanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
+import { emptyTask, refreshTask } from "../lib/awareness/task.ts";
 import { applyFlagIndexes, buildFlag, explicitDates, FLAG_FIELDS, FLAG_TTL_SECONDS, fold, inspectTurn, publicFlag, trimContext, type TurnForFlags } from "../lib/chat-flags.ts";
 import { runPlanAgent, type PlanReplyTurn } from "../lib/plan-agent.ts";
+import { buildPlan } from "../lib/trip-planner.ts";
 import { scriptedModel } from "./plan/mock-model.ts";
 
 const same = { start: "2026-11-16", end: "2026-11-18", days: 3, car: false, pace: "slow", stops: 4 };
@@ -187,6 +191,47 @@ test("the chat_flags TTL index is 30 days and the writer does not persist reques
   assert.doesNotMatch(source, /userAgent|x-forwarded-for|remoteAddress|cookie/);
 });
 
+test("diff-derived replies are flagged only when the plan does not match the claim", () => {
+  const before = { start: "2026-11-16", end: "2026-11-18", days: 3, car: false, pace: "slow", stops: 4 };
+  const shifted = { start: "2026-11-18", end: "2026-11-20", days: 3, car: false, pace: "slow", stops: 4 };
+  const moved = [
+    ["en", "going on the 18th", "Moved your 3 days to Wed 18 Nov – Fri 20 Nov."],
+    ["pt", "chego dia 18", "Mudei os 3 dias para qua 18 nov – sex 20 nov."],
+    ["fr", "j'arrive le 18", "J'ai déplacé vos 3 jours : mer. 18 nov – ven. 20 nov."],
+  ] as const;
+  for (const [locale, userMessage, botReply] of moved) {
+    const reasons = inspectTurn(turn({ locale, userMessage, botReply, planBefore: before, planAfter: shifted, planTurn: true }));
+    assert.equal(reasons.includes("claimed_change_unchanged"), false, botReply);
+    assert.equal(reasons.includes("dates_mismatch"), false, botReply);
+  }
+  const lengthened = { start: "2026-11-16", end: "2026-11-19", days: 4, car: true, pace: "slow", stops: 5 };
+  const longer = inspectTurn(turn({
+    userMessage: "add a day",
+    botReply: "Your trip now runs 4 days, Mon 16 Nov to Thu 19 Nov.",
+    planBefore: { ...before, car: true },
+    planAfter: lengthened,
+    planTurn: true,
+  }));
+  assert.equal(longer.includes("claimed_change_unchanged"), false);
+  assert.equal(longer.includes("dates_mismatch"), false);
+  const already = inspectTurn(turn({
+    userMessage: "make Saturday lazier",
+    botReply: "The trip already matches that.",
+    planBefore: before,
+    planAfter: before,
+    planTurn: true,
+  }));
+  assert.deepEqual(already, []);
+  const car = inspectTurn(turn({
+    userMessage: "we rented a car",
+    botReply: "Updated: with a car.",
+    planBefore: before,
+    planAfter: { ...before, car: true },
+    planTurn: true,
+  }));
+  assert.equal(car.includes("claimed_change_unchanged"), false);
+});
+
 test("the plan agent calls the reply hook once and still returns the reply", async () => {
   const seen: PlanReplyTurn[] = [];
   const result = await runPlanAgent(
@@ -202,4 +247,49 @@ test("the plan agent calls the reply hook once and still returns the reply", asy
   assert.equal(seen[0].reply, result.reply);
   assert.equal(seen[0].userMessage, "hi");
   assert.equal(seen[0].toolFacts.includes("unused"), false);
+});
+
+test("the reply hook sees a diff-derived move and does not flag it", async () => {
+  const forecast = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"].map((date) => ({
+    date, waveHeightM: 0.8, windKmh: 16, tempMaxC: 28, sunset: "18:10",
+  }));
+  const plan = buildPlan({
+    request: { startDate: "2026-11-16", days: 3, locale: "en", adults: 2, hasCar: false, boatTrips: 0, pace: "slow" },
+    forecast, sailings: [],
+  });
+  const task = refreshTask({
+    ...emptyTask("en"),
+    objective: plan.title,
+    constraints: { dates: { start: "2026-11-16", days: 3 }, party: { adults: 2, kids: 0 }, car: false, pace: "slow" },
+    completed: ["itinerary"],
+  });
+  const seen: PlanReplyTurn[] = [];
+  const bomb = new MockLanguageModelV4({
+    doGenerate: async () => { throw new Error("model should not be called"); },
+  }) as unknown as LanguageModel;
+  const result = await runPlanAgent(
+    [{ role: "user", content: "going on the 18th" }],
+    plan,
+    { model: bomb, fetchImpl: (async () => new Response("not found", { status: 404 })) as typeof fetch, now: new Date("2026-11-15T12:00:00Z"), onReply: (turn) => seen.push(turn) },
+    task,
+  );
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].reply, result.reply);
+  assert.match(seen[0].reply, /Moved your 3 days/);
+  assert.equal(seen[0].planAfter?.days[0]?.date, "2026-11-18");
+  assert.equal(seen[0].planTurn, true);
+  const reasons = inspectTurn({
+    surface: "plan",
+    locale: "en",
+    userMessage: seen[0].userMessage,
+    previousTurns: seen[0].previousTurns,
+    botReply: seen[0].reply,
+    planBefore: seen[0].planBefore,
+    planAfter: seen[0].planAfter,
+    chips: seen[0].chips,
+    planTurn: seen[0].planTurn,
+    toolFacts: seen[0].toolFacts,
+  });
+  assert.equal(reasons.includes("claimed_change_unchanged"), false, reasons.join(","));
+  assert.equal(reasons.includes("plan_reemitted"), false);
 });

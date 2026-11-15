@@ -2,7 +2,7 @@ import type { Locale } from "./locale.ts";
 
 const en = {
   eyebrow: "Trip planner · test", title: "Plan your days on Maio", lede: "Say how many days you have. We plan around the sea.",
-  tripPlan: "Trip plan", greeting: "Olá! How many days do you have on Maio, and when? I plan around the sea.", startChips: ["3 days, slow pace", "We're 2 adults, no car", "Best beaches?"],
+  tripPlan: "Trip plan", greeting: "Olá! How many days do you have on Maio, and when? I plan around the sea.", startChips: ["3 days, slow pace", "We're 2 adults, no car", "Show me the best beaches"],
   placeholder: "3 days, two of us…", followUp: "Change anything, just ask", send: "Send", thinking: "Checking sea forecast and places…",
   error: "The planner is unavailable. Try again.", editFailed: "Couldn't update the plan. Nothing changed.",
   yourTrip: "Your trip", empty: "Your plan will appear here as cards.", try: "Try",
@@ -52,7 +52,7 @@ const pt: Strings = {
   walk: (n: number) => `~${n} min a pé`,
   taxi: (n: number) => `~${n} min de táxi (aluguer)`,
   eyebrow: "Planeador · teste", title: "Planeie os seus dias no Maio", lede: "Diga quantos dias tem. Planeamos à volta do mar.",
-  tripPlan: "Plano de viagem", greeting: "Olá! Quantos dias vai passar no Maio, e quando? Eu planeio em função do mar.", startChips: ["3 dias, ritmo calmo", "Somos 2 adultos, sem carro", "Melhores praias?"],
+  tripPlan: "Plano de viagem", greeting: "Olá! Quantos dias vai passar no Maio, e quando? Eu planeio em função do mar.", startChips: ["3 dias, ritmo calmo", "Somos 2 adultos, sem carro", "Mostra-me as melhores praias"],
   placeholder: "3 dias, somos dois…", followUp: "Mude o que quiser, é só pedir", send: "Enviar", thinking: "A ver a previsão do mar e os lugares…",
   error: "O planeador não está disponível. Tente de novo.", editFailed: "Não foi possível atualizar o plano. Nada mudou.",
   yourTrip: "A sua viagem", empty: "O seu plano aparece aqui em cartões.", try: "Experimente",
@@ -93,7 +93,7 @@ const fr: Strings = {
   walk: (n: number) => `~${n} min à pied`,
   taxi: (n: number) => `~${n} min en taxi (aluguer)`,
   eyebrow: "Planificateur · test", title: "Planifiez vos jours à Maio", lede: "Dites combien de jours vous avez. On planifie selon la mer.",
-  tripPlan: "Plan de voyage", greeting: "Olá ! Combien de jours passez-vous à Maio, et quand ? Je planifie selon la mer.", startChips: ["3 jours, rythme calme", "Nous sommes 2 adultes, sans voiture", "Meilleures plages ?"],
+  tripPlan: "Plan de voyage", greeting: "Olá ! Combien de jours passez-vous à Maio, et quand ? Je planifie selon la mer.", startChips: ["3 jours, rythme calme", "Nous sommes 2 adultes, sans voiture", "Montre-moi les meilleures plages"],
   placeholder: "3 jours, nous sommes deux…", followUp: "Changez ce que vous voulez, demandez", send: "Envoyer", thinking: "Prévision de la mer et lieux…",
   error: "Le planificateur est indisponible. Réessayez.", editFailed: "Impossible de modifier le plan. Rien n'a changé.",
   yourTrip: "Votre voyage", empty: "Votre plan apparaîtra ici en cartes.", try: "Essayez",

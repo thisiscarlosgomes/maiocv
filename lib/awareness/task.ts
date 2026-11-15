@@ -187,7 +187,7 @@ export type GuestChip =
 /** Correction chips, in the guest's language. These are actions, not new trips. */
 export function parseGuestChip(text: string): GuestChip | null {
   const n = text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/['’]/g, "'").replace(/[.!?…]+$/g, "").replace(/\s+/g, " ").trim();
-  const relax = n.match(/^(?:make day (\d+) more relaxed|deixa o dia (\d+) mais calmo|rends le jour (\d+) plus calme)$/);
+  const relax = n.match(/^(?:make day (\d+) more (?:relaxed|calm|light)|(?:deixa|deixe) o dia (\d+) mais (?:relaxado|calmo|leve)|(?:rends|laisse) le jour (\d+) plus (?:detendu|calme|leger))$/);
   if (relax) {
     const day = Number(relax[1] ?? relax[2] ?? relax[3]);
     return day >= 1 && day <= 14 ? { kind: "relax", day } : null;
@@ -208,7 +208,7 @@ const VOICE: Record<TaskLocale, { days: string; party: string; partyNoCar: strin
     days: "3 days, slow pace",
     party: "We're 2 adults",
     partyNoCar: "We're 2 adults, no car",
-    beaches: "Best beaches?",
+    beaches: "Show me the best beaches",
     relax: "Make day 2 more relaxed",
     boat: "Add a boat trip",
     rent: "Where can I rent a car?",
@@ -218,7 +218,7 @@ const VOICE: Record<TaskLocale, { days: string; party: string; partyNoCar: strin
     days: "3 dias, ritmo calmo",
     party: "Somos 2 adultos",
     partyNoCar: "Somos 2 adultos, sem carro",
-    beaches: "Melhores praias?",
+    beaches: "Mostra-me as melhores praias",
     relax: "Deixa o dia 2 mais calmo",
     boat: "Acrescenta um passeio de barco",
     rent: "Onde alugo um carro?",
@@ -228,7 +228,7 @@ const VOICE: Record<TaskLocale, { days: string; party: string; partyNoCar: strin
     days: "3 jours, rythme calme",
     party: "Nous sommes 2 adultes",
     partyNoCar: "Nous sommes 2 adultes, sans voiture",
-    beaches: "Meilleures plages ?",
+    beaches: "Montre-moi les meilleures plages",
     relax: "Rends le jour 2 plus calme",
     boat: "Ajoute une sortie en bateau",
     rent: "Où louer une voiture ?",
@@ -278,8 +278,10 @@ export function followUpChips(task: Task): string[] {
   }
   const boatDone = task.completed.includes("boat") || task.completed.includes("boat-skipped") || (c.boatTrips ?? 0) > 0;
   if (!boatDone) chips.push(copy.boat);
-  if (task.completed.includes("pdf")) chips.push(copy.beaches);
-  else chips.push(c.car === false ? copy.rent : copy.pdf);
+  const rentSpent = task.completed.includes("asked-rental");
+  if (task.completed.includes("pdf")) chips.push(c.car === false && !rentSpent ? copy.rent : copy.beaches);
+  else if (c.car === false && !rentSpent) chips.push(copy.rent);
+  else chips.push(copy.pdf);
   return [...new Set(chips)].slice(0, 3);
 }
 

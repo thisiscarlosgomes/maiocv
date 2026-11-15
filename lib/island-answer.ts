@@ -103,7 +103,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   const atm = /\b(?:atm|atms|multibanco|caixas? automatic[oa]s?|distributeurs?)\b/.test(n);
   const eat = /\b(?:eat|food|lunch|dinner|restaurant|comer|almoco|jantar|manger|dejeuner|diner)\b/.test(n)
     && !/\b(?:around there|por ali|la-bas|la bas|pres de la)\b/.test(n);
-  const around = /\b(?:get around|getting around|desloc|deplacer|déplacer|aluguer|without a car|sem carro como|bus|autocarro)\b/.test(n);
+  const around = /\b(?:get around|getting around|desloc\w*|deplac\w*|aluguer|without a car|sem carro|sans voiture|bus|autocarro)\b/.test(n);
 
   if (pharmacy) {
     return say(locale,
