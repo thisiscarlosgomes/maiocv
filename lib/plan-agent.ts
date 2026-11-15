@@ -892,6 +892,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (lengthEdit && current && typeof task.constraints.car === "boolean") {
+    appliedEdit = lengthEdit.kind === "add" ? "add_day" : lengthEdit.kind === "drop-last" ? "remove_day" : "set_dates";
     const rebuilt = await rebuildPlan(task);
     if (!rebuilt) return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
     const reply = lengthDiffReply(current, rebuilt.plan, task.locale) ?? lengthUnchangedReply(current, task.locale);
@@ -932,6 +933,35 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     if (rebuilt) {
       const reply = say(task.locale, "Day 1 now starts after 15:00.", "O dia 1 passa a começar depois das 15:00.", "Le jour 1 commence maintenant après 15:00.");
       return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+    }
+  }
+
+  if (current && typeof task.constraints.car === "boolean" && (refersToFerry(lastUser) || refersToFlight(lastUser))) {
+    const lead = travelLead(task.locale, task, lastUser);
+    if (lead) {
+      const citedStart = task.constraints.arrival ? task.constraints.dates?.start : current.days[0]?.date;
+      const citedTime = task.constraints.arrival?.time;
+      const sameStart = !citedStart || citedStart === current.days[0]?.date;
+      const arrival = current.days[0]?.items.find((item) => item.kind === "transport");
+      const sameArrival = !citedTime || arrival?.start === citedTime;
+      if (sameStart && sameArrival) {
+        const reply = say(task.locale,
+          `${lead} The plan already starts with that arrival.`,
+          `${lead} O plano já começa com essa chegada.`,
+          `${lead} Le plan commence déjà par cette arrivée.`);
+        return finish(reply, current, [], task, undefined, true, false, false, "moment");
+      }
+      appliedEdit = "set_arrival";
+      const rebuilt = await rebuildPlan(task);
+      if (rebuilt) {
+        const same = samePlanShape(rebuilt.plan, current);
+        const reply = say(task.locale,
+          same ? `${lead} The plan already starts with that arrival.` : `${lead} The plan now starts with that arrival.`,
+          same ? `${lead} O plano já começa com essa chegada.` : `${lead} O plano passa a começar com essa chegada.`,
+          same ? `${lead} Le plan commence déjà par cette arrivée.` : `${lead} Le plan commence maintenant par cette arrivée.`);
+        return finish(reply, same ? current : rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+      }
+      return finish(lead, current, [], task, undefined, true, false, false, "moment");
     }
   }
 

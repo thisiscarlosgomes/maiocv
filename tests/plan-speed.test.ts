@@ -177,6 +177,40 @@ test("hospital, police, pharmacy and contact stay listings answers with no open 
   assert.equal(contact.intent, "side_question");
 });
 
+test("an open 18-20 plan already on the Wednesday ferry names that sailing without the model", async () => {
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    return quietFetch()(input);
+  }) as typeof fetch;
+  const built = await runPlanAgent(
+    [{ role: "user", content: "3 days, slow pace, renting a car, from 18 to 20 November" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+  );
+  assert.deepEqual(built.plan?.days.map((day) => day.date), ["2026-11-18", "2026-11-19", "2026-11-20"]);
+  const asked = await runPlanAgent(
+    [{ role: "user", content: "Is there a ferry on Wednesday?" }],
+    built.plan,
+    { model: bomb(), fetchImpl, now: TODAY },
+    built.task,
+  );
+  const started = Date.now();
+  const around = await runPlanAgent(
+    [{ role: "user", content: "plan around that ferry" }],
+    asked.plan ?? built.plan,
+    { model: bomb(), fetchImpl, now: TODAY },
+    asked.task,
+  );
+  assert.ok(Date.now() - started < 1_000, around.reply);
+  assert.match(around.reply, /07:00/);
+  assert.match(around.reply, /already starts with that arrival|now starts with that arrival/);
+  assert.doesNotMatch(around.reply, /didn't change the plan/);
+  assert.deepEqual(around.plan?.days.map((day) => day.date), ["2026-11-18", "2026-11-19", "2026-11-20"]);
+  assert.equal(around.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "07:00");
+});
+
 test("a 4x4 question is answered from the listings", async () => {
   const started = Date.now();
   const result = await runPlanAgent(
