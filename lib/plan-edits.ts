@@ -2,7 +2,7 @@ import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { resolveOverlaps } from "./full-day.ts";
 import { applyLength, planQuestionKind, type LengthEdit } from "./plan-router.ts";
 import { humanPlanDate, itemLabel } from "./plan-reply.ts";
-import { EXPERIENCES, PLACES, food, isExcludedExperience, localizedPlaceName, type PlanItem, type TripPlan } from "./trip.ts";
+import { EXPERIENCES, FOOD, PLACES, food, isExcludedExperience, localizedPlaceName, type PlanItem, type TripPlan } from "./trip.ts";
 
 /** Meals and anchored places. Free rows and the arrival header are not stops. */
 export function visibleStops(items: PlanItem[]): number {
@@ -50,40 +50,45 @@ export function relaxDay(plan: TripPlan, dayNumber: number, locale: TaskLocale =
   };
 }
 
-/** One extra real stop on a day that should feel fuller. Other days stay. */
+/** One or two extra stops on a day that should feel fuller, still inside a slow day. Other days stay. */
 export function busyDay(plan: TripPlan, dayNumber: number, locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; changed: boolean } | null {
   const index = dayNumber - 1;
   const day = plan.days[index];
   if (!day) return null;
   const before = visibleStops(day.items);
-  const used = new Set(plan.days.flatMap((item) => item.items.map((stop) => stop.refId)));
-  const extra = PLACES.find((item) => item.category === "beach" && !used.has(item.id)) ?? PLACES.find((item) => !used.has(item.id));
   const when = humanPlanDate(day.date, locale);
-  if (!extra || before >= 6) {
-    return {
-      plan,
-      changed: false,
-      reply: say(locale,
-        `${when} is already a full day.`,
-        `${when} já está cheio.`,
-        `${when} est déjà bien rempli.`),
-    };
+  const full = {
+    plan,
+    changed: false,
+    reply: say(locale, `${when} is already a full day.`, `${when} já está cheio.`, `${when} est déjà bien rempli.`),
+  };
+  if (before >= 6) return full;
+  const used = new Set(plan.days.flatMap((item) => item.items.map((stop) => stop.refId)));
+  const room = Math.min(2, 6 - before);
+  const additions: PlanItem[] = [];
+  const beach = PLACES.find((item) => item.category === "beach" && !used.has(item.id));
+  if (beach && additions.length < room) {
+    additions.push({ id: `d${index}-busy`, kind: "place", refId: beach.id, slot: "activity", start: "15:30", durationMin: 75 });
+    used.add(beach.id);
   }
-  const name = localizedPlaceName(extra.name, locale);
-  const added: PlanItem = { id: `d${index}-busy`, kind: "place", refId: extra.id, slot: "activity", start: "15:30", durationMin: 90 };
-  const freeAt = day.items.findIndex((item) => item.kind === "free" && (item.refId === "free-time" || item.slot === "rest") && item.durationMin >= 120);
-  const items = [...day.items];
-  if (freeAt >= 0) items.splice(freeAt, 1, added);
-  else items.push(added);
-  const nextItems = resolveOverlaps(items).slice(0, 9);
+  const meal = FOOD.find((item) => !used.has(item.id));
+  if (meal && additions.length < room && !day.items.some((item) => item.slot === "lunch" && item.kind === "food")) {
+    additions.push({ id: `d${index}-busy-lunch`, kind: "food", refId: meal.id, slot: "lunch", start: "13:00", durationMin: 75 });
+  }
+  if (!additions.length) return full;
+  const dropFree = additions.length;
+  let dropped = 0;
+  const kept = day.items.filter((item) => {
+    if (dropped < dropFree && item.kind === "free" && (item.refId === "free-time" || item.slot === "rest") && item.durationMin >= 90) {
+      dropped += 1;
+      return false;
+    }
+    return true;
+  });
+  const nextItems = resolveOverlaps([...kept, ...additions]).slice(0, 9);
   const after = visibleStops(nextItems);
-  if (after <= before) {
-    return {
-      plan,
-      changed: false,
-      reply: say(locale, `${when} is already a full day.`, `${when} já está cheio.`, `${when} est déjà bien rempli.`),
-    };
-  }
+  if (after <= before) return full;
+  const name = beach ? localizedPlaceName(beach.name, locale) : meal?.title ?? "";
   return {
     changed: true,
     plan: { ...plan, days: plan.days.map((item, i) => i === index ? { ...day, items: nextItems } : item) },

@@ -293,9 +293,11 @@ export function planQuestionKind(text: string): "day" | "leave" | "lunch" | null
   return null;
 }
 
-/** A reply that tells the guest the trip changed. PT and FR included. */
+/** A reply that tells the guest the trip changed. PT and FR included. An honest "already" line does not. */
 export function claimsUnappliedEdit(text: string): boolean {
-  return /\b(?:done\b|all set|i(?:'ve| have)? (?:moved|added|updated|removed|extended)|moved your|updated the (?:plan|trip)|i made it|acrescentei|adicionei|mudei|alterei|atualizei|pronto|já está|ja esta|c'est fait|tout est (?:bon|regle)|j'ai (?:ajout|deplac|modifi|mis a jour))\b/i.test(text);
+  if (/\b(?:already the lighter|already a full|já está mais leve|já está cheio|ja esta mais leve|ja esta cheio|déjà plus léger|déjà bien rempli|deja plus leger|deja bien rempli)\b/i.test(text)) return false;
+  if (/\b(?:done\b|all set|i(?:'ve| have)? (?:moved|added|updated|removed|extended|packed)|moved your|updated the (?:plan|trip)|i made it|day is packed|packed with|acrescentei|adicionei|mudei|alterei|atualizei|pronto|já está|ja esta|c'est fait|tout est (?:bon|regle)|j'ai (?:ajout|deplac|modifi|mis a jour|rendu|all[eé]g))\b/i.test(text)) return true;
+  return /\b(?:day|dia|jour)\s+\d+\b[\s\S]{0,160}\b(?:packed|busier|lighter|easier|quieter|relaxed|fuller|cheio|mais leve|plus l[eé]ger|plus charg)\b/i.test(text);
 }
 
 const START_CUE = /\b(?:going on|go on|arriv(?:e|ing|ons)?|land on|we land|actually|chego|vou(?: a| no| dia)?|j'arrive|j arrive|finalement|start(?:ing)? on|a partir)\b/;

@@ -20,6 +20,8 @@ test("ordinals in English, Portuguese and French use lastPlaces order", () => {
   assert.equal(resolveReference("a segunda praia", beaches).place?.id, "praia-do-morro");
   assert.equal(resolveReference("la deuxième", beaches).place?.id, "praia-do-morro");
   assert.equal(resolveReference("the second one", beaches).kind, "ordinal");
+  assert.equal(resolveReference("o segundo dia mais calmo", beaches).kind, null);
+  assert.equal(resolveReference("deuxième jour plus tranquille", beaches).kind, null);
 });
 
 test("that one, around there and directions resolve without inventing a place", () => {

@@ -4,11 +4,13 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { readFileSync } from "node:fs";
 import { classify } from "../lib/awareness/classify.ts";
 import { emptyTask, refreshTask, type Task } from "../lib/awareness/task.ts";
 import { runPlanAgent } from "../lib/plan-agent.ts";
 import { visibleStops } from "../lib/plan-edits.ts";
-import { EditIntentSchema, intentFromToolInput, parseEditIntent, resolveDayRef, shiftFromIntent } from "../lib/plan-intent.ts";
+import { EditIntentSchema, INTENT_TIMEOUT_MS, intentFromToolInput, parseEditIntent, resolveDayRef, shiftFromIntent } from "../lib/plan-intent.ts";
+import { scriptedModel } from "./plan/mock-model.ts";
 import { parseDateShift } from "../lib/plan-router.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import type { TripPlan } from "../lib/trip.ts";
@@ -37,17 +39,21 @@ function quietFetch(): typeof fetch {
   }) as typeof fetch;
 }
 
-function planned(locale: "en" | "pt" | "fr" = "en", boat = false): { plan: TripPlan; task: Task } {
+function planned(locale: "en" | "pt" | "fr" = "en", boat = false, start = "2026-11-16"): { plan: TripPlan; task: Task } {
   const plan = buildPlan({
-    request: { startDate: "2026-11-16", days: 3, locale, adults: 2, kids: 0, hasCar: true, boatTrips: boat ? 1 : 0, pace: "slow" },
+    request: { startDate: start, days: 3, locale, adults: 2, kids: 0, hasCar: true, boatTrips: boat ? 1 : 0, pace: "slow" },
     forecast,
     sailings: [],
   });
   const task = refreshTask({
     ...emptyTask(locale),
     objective: plan.title,
-    constraints: { dates: { start: "2026-11-16", days: 3 }, party: { adults: 2, kids: 0 }, car: true, pace: "slow", ...(boat ? { boatTrips: 1 } : {}) },
+    constraints: { dates: { start, days: 3 }, party: { adults: 2, kids: 0 }, car: true, pace: "slow", ...(boat ? { boatTrips: 1 } : {}) },
     completed: ["itinerary"],
+    lastPlaces: [
+      { id: "praia-de-cadjetinha", name: "Praia de Cadjetinha", area: "Maio" },
+      { id: "praia-do-morro", name: "Praia do Morro", area: "Morro" },
+    ],
   });
   return { plan, task };
 }
@@ -292,4 +298,132 @@ test("day refs resolve across EN PT and FR", () => {
     assert.equal(resolveDayRef(undefined, plan, today, ref), day, ref);
   }
   assert.equal(resolveDayRef(undefined, plan, today, "make it slower"), "ambiguous");
+  assert.equal(resolveDayRef(undefined, plan, today, "pack the middle day"), 2);
+});
+
+const LIVE = [
+  { phrase: "o segundo dia mais calmo", locale: "pt" as const, kind: "relax" as const, day: 2 },
+  { phrase: "deuxième jour plus tranquille", locale: "fr" as const, kind: "relax" as const, day: 2 },
+  { phrase: "rends le deuxième jour plus tranquille", locale: "fr" as const, kind: "relax" as const, day: 2 },
+  { phrase: "pack day 1 more", locale: "en" as const, kind: "busy" as const, day: 1 },
+  { phrase: "enche mais o dia 1", locale: "pt" as const, kind: "busy" as const, day: 1 },
+  { phrase: "remplis davantage le jour 1", locale: "fr" as const, kind: "busy" as const, day: 1 },
+  { phrase: "can we take it easier on the last day?", locale: "en" as const, kind: "relax" as const, day: 3 },
+  { phrase: "podemos deixar o último dia mais leve?", locale: "pt" as const, kind: "relax" as const, day: 3 },
+  { phrase: "on peut rendre le dernier jour plus calme ?", locale: "fr" as const, kind: "relax" as const, day: 3 },
+  { phrase: "I'd like a quieter afternoon on Wednesday", locale: "en" as const, kind: "relax" as const, day: 1 },
+  { phrase: "quero uma tarde mais calma na quarta", locale: "pt" as const, kind: "relax" as const, day: 1 },
+  { phrase: "je voudrais un après-midi plus calme mercredi", locale: "fr" as const, kind: "relax" as const, day: 1 },
+  { phrase: "pack the middle day a little more", locale: "en" as const, kind: "busy" as const, day: 2 },
+  { phrase: "enche um pouco mais o dia do meio", locale: "pt" as const, kind: "busy" as const, day: 2 },
+  { phrase: "remplis un peu plus le jour du milieu", locale: "fr" as const, kind: "busy" as const, day: 2 },
+];
+
+for (const item of LIVE) {
+  test(`live miss: ${item.phrase}`, async () => {
+    const { plan: before, task } = planned(item.locale, false, "2026-11-18");
+    const result = await runPlanAgent(
+      [{ role: "user", content: item.phrase }],
+      before,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+      task,
+    );
+    assert.notEqual(result.intent, "side_question", result.reply);
+    assert.doesNotMatch(result.reply, /^(?:É|C'est|That is)\b/);
+    assert.doesNotMatch(result.reply, /Which day should the trip start|Para que dia mudo|Quel jour pour le début/);
+    assert.doesNotMatch(result.reply, UNCHANGED);
+    assert.ok(result.plan);
+    const index = item.day - 1;
+    const stops = visibleStops(result.plan.days[index].items);
+    const previous = visibleStops(before.days[index].items);
+    if (item.kind === "relax") assert.ok(stops < previous, result.reply);
+    else assert.ok(stops > previous, result.reply);
+    assert.ok(result.reply.length < 240, result.reply);
+  });
+}
+
+test("make one day easier asks which day on the open trip", async () => {
+  const { plan, task } = planned("en", false, "2026-11-18");
+  const result = await runPlanAgent(
+    [{ role: "user", content: "make one day easier" }],
+    plan,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    task,
+  );
+  assert.equal(result.plan, plan);
+  assert.equal(result.reply, "Which day: Wed 18, Thu 19 or Fri 20?");
+  assert.doesNotMatch(result.reply, UNCHANGED);
+});
+
+test("an even trip asks which day for the middle", async () => {
+  const plan = buildPlan({
+    request: { startDate: "2026-11-18", days: 4, locale: "en", adults: 2, hasCar: true, boatTrips: 0, pace: "slow" },
+    forecast, sailings: [],
+  });
+  const task = refreshTask({
+    ...emptyTask("en"),
+    objective: plan.title,
+    constraints: { dates: { start: "2026-11-18", days: 4 }, party: { adults: 2, kids: 0 }, car: true },
+    completed: ["itinerary"],
+  });
+  const result = await runPlanAgent(
+    [{ role: "user", content: "pack the middle day a little more" }],
+    plan,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    task,
+  );
+  assert.equal(result.plan, plan);
+  assert.match(result.reply, /Which day: Wed 18/);
+});
+
+test("a claimed packed day with no card change is not shown", async () => {
+  const { plan, task } = planned("en");
+  const claim = "Day 1 is packed with a salt flats tour, lunch at 12:30 and dinner at 19:00. I made the morning fuller too, then sunset and a long walk.";
+  const result = await runPlanAgent(
+    [{ role: "user", content: "tell me a joke about the salt" }],
+    plan,
+    { model: scriptedModel([], claim), fetchImpl: quietFetch(), now: TODAY },
+    task,
+  );
+  assert.equal(result.plan, plan);
+  assert.doesNotMatch(result.reply, /salt flats|packed with/);
+});
+
+test("a fresh 3-day plan asks for a car instead of a prose itinerary", async () => {
+  const prose = `${"Day 1 — Wed 18 Nov - 08:30 Breakfast - 10:30 Salt flats tour - 12:30 Lunch. ".repeat(8)}`;
+  assert.ok(prose.length > 500);
+  const result = await runPlanAgent(
+    [{ role: "user", content: "3-day plan" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    emptyTask("en"),
+  );
+  assert.equal(result.plan, null);
+  assert.equal(result.intent, "new_objective");
+  assert.match(result.reply, /car/i);
+  assert.ok(result.reply.length < 200, result.reply);
+  assert.doesNotMatch(result.reply, /Salt flats|08:30/);
+});
+
+test("a 3-day plan with a car returns a plan when the model only writes prose", async () => {
+  const prose = `${"Day 1 — Wed 18 Nov - 08:30 Breakfast - 10:30 Salt flats tour - 12:30 Lunch at the beach. ".repeat(6)}`;
+  const result = await runPlanAgent(
+    [{ role: "user", content: "3-day plan with a car" }],
+    null,
+    { model: scriptedModel([], prose), fetchImpl: quietFetch(), now: TODAY },
+    emptyTask("en"),
+  );
+  assert.ok(result.plan);
+  assert.equal(result.plan.days.length, 3);
+  assert.equal(result.plan.hasCar, true);
+  assert.ok(result.reply.length < 300, result.reply);
+  assert.doesNotMatch(result.reply, /Salt flats/);
+});
+
+test("the edit-intent model call is capped under the edit-turn budget", () => {
+  assert.ok(INTENT_TIMEOUT_MS <= 4_000);
+  const planRoute = readFileSync(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const chatRoute = readFileSync(new URL("../app/api/maio-chat/route.ts", import.meta.url), "utf8");
+  assert.match(planRoute, /after\(/);
+  assert.match(chatRoute, /after\(/);
 });

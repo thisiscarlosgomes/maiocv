@@ -6,7 +6,10 @@ import { consumeJudgeBudget } from "./chat-flags-mongo.ts";
 import { recordFlag, type FlagStore } from "./chat-flags-store.ts";
 
 export const JUDGE_DAILY_CAP = 2000;
+/** Confirmed on the AI Gateway catalog. */
 export const JUDGE_MODEL = "openai/gpt-5-nano";
+/** Used only when the preferred model id is rejected. */
+export const JUDGE_MODEL_FALLBACK = "openai/gpt-4.1-nano";
 
 export type JudgeVerdict = { ok: boolean; reasons: string[]; severity: FlagSeverity };
 
@@ -105,24 +108,86 @@ export function parseJudgeVerdict(value: unknown): JudgeVerdict | null {
   return { ok: row.ok, reasons, severity };
 }
 
+/** A short reason code. Never the prompt, the reply, or a request identifier. */
+export function judgeErrorType(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  const message = error.message.toLowerCase();
+  if (error.name === "AbortError" || error.name === "TimeoutError" || /timeout|aborted/.test(message)) return "timeout";
+  if (/not found|does not exist|404|model/.test(message) && /model|not found|404/.test(message)) return "model_not_found";
+  if (/401|403|unauthori[sz]ed|api key/.test(message)) return "auth";
+  if (/429|rate limit/.test(message)) return "rate_limit";
+  if (/schema|output|parse|json/.test(message)) return "output";
+  return "model_error";
+}
+
+type JudgeHealth = { day: string; calls: number; failures: number; lastError: string | null };
+const judgeHealth: JudgeHealth = { day: "", calls: 0, failures: 0, lastError: null };
+
+function healthDay(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function rollHealth(now = new Date()) {
+  const day = healthDay(now);
+  if (judgeHealth.day !== day) {
+    judgeHealth.day = day;
+    judgeHealth.calls = 0;
+    judgeHealth.failures = 0;
+    judgeHealth.lastError = null;
+  }
+}
+
+export function noteJudgeCall(now = new Date()) {
+  rollHealth(now);
+  judgeHealth.calls += 1;
+}
+
+export function noteJudgeFailure(errorType: string, now = new Date()) {
+  rollHealth(now);
+  judgeHealth.failures += 1;
+  judgeHealth.lastError = errorType.slice(0, 40);
+}
+
+export function judgeHealthSnapshot(now = new Date()): { calls: number; failures: number; lastError: string | null } {
+  rollHealth(now);
+  return { calls: judgeHealth.calls, failures: judgeHealth.failures, lastError: judgeHealth.lastError };
+}
+
+export function resetJudgeHealth() {
+  judgeHealth.day = "";
+  judgeHealth.calls = 0;
+  judgeHealth.failures = 0;
+  judgeHealth.lastError = null;
+}
+
 export async function gatewayJudge(prompt: string, env: Record<string, string | undefined> = process.env): Promise<JudgeVerdict> {
-  const modelId = env.MAIO_JUDGE_MODEL?.trim() || JUDGE_MODEL;
-  const result = await generateText({
-    model: gateway(modelId),
-    output: Output.object({
-      schema: JudgeSchema,
-      name: "maio_reply_grade",
-      description: "Whether this Maio reply failed, why, and how serious it is.",
-    }),
-    prompt,
-    temperature: 0,
-    maxRetries: 0,
-    maxOutputTokens: 200,
-    abortSignal: AbortSignal.timeout(12_000),
-  });
-  const verdict = parseJudgeVerdict(result.output);
-  if (!verdict) throw new Error("judge output");
-  return verdict;
+  const preferred = env.MAIO_JUDGE_MODEL?.trim() || JUDGE_MODEL;
+  const models = preferred === JUDGE_MODEL_FALLBACK ? [preferred] : [preferred, JUDGE_MODEL_FALLBACK];
+  let last: unknown = new Error("judge output");
+  for (const modelId of models) {
+    try {
+      const result = await generateText({
+        model: gateway(modelId),
+        output: Output.object({
+          schema: JudgeSchema,
+          name: "maio_reply_grade",
+          description: "Whether this Maio reply failed, why, and how serious it is.",
+        }),
+        prompt,
+        temperature: 0,
+        maxRetries: 0,
+        maxOutputTokens: 200,
+        abortSignal: AbortSignal.timeout(8_000),
+      });
+      const verdict = parseJudgeVerdict(result.output);
+      if (!verdict) throw new Error("judge output");
+      return verdict;
+    } catch (error) {
+      last = error;
+      console.warn(`judge model failed: ${modelId} ${judgeErrorType(error)}`);
+    }
+  }
+  throw last;
 }
 
 const mongoBudget: JudgeBudget = { tryConsume: (day, cap) => consumeJudgeBudget(day, cap) };
@@ -159,12 +224,15 @@ export async function reviewWithJudge(turn: TurnForFlags, deps: ReviewDeps = {})
     const day = (deps.now ?? new Date()).toISOString().slice(0, 10);
     if (!(await budget.tryConsume(day, judgeCap(env)))) return;
     const judge = deps.judge ?? ((prompt: string) => gatewayJudge(prompt, env));
+    noteJudgeCall(deps.now);
     const verdict = await judge(judgePrompt(turn));
     if (!verdict || verdict.ok !== false) return;
     const reasons = verdict.reasons.length ? verdict.reasons : ["judge"];
     recordFlag(buildFlag(turn, { source: "judge", reasons, severity: verdict.severity, now: deps.now }), deps.store);
-  } catch {
-    // Fail open: a grader outage never affects the guest and stores nothing.
+  } catch (error) {
+    const type = judgeErrorType(error);
+    noteJudgeFailure(type, deps.now);
+    console.warn(`judge failed: ${type}`);
   }
 }
 

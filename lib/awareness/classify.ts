@@ -124,9 +124,9 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const patch: TaskConstraints = {};
   const shift = parseDateShift(text, today);
   const relativeMove = Boolean(shift && shift !== "ask" && shift.shiftDays);
-  const days = n.match(/\b(\d+)\s*(?:days?|dias?|jours?)\b/);
+  const days = n.match(/\b(\d+)\s*-?\s*(?:days?|dias?|jours?)\b/);
   if (days && !relativeMove) patch.dates = { ...(patch.dates ?? {}), days: Number(days[1]) };
-  const scheduling = /\b(?:\d+\s*(?:days?|dias?|jours?)|from|partir|arriv|stay|fica|plan|plano|voyage|viagem)\b/.test(n);
+  const scheduling = /\b(?:\d+\s*-?\s*(?:days?|dias?|jours?)|from|partir|arriv|stay|fica|plan|plano|voyage|viagem)\b/.test(n);
   if (scheduling && /\b(?:today|hoje|aujourd'hui|aujourdhui)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: today };
   if (scheduling && /\b(?:tomorrow|amanha|demain)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: addDays(today, 1) };
 
@@ -140,7 +140,9 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const negated = new Set<number>();
   if (/\b(?:not|nao|pas)\s+(?:on\s+|a\s+|le\s+|na\s+)?(?:friday|sexta(?:-feira)?|vendredi)\b/.test(n)) negated.add(5);
   const chosen = [...weekdays].reverse().find((hit) => !negated.has(hit.day));
-  if (chosen) patch.dates = { ...(patch.dates ?? {}), start: upcomingDate(today, chosen.day) };
+  // "quieter on Wednesday" names a day already on the trip, not a new start date.
+  const dayQuality = /\b(?:quiet(?:er)?|easier|relax\w*|slow(?:er)?|lighter|calmer|calmo|leve|tranquille|pack(?:ed|ing)?|busier|cheio|charge)\b/.test(n);
+  if (chosen && !dayQuality) patch.dates = { ...(patch.dates ?? {}), start: upcomingDate(today, chosen.day) };
 
   const party = extractParty(n);
   if (party) patch.party = party;
@@ -283,6 +285,14 @@ function hasPlanSignal(patch: TaskConstraints): boolean {
 function isQuestion(text: string): boolean {
   if (text.endsWith("?")) return true;
   return /^(?:is|are|what|whats|what's|where|when|how|can|do|does|why|which|qual|quais|onde|quando|como|posso|o que|est-ce|quel|quelle|ou |quand |comment |puis-je)\b/.test(text);
+}
+
+/** "Can we make the last day easier?" is a request, not a question about the island. */
+function isPoliteEdit(text: string): boolean {
+  const n = normalizeUtterance(text);
+  const ask = /\b(?:can we|can you|could we|could you|could i|is it possible|would you|podemos|consegues|podes|pode ser|peut-on|pouvez-vous|pourriez-vous|est-ce possible|on peut)\b/.test(n);
+  if (!ask) return false;
+  return /\b(?:easier|relax|slow|calm|quiet|lighter|calmo|leve|tranquille|calme|pack|busier|cheio|charge|last|ultimo|dernier|middle|meio|milieu|day|dia|jour|afternoon|tarde|apres-midi|morning|manha|matin|evening|noite|soir)\b/.test(n);
 }
 
 export function isTimetableQuestion(text: string): boolean {
@@ -481,7 +491,7 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   if (contradicts(task, patch) || datesMoved || (explicitCorrection(n) && (patch.dates || patch.car !== undefined || patch.party || patch.departure || patch.arrival))) {
     return { ...base, intent: "correction", planShaping: true };
   }
-  if (!dietOnly && (isFactualAside(n) || (isQuestion(n) && !planShaping) || (reference.kind && !planShaping))) {
+  if (!dietOnly && !isPoliteEdit(n) && (isFactualAside(n) || (isQuestion(n) && !planShaping) || (reference.kind && !planShaping))) {
     return { ...base, intent: "side_question", planShaping: false };
   }
   return { ...base, intent: "continuation" };

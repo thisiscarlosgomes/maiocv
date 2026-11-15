@@ -213,7 +213,10 @@ export function resolveReference(text: string, lastPlaces: LastPlace[]): Referen
   const pool = wantsBeach ? lastPlaces.filter(beachLike) : lastPlaces;
   const list = pool.length ? pool : lastPlaces;
   const pointer = isShortPointer(text);
-  if (pointer && !/\bsegunda-feira\b|\bsegunda feira\b/.test(n)) {
+  // "o segundo dia" / "deuxième jour" names a day of the trip, not a row in the last list.
+  const dayOrdinal = /\b(?:first|second|third|fourth|fifth|primeir\w*|segund\w*|terceir\w*|premi\w*|deuxi\w*|troisi\w*|dernier|ultimo|last|middle|meio|milieu)\b/.test(n)
+    && /\b(?:day|dia|jour|journee|jornada)\b/.test(n);
+  if (pointer && !dayOrdinal && !/\bsegunda-feira\b|\bsegunda feira\b/.test(n)) {
     const leading = /^(?:please |por favor |s'il vous plait )?(?:the |a |o |os |as |le |la |les )?(?:first|second|third|fourth|fifth|primeir[oa]s?|segund[oa]s?|terceir[oa]s?|quart[oa]s?|quint[oa]s?|premi(?:er|ere)|deuxieme|seconde|troisieme|quatrieme|cinquieme|\d(?:st|nd|rd|er|re|a))\b/;
     if (leading.test(n)) {
       for (const ordinal of ORDINALS) {
