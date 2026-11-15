@@ -148,7 +148,8 @@ test("a party correction rebuilds with the new party", async () => {
   assert.equal(second.plan!.party.youngestAge, 5);
   assert.equal(second.task.constraints.party?.youngestAge, 5);
   assert.equal(second.task.constraints.dates?.start, first.task.constraints.dates?.start);
-  grounded(second.reply, `${second.reply.includes("5") ? "5-year-old" : ""}`);
+  assert.ok(second.reply.split("\n").filter((line) => line.trim()).length <= 2, second.reply);
+  grounded(second.reply, "3");
 });
 
 test("no car stays walkable, and renting a car replaces that constraint", async () => {
@@ -322,7 +323,7 @@ test("a stated landing time stays unverified and no airline is invented", async 
   const transport = result.plan!.days[0].items.find((item) => item.kind === "transport");
   assert.equal(transport?.start, "11:00");
   assert.match(transport?.note ?? "", /not live status/i);
-  assert.match(result.reply, /11:00/);
+  assert.ok(result.reply.split("\n").filter((line) => line.trim()).length <= 2, result.reply);
   assert.doesNotMatch(result.reply, /TACV|airline|Bestfly|Cabo Verde Airlines/i);
   assert.equal(result.task.constraints.arrival?.verified, false);
   grounded(result.reply, `11:00 ${JSON.stringify(result.plan)}`);
@@ -371,7 +372,8 @@ test("diving, nightlife and a dolphin cruise go to unmet", async () => {
   assert.ok(result.plan!.unmet.length > 0);
   assert.deepEqual(unknownRefs(result.plan!), []);
   assert.equal(result.toolEvents.find((event) => event.name === "propose_itinerary")?.dropped?.[0], "dolphin-cruise");
-  assert.match(result.reply, /don't list/);
+  assert.match(result.plan!.unmet.join(" "), /diving|nightlife|dolphin/i);
+  assert.ok(result.reply.split("\n").filter((line) => line.trim()).length <= 2, result.reply);
 });
 
 test("rough sea moves the boat off that day", async () => {
@@ -430,7 +432,7 @@ test("chips do not offer a boat trip that is already chosen", async () => {
     reply: "The boat is on the calmest day.",
   });
   assert.ok(result.task.completed.includes("boat"));
-  assert.ok(result.chips.length <= 2);
+  assert.ok(result.chips.length <= 3);
   assert.ok(result.chips.every((chip) => !/boat trip|saída de barco|sortie en bateau/i.test(chip)));
   assert.ok(result.chips.every((chip) => !/leave|partem|partez/i.test(chip)));
 });

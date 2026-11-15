@@ -56,9 +56,13 @@ export type Pools = { hasCar: boolean; locale: Locale; drinks: boolean; pace?: "
 /** Trip-wide state: what has been used, so later days prefer new places and each day allows one repeat. */
 export class Picker {
   used = new Set<string>();
+  /** Higher means used more recently, so a repeat rotates to an older place. */
+  private seenAt = new Map<string, number>();
+  private tick = 0;
   private reach: (p: Pt) => boolean;
   private o: Pools;
   constructor(o: Pools) { this.o = o; this.reach = (p) => o.hasCar || distanceKm(p, TOWN) <= WALKABLE_KM; }
+  private mark(id: string) { this.used.add(id); this.seenAt.set(id, this.tick += 1); }
   restaurants() { return FOOD.filter((f) => venueType(f) === "restaurant" && this.reach(place(f.placeId)!)); }
   cafes() { return this.restaurants().filter((f) => /caf[eé]|coffee|breakfast|bakery|pastelaria/i.test(`${f.title} ${f.description.en}`)); }
   bars() { return FOOD.filter((f) => venueType(f) === "bar" && this.reach(place(f.placeId)!)); }
@@ -76,11 +80,14 @@ export class Picker {
       if (far.length) pool = far;
     }
     const fresh = [...pool].sort(near)[0];
-    if (fresh) { this.used.add(fresh.id); day.ids.add(fresh.id); return { id: fresh.id }; }
+    if (fresh) { this.mark(fresh.id); day.ids.add(fresh.id); return { id: fresh.id }; }
     if (freshOnly || day.repeats >= 1) return null;
-    const again = list.filter((x) => !day.ids.has(x.id)).sort(near)[0];
+    const again = list.filter((x) => !day.ids.has(x.id)).sort((a, b) => {
+      const age = (this.seenAt.get(a.id) ?? 0) - (this.seenAt.get(b.id) ?? 0);
+      return age || near(a, b);
+    })[0];
     if (!again) return null;
-    day.repeats += 1; day.ids.add(again.id);
+    day.repeats += 1; day.ids.add(again.id); this.mark(again.id);
     return { id: again.id, note: repeatNotes[this.o.locale][note] };
   }
 }
@@ -108,17 +115,25 @@ export function buildDay(args: {
   const foodPt = (f: { placeId: string }) => place(f.placeId)!;
   const slow = pools.pace === "slow";
   const meal = (slot: Slot, start: number, dur: number, fallback: string) => {
-    const r = picker.pick(picker.restaurants(), foodPt, from, day, "meal", slow);
+    const list = picker.restaurants();
+    const r = picker.pick(list, foodPt, from, day, "meal", true) ?? picker.pick(list, foodPt, from, day, "meal", false);
     if (r) add(slot, { kind: "food", refId: r.id, start: toTime(start), durationMin: dur, ...(r.note ? { note: r.note } : {}) });
     else free(slot, fallback, start, dur);
   };
   const outing = (slot: Slot, start: number, dur: number, opts: { sheltered?: boolean; sunset?: boolean; beachOnly?: boolean; preferFar?: boolean } = {}) => {
+    const note = opts.sunset ? "sunset" as const : "venue" as const;
     const lists = opts.sunset ? [picker.sunsets(), picker.walks().filter(isWestCoast)]
       : [picker.beaches(opts.sheltered), ...(opts.beachOnly ? [] : [picker.walks()])];
+    const take = (list: ReturnType<Picker["beaches"]>, freshOnly: boolean, far = !!opts.preferFar) => picker.pick(list, (x) => x, from, day, note, freshOnly, far);
     for (const list of lists) {
-      const p = picker.pick(list, (x) => x, from, day, opts.sunset ? "sunset" : "venue", false, !!opts.preferFar);
+      const p = take(list, true);
       if (p) return add(slot, { kind: "place", refId: p.id, start: toTime(start), durationMin: dur, ...(p.note ? { note: p.note } : {}) });
     }
+    const wider = picker.beaches(false);
+    const fresh = take(wider, true);
+    if (fresh) return add(slot, { kind: "place", refId: fresh.id, start: toTime(start), durationMin: dur });
+    const again = take(wider, false, false);
+    if (again) return add(slot, { kind: "place", refId: again.id, start: toTime(start), durationMin: dur, ...(again.note ? { note: again.note } : {}) });
     return free(slot, "free-time", start, dur);
   };
   const sunsetAndDinner = (clock: number, preferFar = false) => {

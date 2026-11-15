@@ -248,8 +248,9 @@ test("a plan without a car answer asks once, then a chip or a short reply builds
   assert.equal(withCar.task.objective, "3 days, slow pace");
   assert.equal(withCar.plan?.hasCar, true);
   assert.match(withCar.reply, /with a car/i);
+  assert.match(withCar.reply, /Tap the card/);
   assert.doesNotMatch(withCar.reply, /## Day/);
-  assert.ok(withCar.reply.split(/[.!?]+/).filter((part) => part.trim()).length <= 2);
+  assert.ok(withCar.reply.split("\n").filter((line) => line.trim()).length <= 2, withCar.reply);
 
   const noCar = await runPlanAgent(
     [{ role: "user", content: "3 days, slow pace" }, { role: "assistant", content: CAR_QUESTION.en }, { role: "user", content: "nope" }],
@@ -258,8 +259,8 @@ test("a plan without a car answer asks once, then a chip or a short reply builds
     (await runPlanAgent([{ role: "user", content: "3 days, slow pace" }], null, { model: bomb(), fetchImpl: quietFetch(), now: TODAY })).task,
   );
   assert.equal(noCar.plan?.hasCar, false);
-  assert.match(noCar.reply, /no car/i);
-  assert.match(noCar.reply, /aluguer/);
+  assert.match(noCar.reply, /without a car/i);
+  assert.match(noCar.reply, /Tap the card/);
   assert.ok(noCar.plan!.days.flatMap((day) => day.items).filter((item) => item.kind === "place").every((item) => distanceKm(place(item.refId)!, town) <= 3));
 
   const unsure = await runPlanAgent(

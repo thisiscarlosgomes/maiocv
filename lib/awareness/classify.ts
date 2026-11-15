@@ -142,7 +142,8 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   else if (stance === "yes" || stance === "unsure") patch.car = true;
 
   if (/\bquiet\b|\bnoite calma\b|\bsoiree calme\b|\blazier\b|\bno bar\b|\bsem bar\b|\bsans bar\b/.test(n)) patch.quietEvenings = true;
-  if (/\b(?:slow pace|relaxed pace|easy pace|ritmo calmo|ritmo lento|sem pressa|rythme lent|rythme calme)\b/.test(n)) patch.pace = "slow";
+  if (/\b(?:packed|action-packed|busy days|full days|ritmo intenso|cheio|corrido|rythme soutenu|journee chargee)\b/.test(n)) patch.pace = "packed";
+  else if (/\b(?:slow pace|relaxed pace|easy pace|ritmo calmo|ritmo lento|sem pressa|rythme lent|rythme calme)\b/.test(n)) patch.pace = "slow";
 
   const diet = n.match(/\b(vegetarian|vegan|vegetariano|vegetariana|vegetarien|vegetarienne)\b/);
   if (diet) patch.diet = diet[1];
@@ -214,7 +215,7 @@ function contradicts(task: Task, patch: TaskConstraints): boolean {
 function hasPlanSignal(patch: TaskConstraints): boolean {
   return Boolean(
     patch.dates?.start || patch.dates?.days || patch.party || patch.car !== undefined
-    || patch.quietEvenings || patch.arrival || patch.departure || patch.boatTrips !== undefined
+    || patch.quietEvenings || patch.arrival || patch.departure || patch.boatTrips !== undefined || patch.pace
     || patch.interests?.some((item) => item === "beach" || item === "boat" || experience(item)),
   );
 }

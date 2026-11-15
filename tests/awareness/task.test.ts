@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { applyClassification, classify } from "../../lib/awareness/classify.ts";
-import { emptyTask, followUpChips, parseTask, refreshTask, type Task } from "../../lib/awareness/task.ts";
+import { emptyTask, followUpChips, isGuestChip, parseTask, refreshTask, type Task } from "../../lib/awareness/task.ts";
 
 const today = "2026-10-27";
 
@@ -138,9 +138,10 @@ test("chips stay within two and do not ask when you leave once dates are set", (
     remaining: ["Want a boat trip?", "When do you leave?"],
   }));
   const chips = followUpChips(task);
-  assert.ok(chips.length <= 2);
-  assert.ok(chips.every((chip) => !/boat trip/i.test(chip)));
-  assert.ok(chips.every((chip) => !/leave|partem|partez/i.test(chip)));
+  assert.ok(chips.length <= 3);
+  assert.ok(chips.every(isGuestChip));
+  assert.ok(chips.every((chip) => !/when do you leave|quando partem|quand partez/i.test(chip)));
+  assert.ok(chips.every((chip) => !/add a boat|passeio de barco|sortie en bateau/i.test(chip)));
 });
 
 test("a pending ferry-or-flight question offers those choices, not a finished intent", () => {

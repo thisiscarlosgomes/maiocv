@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind, inferSlot, restCovered, stopCount, toMin } from "../lib/full-day.ts";
+import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, SLOW_ANCHORED_MAX, anchoredCount, dayKind, inferSlot, restCovered, stopCount, toMin } from "../lib/full-day.ts";
 import { enforcePlanRules, isBar, planRuleViolations } from "../lib/plan-rules.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { samplePlan } from "../lib/trip-sample.ts";
@@ -29,27 +29,35 @@ test("every generated plan passes all rules (slots, stop ranges, exclusions, tou
   }
 });
 
-test("full days cover all seven core slots and have 6–8 stops", () => {
+test("default days are relaxed: breakfast from 08:30, at most 4 anchored stops, no unrequested adrenaline", () => {
   let full = 0;
-  for (const { name, p } of matrix) for (const d of p.days) {
-    if (dayKind(d) !== "full") continue;
-    full += 1;
-    const slots = new Set(d.items.map(inferSlot));
-    for (const s of FULL_DAY_SLOTS) assert.ok(slots.has(s) || (s === "rest" && restCovered(d.items)), `${name} ${d.date}: ${s}`);
-    const n = stopCount(d);
-    assert.ok(n >= FULL_DAY_RANGE.min && n <= FULL_DAY_RANGE.max, `${name} ${d.date}: ${n}`);
-    const times = d.items.map((i) => toMin(i.start));
-    assert.deepEqual(times, [...times].sort((a, b) => a - b), `${name}: ordered`);
+  for (const { name, p } of matrix) {
+    assert.equal(p.pace, "slow", name);
+    for (const d of p.days) {
+      const times = d.items.map((i) => toMin(i.start));
+      assert.deepEqual(times, [...times].sort((a, b) => a - b), `${name}: ordered`);
+      assert.equal(d.items.some((i) => /quad|jetski|jet-ski|off-?road/i.test(i.refId)), false, name);
+      if (dayKind(d) !== "full") continue;
+      full += 1;
+      assert.ok(anchoredCount(d.items) <= SLOW_ANCHORED_MAX, `${name} ${d.date}`);
+      const breakfast = d.items.find((i) => i.slot === "breakfast");
+      if (breakfast?.start) assert.ok(toMin(breakfast.start) >= toMin("08:30"), `${name} ${breakfast.start}`);
+    }
   }
   assert.ok(full > 40);
 });
 
-test("default slot times: 08:30 breakfast, 09:30 morning, 12:30 lunch, 14:30 rest, 16:00 activity, sunset from forecast, 19:30 dinner, 21:00 drinks", () => {
-  const p = plan({ days: 1, boatTrips: 0, exclude: EXPERIENCES.map((e) => e.id) }, [0.8]);
+test("packed pace keeps the seven-slot day", () => {
+  const p = plan({ days: 1, pace: "normal", boatTrips: 0, exclude: EXPERIENCES.map((e) => e.id) }, [0.8]);
+  assert.equal(p.pace, "normal");
   const at = Object.fromEntries(p.days[0].items.map((i) => [i.slot, i.start]));
   assert.equal(at.breakfast, "08:30"); assert.equal(at.lunch, "12:30"); assert.equal(at.rest, "14:30"); assert.equal(at.dinner, "19:30"); assert.equal(at.drinks, "21:00");
-  assert.equal(at.sunset, "18:10", "25 min before the forecast sunset of 18:33, rounded");
+  assert.equal(at.sunset, "18:10");
   assert.equal(at.morning, "09:30"); assert.equal(at.activity, "16:00");
+  const n = stopCount(p.days[0]);
+  assert.ok(n >= FULL_DAY_RANGE.min && n <= FULL_DAY_RANGE.max, String(n));
+  for (const s of FULL_DAY_SLOTS) assert.ok(p.days[0].items.some((i) => inferSlot(i) === s) || (s === "rest" && restCovered(p.days[0].items)), s);
+  assert.equal(p.days[0].items.some((i) => /quad|jetski/.test(i.refId)), false);
 });
 
 test("hard exclusions: Beach Volley Camp and Maio Offroad never appear, even when requested", () => {
@@ -57,8 +65,11 @@ test("hard exclusions: Beach Volley Camp and Maio Offroad never appear, even whe
   assert.ok(EXPERIENCES.every((e) => !EXCLUDED_EXPERIENCE_IDS.has(e.id)), "not offered by search");
   for (const { name, p } of matrix) for (const i of p.days.flatMap((d) => d.items)) assert.ok(!EXCLUDED_EXPERIENCE_IDS.has(i.refId), name);
   // Enforced on any plan, e.g. one a model or an old share link produced.
-  const bad: TripPlan = { ...samplePlan("en") };
-  bad.days = bad.days.map((d, k) => k === 1 ? { ...d, items: d.items.map((i) => i.kind === "experience" ? { ...i, refId: "blue-maio-offroad" } : i) } : d);
+  const bad: TripPlan = structuredClone(samplePlan("en"));
+  const host = bad.days.find((d) => d.items.some((i) => i.kind === "experience")) ?? bad.days[0];
+  const slot = host.items.find((i) => i.kind === "experience") ?? host.items[0];
+  slot.kind = "experience";
+  slot.refId = "blue-maio-offroad";
   assert.ok(planRuleViolations(bad).some((v) => v.startsWith("excluded")));
   const fixed = enforcePlanRules(bad);
   assert.ok(!fixed.days.flatMap((d) => d.items).some((i) => EXCLUDED_EXPERIENCE_IDS.has(i.refId)));
@@ -87,7 +98,7 @@ test("departure day: breakfast, short beach, lunch only when leaving late, then 
   const early = plan({ days: 2, departure: { mode: "ferry", time: "09:00" } });
   assert.deepEqual(early.days[1].items.map((i) => i.refId), ["breakfast-stay", "depart-port"]);
   assert.ok(!early.days[0].items.some((i) => i.slot === "drinks"), "no bar the night before an early exit");
-  assert.ok(plan({ days: 2, departure: { mode: "ferry", time: "18:00" } }).days[0].items.some((i) => i.slot === "drinks"), "bar when leaving late");
+  assert.ok(plan({ days: 2, pace: "normal", departure: { mode: "ferry", time: "18:00" } }).days[0].items.some((i) => i.slot === "drinks"), "packed pace still has a bar when leaving late");
   for (const { p: q } of matrix) for (const day of q.days) if (dayKind(day) === "departure") {
     const n = stopCount(day);
     assert.ok(n >= DEPARTURE_RANGE.min && n <= DEPARTURE_RANGE.max, `${n}`);
@@ -172,7 +183,7 @@ test("no two stops in a day overlap, across the matrix and with an afternoon tou
 });
 
 test("repair drops rest time that collides with a 14:30 tour (J&Tour case from the PDF)", () => {
-  const base = plan({ days: 3, hasCar: true });
+  const base = plan({ days: 3, hasCar: true, pace: "normal" });
   const bad = structuredClone(base) as TripPlan;
   for (const x of bad.days) x.items = x.items.filter((i) => i.kind !== "experience");
   const d = bad.days[1];

@@ -2,7 +2,7 @@
 
 import { trackUsage } from "../../lib/analytics-client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Locale } from "../../lib/locale";
 import { parseTripPlan, type PlanDay, type PlanItem, type TripPlan } from "../../lib/trip";
 import { planStrings, type PlanStrings } from "../../lib/trip-strings";
@@ -83,9 +83,23 @@ export function Planner({ locale }: { locale: Locale }) {
 
   function setScreen(next: Screen) { setScreenState(next); window.scrollTo(0, 0); }
 
+  useLayoutEffect(() => {
+    if (screen !== "trip") return;
+    const pane = document.querySelector<HTMLElement>(".plan-main .chat-conversation");
+    if (pane) pane.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, [screen]);
+
   async function send(text: string) {
     const content = text.trim();
     if (!content || busy || shared) return;
+    if (plan && /^(export as pdf|exportar em pdf|exporter en pdf)$/i.test(content)) {
+      const note = locale === "pt" ? "A viagem está aberta. Use Exportar PDF." : locale === "fr" ? "Le voyage est ouvert. Utilisez Exporter en PDF." : "The trip is open. Use Export PDF.";
+      setMessages([...messages, { role: "user", content }, { role: "assistant", content: note }]);
+      setDraft("");
+      setScreen("trip");
+      return;
+    }
     const conversation: Msg[] = [...messages, { role: "user", content }];
     setMessages(conversation); setDraft(""); setBusy(true); setError(null);
     if (screen === "trip") setScreen("chat");
@@ -185,7 +199,7 @@ export function Planner({ locale }: { locale: Locale }) {
             </div>
           </div>
           {plan.days.map((d) => (
-            <section key={d.date} className="plan-day" aria-labelledby={`day-${d.date}`}>
+            <section key={d.date} className="plan-day" data-testid="plan-day" aria-labelledby={`day-${d.date}`}>
               <div className="plan-day-head">
                 <h2 id={`day-${d.date}`}><span className="mono">{dayParts(d.date, locale).short}</span> <span className="plan-weekday">{dayParts(d.date, locale).weekday}</span></h2>
                 <SeaText day={d} s={s} />

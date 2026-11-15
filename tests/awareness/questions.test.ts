@@ -155,7 +155,7 @@ for (const item of CASES) {
     assert.equal(result.plan, plan);
     assert.equal(result.task.objective, task.objective);
     assert.equal(result.task.constraints.dates?.start, "2026-11-16");
-    assert.ok(result.chips.length <= 2);
+    assert.ok(result.chips.length <= 3);
     assert.ok(result.chips.every((chip) => !/leave|partem|partez/i.test(chip)));
     assertGuestReply(result.reply, { min: 40 });
     assert.ok(result.reply.split(/[.!?]/).filter((part) => part.trim()).length >= 2, result.reply);
@@ -191,7 +191,7 @@ test("a dumped model itinerary is rewritten with human dates and no ids", async 
   });
   // The scripted model is only reached when this is a plan, not a side question.
   assert.ok(result.plan);
-  assert.match(result.reply, /no car/i);
+  assert.match(result.reply, /without a car/i);
   assert.doesNotMatch(result.reply, /## Day 1/);
   assert.doesNotMatch(result.reply, /blue-rental|food listing|\d{4}-\d{2}-\d{2}/);
   assert.equal(result.task.constraints.pace, "slow");

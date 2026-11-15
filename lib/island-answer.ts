@@ -11,7 +11,7 @@ function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
 
 function beaches(locale: TaskLocale, count = 3): { name: string; location: string }[] {
   return PLACES.filter((item) => item.category === "beach").slice(0, count).map((item) => ({
-    name: locale === "pt" ? item.name.pt : item.name.en,
+    name: locale === "en" ? item.name.en : item.name.pt,
     location: item.location,
   }));
 }
@@ -52,7 +52,7 @@ export function answerPlaceList(text: string, locale: TaskLocale): { reply: stri
     const rows = PLACES.filter((item) => item.category === "beach" && (!vila || distanceKm(item, TOWN) <= 3)).slice(0, 3);
     const places: LastPlace[] = rows.map((item) => ({
       id: item.id,
-      name: locale === "pt" ? item.name.pt : item.name.en,
+      name: locale === "en" ? item.name.en : item.name.pt,
       area: item.location,
       lat: item.lat,
       lon: item.lon,

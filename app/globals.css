@@ -1273,7 +1273,8 @@ body:has(.chat-screen) { overflow: hidden; }
 .chat-screen { position: fixed; inset: 0; top: var(--chat-offset-top, 0px); display: flex; flex-direction: column; height: 100vh; height: var(--chat-height, 100dvh); overflow: hidden; }
 .chat-screen .maio-header { flex: none; }
 .chat-page { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 24px; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.chat-conversation { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 24px 0; }
+.chat-conversation { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; overscroll-behavior: contain; scrollbar-width: none; padding: 24px 0; }
+.chat-scroll-tail { flex: none; width: 100%; }
 .chat-conversation::-webkit-scrollbar { display: none; }
 .chat-conversation-empty { display: flex; flex-direction: column; }
 .chat-conversation-empty .chat-welcome { flex-shrink: 0; margin-block: auto; padding: 0 0 20px; }
@@ -1762,7 +1763,8 @@ body:has(.chat-screen) { overflow: hidden; }
   @page { size: A4 portrait; margin: 14mm 0 18mm;
     @bottom-left { font: 8pt var(--font-pp, sans-serif); color: #56565b; padding-left: 15mm; }
     @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-mono); color: #56565b; padding-right: 15mm; } }
-  html, body { margin: 0 !important; padding: 0 !important; background: #fff; width: auto !important; min-width: 0 !important; max-width: none !important; overflow: visible !important; }
+  html, body, body:has(.chat-screen) { margin: 0 !important; padding: 0 !important; background: #fff; width: auto !important; min-width: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
+  .chat-screen, .chat-page, .plan-screen, .plan-main { position: static !important; inset: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; display: block !important; }
   .plan-screen { min-height: 0 !important; overflow: visible !important; }
   body * { visibility: hidden; }
   .plan-print, .plan-print * { visibility: visible; }
@@ -1772,7 +1774,8 @@ body:has(.chat-screen) { overflow: hidden; }
   .plan-print-head { border-bottom: 1px solid #56565b; padding-bottom: 10pt; margin-bottom: 14pt; break-inside: avoid; }
   .plan-print-head h1 { font-size: 26pt; font-weight: 500; line-height: 1.1; margin: 4pt 0 4pt; }
   .plan-print-head p { margin: 0; color: #56565b; }
-  .plan-print-day { margin-bottom: 16pt; }
+  .plan-print-day { margin-bottom: 16pt; break-inside: auto; }
+  .plan-print-day + .plan-print-day { break-before: page; page-break-before: always; }
   .plan-print-dayhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2pt 8mm; border-bottom: 1px solid #111; padding-bottom: 4pt; break-inside: avoid; break-after: avoid; page-break-after: avoid; }
   .plan-print-dayhead h2 { font-size: 15pt; font-weight: 500; margin: 0; }
   .plan-print-dayhead p { margin: 0; color: #111; font-size: 9pt; min-width: 0; }

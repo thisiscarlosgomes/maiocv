@@ -28,8 +28,8 @@ export const TaskConstraintsSchema = z.object({
   diet: z.string().max(60).nullable().optional(),
   budget: z.string().max(60).nullable().optional(),
   quietEvenings: z.boolean().optional(),
-  /** Slow pace keeps meals and the next stop from stacking. */
-  pace: z.enum(["slow"]).optional(),
+  /** Slow is the relaxed default. Packed is only when the guest asks for a full day. */
+  pace: z.enum(["slow", "packed"]).optional(),
   interests: z.array(z.string().max(40)).max(8).optional(),
   boatTrips: z.number().int().min(0).max(3).optional(),
   arrival: z.object({
@@ -179,7 +179,46 @@ export function isCarPending(question: string | null | undefined): boolean {
   return (Object.values(CAR_QUESTION) as string[]).includes(question);
 }
 
-const BOAT_CHIP = /boat|barco|bateau/i;
+const VOICE: Record<TaskLocale, { days: string; party: string; partyNoCar: string; beaches: string; relax: string; boat: string; rent: string; pdf: string }> = {
+  en: {
+    days: "3 days, slow pace",
+    party: "We're 2 adults",
+    partyNoCar: "We're 2 adults, no car",
+    beaches: "Best beaches?",
+    relax: "Make day 2 more relaxed",
+    boat: "Add a boat trip",
+    rent: "Where can I rent a car?",
+    pdf: "Export as PDF",
+  },
+  pt: {
+    days: "3 dias, ritmo calmo",
+    party: "Somos 2 adultos",
+    partyNoCar: "Somos 2 adultos, sem carro",
+    beaches: "Melhores praias?",
+    relax: "Deixa o dia 2 mais calmo",
+    boat: "Acrescenta um passeio de barco",
+    rent: "Onde alugo um carro?",
+    pdf: "Exportar em PDF",
+  },
+  fr: {
+    days: "3 jours, rythme calme",
+    party: "Nous sommes 2 adultes",
+    partyNoCar: "Nous sommes 2 adultes, sans voiture",
+    beaches: "Meilleures plages ?",
+    relax: "Rends le jour 2 plus calme",
+    boat: "Ajoute une sortie en bateau",
+    rent: "Où louer une voiture ?",
+    pdf: "Exporter en PDF",
+  },
+};
+
+/** The bot asking the guest for their own details. Chips are the other way around. */
+const BOT_TO_GUEST = /\b(when do you|who is coming|who'?s coming|will you have|how many days do you|do you arrive|do you leave|quantos dias vai|v[aã]o ter|quem vem|quando chega|quando parte|aurez-vous|qui vient|quand arrivez|combien de jours passez)\b/i;
+
+/** A chip is something the guest would send. A question mark is only for a question to the assistant. */
+export function isGuestChip(text: string): boolean {
+  return !BOT_TO_GUEST.test(text.trim());
+}
 
 function questionOptions(question: string, locale: TaskLocale): string[] {
   const text = question.toLowerCase();
@@ -189,16 +228,27 @@ function questionOptions(question: string, locale: TaskLocale): string[] {
   return ["Ferry", "Flight"];
 }
 
-/** Chips from remaining work and the pending question. Never re-offers a finished intent. */
+/** Clickable guest messages for this task. Never a question the assistant would ask. */
 export function followUpChips(task: Task): string[] {
-  const boatDone = task.completed.some((item) => item === "boat" || BOAT_CHIP.test(item));
-  const pending = task.pendingQuestion ? questionOptions(task.pendingQuestion, task.locale) : [];
-  const open = task.remaining.filter((item) => {
-    if (boatDone && BOAT_CHIP.test(item)) return false;
-    return !task.completed.includes(item);
-  });
-  const chips = (pending.length ? pending : open.length ? open : task.pendingQuestion ? [task.pendingQuestion] : []);
-  return [...new Set(chips.filter((item) => !(boatDone && BOAT_CHIP.test(item))))].slice(0, 2);
+  const locale = task.locale;
+  if (isCarPending(task.pendingQuestion)) return [...CAR_CHIPS[locale]];
+  const choice = task.pendingQuestion ? questionOptions(task.pendingQuestion, locale) : [];
+  if (choice.length) return choice.slice(0, 3);
+  const copy = VOICE[locale];
+  const c = task.constraints;
+  const hasPlan = task.completed.includes("itinerary");
+  const chips: string[] = [];
+  if (!hasPlan) {
+    if (!(c.dates?.start && c.dates?.days)) chips.push(copy.days);
+    if (!c.party?.adults) chips.push(c.car === false ? copy.partyNoCar : copy.party);
+    if (chips.length < 3) chips.push(copy.beaches);
+    return [...new Set(chips)].slice(0, 3);
+  }
+  if ((c.dates?.days ?? 1) >= 2) chips.push(copy.relax);
+  const boatDone = task.completed.includes("boat") || (c.boatTrips ?? 0) > 0;
+  if (!boatDone) chips.push(copy.boat);
+  chips.push(c.car === false ? copy.rent : copy.pdf);
+  return [...new Set(chips)].slice(0, 3);
 }
 
 export function rememberFact(task: Task, fact: ToolFact): Task {

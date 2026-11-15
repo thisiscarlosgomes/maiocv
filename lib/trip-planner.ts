@@ -25,7 +25,7 @@ export const TripRequestSchema = z.object({
   arrival: z.object({ mode: z.enum(["ferry", "flight"]), dayIndex: z.number().int().min(0).max(6).default(0), time: time.optional() }).optional(),
   departure: z.object({ mode: z.enum(["ferry", "flight"]), time: time.optional().describe("Departure time of the ferry or flight, HH:MM") }).optional().describe("Set when the guest leaves Maio on the last day"),
   drinks: z.boolean().default(true).describe("false if the guest wants quiet evenings (no bar)"),
-  pace: z.enum(["slow", "normal"]).optional().describe("slow keeps breakfast and the next stop from stacking"),
+  pace: z.enum(["slow", "normal", "packed"]).optional().describe("Omit unless the guest asked for a packed day. The default is a relaxed day."),
   diet: z.string().max(60).optional().describe("Diet in the guest's words. Listings have no diet flags; never claim a menu."),
   budget: z.string().max(60).optional().describe("Budget in the guest's words. No prices are stored; never invent an amount."),
   include: z.array(z.string()).max(5).default([]).describe("Experience ids from search_experiences the guest asked for"),
@@ -134,10 +134,10 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   const safe = (i: number) => status[i] === "calm" || status[i] === "moderate";
   const calmest = [...fullDays].filter(safe).sort((a, b) => (sea[a]?.waveHeightM ?? 9) - (sea[b]?.waveHeightM ?? 9));
   const requested = req.include.map(experience).filter((e): e is Experience => !!e && eligible.includes(e));
-  const slow = req.pace === "slow";
-  // A slow day does not invent a land tour. Quad and jet ski stay out unless that include was named.
-  const seaPool = eligible.filter((e) => e.seaDependent && (!slow || !isAdrenalineExperience(e) || requested.includes(e))).sort((a, b) => Number(b.boat) - Number(a.boat));
-  const landPool = slow ? [] : eligible.filter((e) => !e.seaDependent && (!kids || e.example.durationMin <= 180));
+  const packed = req.pace === "normal" || req.pace === "packed";
+  // Quad and jet ski stay out unless the guest named that include, at every pace.
+  const seaPool = eligible.filter((e) => e.seaDependent && (!isAdrenalineExperience(e) || requested.includes(e))).sort((a, b) => Number(b.boat) - Number(a.boat));
+  const landPool = packed ? eligible.filter((e) => !e.seaDependent && !isAdrenalineExperience(e) && (!kids || e.example.durationMin <= 180)) : [];
   let tour: { exp: Experience; day: number } | null = null;
   for (const exp of [...requested, ...(req.boatTrips > 0 ? seaPool : []), ...landPool]) {
     const day = exp.seaDependent ? calmest[0] : (fullDays.find((i) => status[i] === "rough") ?? fullDays[0]);
@@ -147,7 +147,8 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   if (req.boatTrips > 1 || req.include.length > 1) unmet.push("one tour per trip");
   if (req.boatTrips > 0 && !tour?.exp.seaDependent) unmet.push("sea outing: no safe sea day");
 
-  const pools = { hasCar: req.hasCar, locale: req.locale, drinks: req.drinks, ...(req.pace === "slow" ? { pace: "slow" as const } : {}) };
+  const pace = packed ? "normal" as const : "slow" as const;
+  const pools = { hasCar: req.hasCar, locale: req.locale, drinks: req.drinks, ...(pace === "slow" ? { pace: "slow" as const } : {}) };
   const picker = new Picker(pools);
   const days: PlanDay[] = dates.map((date, i) => {
     const items = buildDay({
@@ -160,5 +161,5 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     return { date, sea: s ? { status: status[i], waveHeightM: s.waveHeightM, windKmh: s.windKmh, tempMaxC: s.tempMaxC, source: forecastSource } : null, items };
   });
 
-  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, ...(req.pace ? { pace: req.pace } : {}), days, unmet: unmet.slice(0, 5) }, { requested: req.include });
+  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, pace, days, unmet: unmet.slice(0, 5) }, { requested: req.include });
 }

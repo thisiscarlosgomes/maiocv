@@ -2,7 +2,7 @@ import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage 
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
-import { humanPlanDate, itemLabel, publicPlanReply } from "./plan-reply.ts";
+import { humanPlanDate, itemLabel, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
 import { loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
@@ -11,7 +11,7 @@ import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule, loadSailings, type Sailing } from "./essentials.ts";
 import { venueType } from "./plan-rules.ts";
-import { EXPERIENCES, FOOD, experience, food, place, parseTripPlan, type TripPlan } from "./trip.ts";
+import { EXPERIENCES, FOOD, experience, food, localizedPlaceName, place, parseTripPlan, type TripPlan } from "./trip.ts";
 import { TripRequestSchema, buildPlan, isAdrenalineExperience, seaStatus, type TripRequest } from "./trip-planner.ts";
 
 export type ToolEvent = { name: string; ok: boolean; arguments?: unknown; dropped?: string[] };
@@ -49,14 +49,14 @@ export function planInstructions(today: string, task: Task, recall: string, rebu
     `Today in Cabo Verde is ${weekday(today)} ${today}. Resolve relative dates like "Friday" to the next such date.`,
     "Reply in the guest's language (pt, en or fr).",
     "Lead with the answer. Two or three short sentences. No menu of what you can do, no 'options I can do now', and never say an itinerary is unfinished when a plan is already in the cards.",
-    "When you describe the days, use Markdown: a one-line intro, then a heading per day and one bullet per stop, then a short notes line. Put a real newline between them. Never one long line.",
+    "Do not write the day-by-day list. The trip card shows every stop. After a plan is built the server replaces your text with a two-line summary.",
     "Write dates as people say them (Mon 16 Nov, seg 16 nov, lun. 16 nov.). Never an ISO date.",
     "Never mention a catalog id, a slug, or a source label such as 'food listing' or 'id …'. Use the place name only.",
     "The task is the authority for who this trip is for. Tool results are the authority for numbers. Never invent a time, a price, an airline, or a walking time.",
     "If a ferry or flight time is not in the tool result, say it is not published. Do not use 14:00 or any other guessed clock. No current rows is not the same as no service, and it is not live status.",
     "get_transport returns published timetables only. Never say a flight is in the air, on time, or delayed.",
     "Include at most ONE tour or experience in the whole trip. Restaurants are for daytime meals. Bars only at 19:00 or later.",
-    "A slow pace is a few anchored stops plus meals, with long gaps. Do not add a quad, jet ski, or other adrenaline activity unless the guest asked for it.",
+    "The default day is relaxed: a few anchored stops plus meals, breakfast at 08:30 or later. Use a packed day only when the guest asks. Do not add a quad, jet ski, or other adrenaline activity unless the guest asked for it.",
     "Use only experience ids from search_experiences. If the guest asks for diving, nightlife, or a dolphin cruise, put it in unmet and say we don't list it yet.",
     "Listings have no diet flags and no prices. Say so. Guests arrange food and payment with the place.",
     rebuilding
@@ -88,7 +88,7 @@ function placesFromPlan(plan: TripPlan): Task["lastPlaces"] {
   for (const day of plan.days) for (const item of day.items) {
     if (item.kind !== "place" && item.kind !== "food" && item.kind !== "experience") continue;
     const record = item.kind === "place" ? place(item.refId) : item.kind === "food" ? place(food(item.refId)?.placeId ?? "") : place(experience(item.refId)?.placeId ?? "");
-    const name = item.kind === "food" ? food(item.refId)?.title : item.kind === "experience" ? experience(item.refId)?.title : record ? (plan.locale === "pt" ? record.name.pt : record.name.en) : "";
+    const name = item.kind === "food" ? food(item.refId)?.title : item.kind === "experience" ? experience(item.refId)?.title : record ? localizedPlaceName(record.name, plan.locale) : "";
     if (!name || seen.has(item.refId) || (item.kind === "place" && !record)) continue;
     seen.add(item.refId);
     places.push({
@@ -114,7 +114,7 @@ function overlayRequest(request: Record<string, unknown>, task: Task): Record<st
   if (c.boatTrips !== undefined) next.boatTrips = c.boatTrips;
   if (c.diet) next.diet = c.diet;
   if (c.budget) next.budget = c.budget;
-  if (c.pace === "slow") next.pace = "slow";
+  next.pace = c.pace === "packed" ? "normal" : "slow";
   if (c.arrival) {
     const prev = request.arrival && typeof request.arrival === "object" ? request.arrival as { dayIndex?: number } : {};
     next.arrival = { mode: c.arrival.mode, dayIndex: typeof prev.dayIndex === "number" ? prev.dayIndex : 0, ...(c.arrival.time ? { time: c.arrival.time } : {}) };
@@ -137,6 +137,7 @@ function syncTask(task: Task, request: TripRequest, plan: TripPlan): Task {
       ...(request.diet ? { diet: request.diet } : {}),
       ...(request.budget ? { budget: request.budget } : {}),
       ...(request.boatTrips > 0 ? { boatTrips: request.boatTrips, interests: ["boat"] } : {}),
+      pace: request.pace === "normal" || request.pace === "packed" ? "packed" as const : "slow" as const,
       ...(request.arrival ? { arrival: { mode: request.arrival.mode, verified: published, ...(request.arrival.time ? { time: request.arrival.time } : {}) } } : {}),
     }),
     lastPlaces: placesFromPlan(plan),
@@ -151,25 +152,29 @@ function pendingFrom(task: Task, reply: string, intent: Intent): Task {
   return { ...task, pendingQuestion: question ? question.slice(0, 200) : null };
 }
 
-function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null): PlanAgentResult {
+function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null, built = false): PlanAgentResult {
   let next = refreshTask(pendingFrom(task, reply, intent));
   if (keepPending && isCarPending(task.pendingQuestion)) next = { ...next, pendingQuestion: task.pendingQuestion };
   let text = reply.trim();
-  const unpublished = plan?.days.some((day) => day.items.some((item) => item.kind === "transport" && !item.start));
-  if (unpublished && !/publish/i.test(text) && !/\b(?:day|dia|jour)\s+\d/i.test(text)) {
-    const extra = next.locale === "pt" ? "O horário não está publicado, por isso o plano não marca uma hora."
-      : next.locale === "fr" ? "L'horaire n'est pas publié, donc le plan ne fixe pas d'heure."
-      : "The timetable has no published time, so the plan does not set one.";
-    text = `${text} ${extra}`.trim();
+  if (built && plan) {
+    text = planBlurb(plan, stance);
+  } else {
+    const unpublished = plan?.days.some((day) => day.items.some((item) => item.kind === "transport" && !item.start));
+    if (unpublished && !/publish/i.test(text) && !/\b(?:day|dia|jour)\s+\d/i.test(text)) {
+      const extra = next.locale === "pt" ? "O horário não está publicado, por isso o plano não marca uma hora."
+        : next.locale === "fr" ? "L'horaire n'est pas publié, donc le plan ne fixe pas d'heure."
+        : "The timetable has no published time, so the plan does not set one.";
+      text = `${text} ${extra}`.trim();
+    }
+    text = publicPlanReply(text, next.locale, plan, stance);
   }
-  text = publicPlanReply(text, next.locale, plan, stance);
   if (!preservePlaces) {
     const found = presentedPlaces(text, next.locale);
     // A list, a recommendation or a side answer replaces the previous list. One incidental name does not.
     if (found.length >= 2) next = { ...next, lastPlaces: found };
   }
   const carChips = isCarPending(next.pendingQuestion) ? CAR_CHIPS[next.locale] : null;
-  const chips = (carChips ?? chipsOverride ?? followUpChips(next)).slice(0, carChips ? 3 : 2);
+  const chips = (carChips ?? chipsOverride ?? followUpChips(next)).slice(0, 3);
   return { reply: text, plan, toolEvents, task: next, chips, intent };
 }
 
@@ -234,7 +239,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
 
-  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance);
+  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built);
 
   const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
   const composeRequest = (modelInput: Record<string, unknown> | null): Record<string, unknown> => {
@@ -242,19 +247,15 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const merged = correction || !modelInput ? requestFromTask(task, today) : overlayRequest(modelInput, task);
     const asked = askedExperiences();
     let include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
-    const slow = task.constraints.pace === "slow" || merged.pace === "slow";
     const exclude = new Set(Array.isArray(merged.exclude) ? merged.exclude.filter((id): id is string => typeof id === "string") : []);
     if (correction) include = [...asked];
-    else if (slow) include = include.filter((id) => {
+    include = include.filter((id) => {
       const exp = experience(id);
       return !exp || !isAdrenalineExperience(exp) || asked.has(id);
     });
-    if (slow || correction) for (const id of asked) if (!include.includes(id)) include.push(id);
-    // A correction rebuilds every day. An unrequested quad from the previous draft is not a constraint.
-    if (correction || slow) {
-      for (const exp of EXPERIENCES) if (isAdrenalineExperience(exp) && !asked.has(exp.id)) exclude.add(exp.id);
-    }
-    return { ...merged, include, exclude: [...exclude] };
+    for (const id of asked) if (!include.includes(id)) include.push(id);
+    for (const exp of EXPERIENCES) if (isAdrenalineExperience(exp) && !asked.has(exp.id)) exclude.add(exp.id);
+    return { ...merged, include, exclude: [...exclude], pace: task.constraints.pace === "packed" ? "normal" : "slow" };
   };
 
   if (classification.smallTalk) {
@@ -482,7 +483,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   const safe = builtRequest && plan ? parseTripPlan(plan) : current;
   if (builtRequest && safe) task = syncTask(task, builtRequest, safe);
-  return finish(generated.text, safe ?? current, toolEvents);
+  return finish(generated.text, safe ?? current, toolEvents, task, undefined, false, false, Boolean(builtRequest && safe));
 }
 
 function smallTalkReply(locale: TaskLocale, spoken: string, plan: TripPlan | null): string {
