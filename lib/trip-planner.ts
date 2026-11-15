@@ -123,8 +123,9 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     }
   }
   // Departure: the last day, when the guest leaves on it (and it isn't also the arrival day).
-  const leave = req.departure && req.days > 1 && kinds[req.days - 1] === "full"
-    ? { mode: req.departure.mode, time: req.departure.time ?? "16:00", note: req.departure.time ? undefined : NOTES[req.locale].unset }
+  // A missing clock stays missing. 16:00 is not a stand-in for an unpublished timetable.
+  const leave = req.departure?.time && req.days > 1 && kinds[req.days - 1] === "full"
+    ? { mode: req.departure.mode, time: req.departure.time }
     : undefined;
   if (leave) kinds[req.days - 1] = "departure";
   const earlyExit = !!leave && toMin(leave.time) < toMin("12:00");

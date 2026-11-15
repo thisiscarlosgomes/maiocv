@@ -1,7 +1,7 @@
 import { EXPERIENCES, addDays, experience } from "../trip.ts";
 import { resolveReference, type ReferenceHit } from "./context.ts";
 import {
-  emptyTask, isCarPending, mergeConstraints, refreshTask, rememberPlace, type Task, type TaskConstraints, type TaskLocale, type TaskScope,
+  emptyTask, isCarPending, mergeConstraints, parseGuestChip, refreshTask, rememberPlace, type GuestChip, type Task, type TaskConstraints, type TaskLocale, type TaskScope,
 } from "./task.ts";
 
 export type Intent = "continuation" | "correction" | "side_question" | "cancel_pending" | "new_objective";
@@ -22,6 +22,8 @@ export type Classification = {
   /** Dates, party, car, quiet evenings, or arrival changed — the plan must be rebuilt. */
   planShaping: boolean;
   research: boolean;
+  /** A chip that asks for a change. Handled in code, not by rebuilding the whole trip. */
+  chip: GuestChip | null;
 };
 
 export type ClassifyContext = { today: string };
@@ -78,7 +80,8 @@ export function detectLocale(text: string): TaskLocale | undefined {
   if (/\b(?:answer in french|en francais|em frances|reponds en francais)\b/.test(n)) return "fr";
   if (/\b(?:em portugues|in portuguese|responde em portugues)\b/.test(n)) return "pt";
   if (/\b(?:nous|jours?|voiture|enfant|plage|sans|sommes)\b/.test(n) && /\b(?:nous|jours?|voiture|enfant|sommes)\b/.test(n)) return "fr";
-  if (/\b(?:dias?|somos|sem carro|amanha|crianca|bebe|voces?)\b/.test(n)) return "pt";
+  if (/\b(?:dias?|somos|sem carro|amanha|crianca|bebe|voces?|proximo|voos?|quando)\b/.test(n)) return "pt";
+  if (/\b(?:prochain|vols?|depuis|mercredi)\b/.test(n)) return "fr";
   if (/\b(?:lista|listar|restaurantes|praias|na vila|quais|indique)\b/.test(n)) return "pt";
   if (/\b(?:listez|liste|plages|donnez|quels)\b/.test(n) && /\b(?:restaurant|plage|liste)\b/.test(n)) return "fr";
   return undefined;
@@ -225,11 +228,23 @@ function isQuestion(text: string): boolean {
   return /^(?:is|are|what|whats|what's|where|when|how|can|do|does|why|which|qual|quais|onde|quando|como|posso|o que|est-ce|quel|quelle|ou |quand |comment |puis-je)\b/.test(text);
 }
 
-function isTimetableQuestion(text: string): boolean {
+export function isTimetableQuestion(text: string): boolean {
   return /\?/.test(text)
     && /\b(?:ferry|flight|voo|barco|bateau|horario|horaire|timetable|schedule)\b/.test(text)
     && /\b(?:is there|there a|ha |y a-t-il|status|horario|horaire|timetable|schedule|published)\b/.test(text)
     && !/\b(?:stay|days|dias|jours|plan)\b/.test(text);
+}
+
+/** "Next ferry to Praia" / "flights from Maio on Wednesday", not a request to build a trip. */
+export function isTravelLookup(text: string): boolean {
+  const n = normalizeUtterance(text);
+  if (/\b\d+\s*(?:days?|dias?|jours?)\b/.test(n) || /\b(?:stay|itinerary|roteiro)\b/.test(n)) return false;
+  const ferry = /\b(?:ferry|ferries|barco|barcos|bateau|bateaux)\b/.test(n)
+    && /\b(?:next|when|proxima|proximo|prochain|horario|horaire|what time|que horas|a que horas|quelle heure|to praia|para a praia|para praia|vers praia)\b/.test(n);
+  const flight = /\b(?:flights?|voos?|vols?|avion)\b/.test(n)
+    && /\b(?:from|do maio|de maio|depuis|wednesday|quarta|mercredi|when|next|horario|horaire|que horas)\b/.test(n)
+    && !/\b(?:in the air|flight status|estado do voo)\b/.test(n);
+  return ferry || flight;
 }
 
 export function isBusinessLookup(text: string): boolean {
@@ -342,7 +357,7 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   const asking = isGeneralIslandQuestion(text) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined && !patch.pace;
   const planShaping = hasPlanSignal(patch) && !referenceOnly && !asking;
   const dietOnly = Boolean(patch.diet || patch.budget) && !planShaping;
-  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false, carStance };
+  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false, carStance, chip: null as GuestChip | null };
   const side = { ...base, intent: "side_question" as const, planShaping: false, patch: {}, research: false, reference: { kind: null, place: null, from: null, to: null } as ReferenceHit };
 
   if (CANCEL_EXACT.test(n)) {
@@ -350,6 +365,13 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   }
   if (isSmallTalk(n)) {
     return { ...side, smallTalk: true, objective: task.objective ?? undefined };
+  }
+  const chip = parseGuestChip(text);
+  if (chip) {
+    return { ...base, intent: "correction", chip, planShaping: false, patch: {}, carStance: null, research: false };
+  }
+  if (isTravelLookup(text) || isTimetableQuestion(text)) {
+    return { ...side, objective: task.objective ?? undefined };
   }
   if (isBusinessLookup(text) && !patch.dates?.days && !patch.dates?.start) {
     return { ...side, patch: {}, planShaping: false, objective: task.objective ?? undefined };

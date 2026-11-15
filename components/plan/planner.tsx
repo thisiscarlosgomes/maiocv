@@ -4,13 +4,16 @@ import { trackUsage } from "../../lib/analytics-client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Locale } from "../../lib/locale";
-import { parseTripPlan, type PlanDay, type PlanItem, type TripPlan } from "../../lib/trip";
+import { parseTripPlan, type PlanItem, type TripPlan } from "../../lib/trip";
 import { planStrings, type PlanStrings } from "../../lib/trip-strings";
 import { samplePlan } from "../../lib/trip-sample";
-import { cardView, dateRange, dayParts, seaLine, timeSpan } from "../../lib/trip-view";
+import { cardView, dateRange, dayParts, seaLine, timeSpan, visibleStops } from "../../lib/trip-view";
 import { decodeTrip, encodeTrip } from "../../lib/trip-share";
-import { DayMap, DayStops, PlaceDetail, RoughAlert, SafeImg, SeaText } from "./cards";
+import { DayStops, PlaceDetail, RoughAlert, SafeImg, SeaText } from "./cards";
 import { ChatShell } from "../chat/shell";
+import { emptyTask, parseGuestChip, refreshTask } from "../../lib/awareness/task";
+import { keepAssistantReply } from "../../lib/plan-edits";
+import { loadingStatus, turnWork } from "../../lib/plan-status";
 
 // The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
 const TASK_KEY = "maio.plan.task";
@@ -22,7 +25,7 @@ const cover = (plan: TripPlan, locale: Locale, s: PlanStrings) => {
   return null;
 };
 const meta = (plan: TripPlan, locale: Locale, s: PlanStrings) => `${dateRange(plan.days, locale)} · ${s.people(plan.party.adults + plan.party.kids)}`;
-const stopCount = (plan: TripPlan) => plan.days.reduce((n, d) => n + d.items.filter((i) => i.kind !== "transport").length, 0);
+const stopCount = (plan: TripPlan) => plan.days.reduce((n, day) => n + visibleStops(day.items), 0);
 
 export function Planner({ locale }: { locale: Locale }) {
   const s = planStrings[locale];
@@ -34,8 +37,10 @@ export function Planner({ locale }: { locale: Locale }) {
   const [error, setError] = useState<string | null>(null);
   const [shared, setShared] = useState(false);
   const [detail, setDetail] = useState<PlanItem | null>(null);
-  const [mapDay, setMapDay] = useState<PlanDay | null>(null);
   const hadPlan = useRef(false);
+  const printOnOpen = useRef(false);
+  const [printNonce, setPrintNonce] = useState(0);
+  const [busyLabel, setBusyLabel] = useState(s.thinking);
   const [copied, setCopied] = useState(false);
   const [taskBlob, setTaskBlob] = useState<string | null>(null);
   const [chips, setChips] = useState<string[]>([]);
@@ -90,19 +95,33 @@ export function Planner({ locale }: { locale: Locale }) {
     window.scrollTo(0, 0);
   }, [screen]);
 
+  function hintTask() {
+    if (!plan) return emptyTask(locale);
+    return refreshTask({
+      ...emptyTask(plan.locale),
+      objective: plan.title,
+      constraints: {
+        dates: { start: plan.days[0]?.date, days: plan.days.length },
+        party: plan.party,
+        car: plan.hasCar,
+        pace: plan.pace === "normal" ? "packed" : "slow",
+      },
+      completed: ["itinerary"],
+    });
+  }
+
   async function send(text: string) {
     const content = text.trim();
     if (!content || busy || shared) return;
-    if (plan && /^(export as pdf|exportar em pdf|exporter en pdf)$/i.test(content)) {
-      const note = locale === "pt" ? "A viagem está aberta. Use Exportar PDF." : locale === "fr" ? "Le voyage est ouvert. Utilisez Exporter en PDF." : "The trip is open. Use Export PDF.";
-      setMessages([...messages, { role: "user", content }, { role: "assistant", content: note }]);
-      setDraft("");
+    const exporting = parseGuestChip(content)?.kind === "pdf" && !!plan;
+    if (exporting) {
+      printOnOpen.current = true;
       setScreen("trip");
-      return;
+      setPrintNonce((nonce) => nonce + 1);
     }
     const conversation: Msg[] = [...messages, { role: "user", content }];
-    setMessages(conversation); setDraft(""); setBusy(true); setError(null);
-    if (screen === "trip") setScreen("chat");
+    setMessages(conversation); setDraft(""); setBusyLabel(loadingStatus(locale, turnWork(content, hintTask(), new Date().toISOString().slice(0, 10)))); setBusy(true); setError(null);
+    if (!exporting && screen === "trip") setScreen("chat");
     try {
       const response = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: conversation.slice(-25).map(({ role, content: c }) => ({ role, content: c })), plan, locale, ...(taskBlob ? { task: taskBlob } : {}) }) });
@@ -114,7 +133,11 @@ export function Planner({ locale }: { locale: Locale }) {
       const changed = !!next && JSON.stringify(next) !== JSON.stringify(plan);
       if (data.intent === "new_objective" && !next) setPlan(null);
       else if (changed && next) { if (!plan) trackUsage("plan_generated"); setPlan(next); }
-      setMessages([...conversation, { role: "assistant", content: String(data.reply || ""), trip: changed }]);
+      const reply = String(data.reply || "");
+      const previous = [...messages].reverse().find((message) => message.role === "assistant")?.content ?? null;
+      if (keepAssistantReply(previous, reply, changed)) {
+        setMessages([...conversation, { role: "assistant", content: reply, trip: changed }]);
+      }
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
     } finally { setBusy(false); }
@@ -136,6 +159,13 @@ export function Planner({ locale }: { locale: Locale }) {
     window.print();
     document.title = title;
   }
+
+  useEffect(() => {
+    if (!printOnOpen.current || screen !== "trip") return;
+    printOnOpen.current = false;
+    const id = window.setTimeout(() => exportPdf(), 50);
+    return () => window.clearTimeout(id);
+  }, [screen, printNonce]);
   function startOver() {
     writeTask(null);
     setMessages([]);
@@ -162,7 +192,7 @@ export function Planner({ locale }: { locale: Locale }) {
       welcome={s.greeting}
       logLabel={s.title}
       placeholder={plan ? s.ask : s.placeholder}
-      thinking={s.thinking}
+      thinking={busyLabel}
       sendLabel={s.send}
       sendingLabel={s.thinking}
       inputId="plan-input"
@@ -206,7 +236,6 @@ export function Planner({ locale }: { locale: Locale }) {
               </div>
               <RoughAlert day={d} s={s} />
               <DayStops day={d} hasCar={plan.hasCar} locale={locale} s={s} onOpen={(item) => setDetail(item)} />
-              <button type="button" className="plan-daymap" onClick={() => setMapDay(d)}>{s.viewDayMap}</button>
             </section>
           ))}
           {plan.unmet.length > 0 && <p className="plan-unmet"><strong>{s.unmet}:</strong> {plan.unmet.join(", ")}</p>}
@@ -222,7 +251,6 @@ export function Planner({ locale }: { locale: Locale }) {
       )}
       {detail && detailDay && <PlaceDetail item={detail} day={detailDay} locale={locale} s={s}
         onClose={() => setDetail(null)} onAsk={shared ? undefined : (text) => { setDetail(null); setDraft(text); setTimeout(() => document.getElementById("plan-input")?.focus(), 0); }} />}
-      {mapDay && <DayMap day={mapDay} locale={locale} s={s} onClose={() => setMapDay(null)} />}
       {plan && <PrintPlan plan={plan} locale={locale} />}
     </ChatShell>
   );

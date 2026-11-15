@@ -119,8 +119,33 @@ test("one tour per trip, on a full day, and never a sea outing on a rough day", 
 test("meals: restaurants for breakfast/lunch/dinner, bars only as 21:00 drinks", () => {
   for (const { name, p } of matrix) for (const d of p.days) for (const i of d.items) {
     if (i.kind !== "food") continue;
-    if (isBar(i.refId)) { assert.equal(i.slot, "drinks", name); assert.ok(toMin(i.start) >= toMin("21:00"), name); }
+    if (isBar(i.refId)) {
+      assert.ok(i.slot === "drinks" || i.slot === "dinner", `${name} ${i.slot}`);
+      assert.ok(toMin(i.start) >= toMin(i.slot === "drinks" ? "21:00" : "19:00"), `${name} ${i.start}`);
+    }
     else assert.notEqual(i.slot, "drinks", name);
+  }
+});
+
+test("food rotation uses Bar Bons Amigos before a restaurant is repeated, and free rows are not stops", () => {
+  const forecast = ["2026-11-16", "2026-11-17", "2026-11-18"].map((date) => ({ date, waveHeightM: 0.8, windKmh: 16, tempMaxC: 28, sunset: "18:10" }));
+  for (const hasCar of [true, false]) {
+    const built = buildPlan({ request: { startDate: "2026-11-16", days: 3, locale: "en", adults: 2, hasCar, boatTrips: 0, pace: "slow" }, forecast, sailings: [] });
+    const meals = built.days.flatMap((day) => day.items.filter((item) => item.kind === "food"));
+    const ids = meals.map((item) => item.refId);
+    const firstEnzo = ids.indexOf("food-006");
+    const secondEnzo = ids.indexOf("food-006", firstEnzo + 1);
+    const bons = ids.indexOf("food-004");
+    assert.ok(bons >= 0, `${hasCar} ${ids.join(" > ")}`);
+    if (secondEnzo >= 0) assert.ok(bons < secondEnzo, ids.join(" > "));
+    for (const day of built.days) {
+      const dinner = day.items.find((item) => item.slot === "dinner");
+      assert.notEqual(dinner?.kind, "free", `${hasCar} ${day.date}`);
+    }
+    const rows = built.days.reduce((n, day) => n + day.items.filter((item) => item.kind !== "transport").length, 0);
+    const visible = built.days.reduce((n, day) => n + day.items.filter((item) => item.kind === "food" || item.kind === "place" || item.kind === "experience").length, 0);
+    assert.ok(visible < rows, `${visible} of ${rows}`);
+    assert.equal(visible, meals.length + built.days.flatMap((day) => day.items).filter((item) => item.kind === "place" || item.kind === "experience").length);
   }
 });
 

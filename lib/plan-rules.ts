@@ -63,7 +63,9 @@ export function enforcePlanRules(plan: TripPlan, opts: { requested?: string[]; h
   let r = 0;
   for (const d of days) {
     for (const item of [...d.items]) {
-      if (item.kind !== "food" || !isBar(item.refId) || (toMin(item.start) >= toMin(EVENING_START) && inferSlot(item) === "drinks")) continue;
+      const slot = inferSlot(item);
+      const eveningBar = toMin(item.start) >= toMin(EVENING_START) && (slot === "drinks" || slot === "dinner");
+      if (item.kind !== "food" || !isBar(item.refId) || eveningBar) continue;
       const bar = item.refId;
       const taken = new Set(d.items.filter((x) => x.kind === "food").map((x) => x.refId));
       const swap = restaurants.map((_, k) => restaurants[(r + k) % restaurants.length]).find((f) => !taken.has(f.id));
@@ -102,8 +104,8 @@ export function planRuleViolations(plan: TripPlan): string[] {
       if (slow && anchoredCount(d.items) > SLOW_ANCHORED_MAX) out.push(`${d.date}: ${anchoredCount(d.items)} anchored stops (max ${SLOW_ANCHORED_MAX})`);
     }
     else if (d.items.some((i) => i.kind === "experience")) out.push(`${kind} day ${d.date} has a tour`);
-    const lunchDinner = d.items.filter((i) => (inferSlot(i) === "lunch" || inferSlot(i) === "dinner" || inferSlot(i) === "breakfast") && i.kind === "food" && isBar(i.refId));
-    for (const i of lunchDinner) out.push(`meal at bar ${i.refId} on ${d.date}`);
+    const daytimeBar = d.items.filter((i) => (inferSlot(i) === "lunch" || inferSlot(i) === "breakfast") && i.kind === "food" && isBar(i.refId));
+    for (const i of daytimeBar) out.push(`meal at bar ${i.refId} on ${d.date}`);
     const repeats = d.items.filter((i) => !!i.note && /^(Back again|De volta|Encore une fois)/.test(i.note)).length;
     if (repeats > 1) out.push(`${d.date}: ${repeats} repeats (max 1)`);
   }

@@ -46,8 +46,11 @@ test("contact rule: booking site → nothing; no site + phone/WhatsApp → links
   assert.equal(contactLinks(fishing.operator), null, "no contact in data");
 });
 
-test("day summary counts stops and estimates travel", () => {
-  assert.match(daySummary(plan.days[2], s, false), /^4 stops · \d+ min (driving|walking)$/);
+test("day summary counts meals and places, not the departure row", () => {
+  const day = plan.days[2];
+  const visible = day.items.filter((item) => item.kind === "food" || item.kind === "place" || item.kind === "experience").length;
+  assert.match(daySummary(day, s, false), new RegExp(`^${visible} stops · \\d+ min (driving|walking)$`));
+  assert.ok(visible < day.items.filter((item) => item.kind !== "transport").length);
 });
 
 test("unknown ids render nothing", () => {

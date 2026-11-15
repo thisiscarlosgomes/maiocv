@@ -1,15 +1,18 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
-import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
+import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
+import { addBoatTrip, noTripReply, pdfReply, relaxDay } from "./plan-edits.ts";
+import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
+import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
 import { loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
 import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
-import { loadBoatSchedule, loadFlightSchedule, loadSailings, type Sailing } from "./essentials.ts";
+import { loadBoatSchedule, loadFlightSchedule } from "./essentials.ts";
 import { venueType } from "./plan-rules.ts";
 import { EXPERIENCES, FOOD, experience, food, localizedPlaceName, place, parseTripPlan, type TripPlan } from "./trip.ts";
 import { TripRequestSchema, buildPlan, isAdrenalineExperience, seaStatus, type TripRequest } from "./trip-planner.ts";
@@ -22,6 +25,8 @@ export type PlanAgentResult = {
   task: Task;
   chips: string[];
   intent: Intent;
+  /** Loading line for this turn. Empty when the turn does no visible work. */
+  status: string;
 };
 export type PlanDeps = { model: LanguageModel; fetchImpl: typeof fetch; now?: Date };
 
@@ -152,7 +157,7 @@ function pendingFrom(task: Task, reply: string, intent: Intent): Task {
   return { ...task, pendingQuestion: question ? question.slice(0, 200) : null };
 }
 
-function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null, built = false): PlanAgentResult {
+function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null, built = false, work: TurnWork = "thinking"): PlanAgentResult {
   let next = refreshTask(pendingFrom(task, reply, intent));
   if (keepPending && isCarPending(task.pendingQuestion)) next = { ...next, pendingQuestion: task.pendingQuestion };
   let text = reply.trim();
@@ -175,7 +180,10 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
   }
   const carChips = isCarPending(next.pendingQuestion) ? CAR_CHIPS[next.locale] : null;
   const chips = (carChips ?? chipsOverride ?? followUpChips(next)).slice(0, 3);
-  return { reply: text, plan, toolEvents, task: next, chips, intent };
+  const ferryRan = toolEvents.some((event) => event.name === "get_transport");
+  const forecastRan = toolEvents.some((event) => event.name === "get_sea_forecast" || event.name === "propose_itinerary");
+  const shown: TurnWork = work === "ferries" || (ferryRan && !forecastRan) ? "ferries" : forecastRan ? "forecast" : work === "forecast" ? "moment" : work;
+  return { reply: text, plan, toolEvents, task: next, chips, intent, status: loadingStatus(next.locale, shown) };
 }
 
 function includeFromConstraints(task: Task, utterance: string): string[] {
@@ -239,7 +247,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
 
-  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built);
+  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built, work ?? turnWork(lastUser, seeded, today));
 
   const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
   const composeRequest = (modelInput: Record<string, unknown> | null): Record<string, unknown> => {
@@ -259,7 +267,27 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   };
 
   if (classification.smallTalk) {
-    return finish(smallTalkReply(task.locale, spoken, current), current, [], task, []);
+    return finish(smallTalkReply(task.locale, spoken, current), current, [], task, [], false, false, false, "thinking");
+  }
+
+  if (classification.chip) {
+    const locale = task.locale;
+    if (!current) return finish(noTripReply(locale), null, [], task, [], true, false, false, classification.chip.kind === "pdf" ? "none" : "moment");
+    if (classification.chip.kind === "pdf") {
+      const next = refreshTask({ ...task, completed: [...task.completed, "pdf"] });
+      return finish(pdfReply(locale), current, [], next, undefined, true, false, false, "none");
+    }
+    if (classification.chip.kind === "relax") {
+      const edited = relaxDay(current, classification.chip.day, locale);
+      if (!edited) return finish(noTripReply(locale), current, [], task, [], true, false, false, "moment");
+      const next = refreshTask({ ...task, completed: [...task.completed, `relax-day-${classification.chip.day}`] });
+      return finish(edited.reply, edited.plan, [], next, undefined, true, false, false, "moment");
+    }
+    const edited = addBoatTrip(current, locale);
+    const tag = edited.added ? "boat" : "boat-skipped";
+    const constraints = edited.added ? mergeConstraints(task.constraints, { boatTrips: 1, interests: ["boat"] }) : task.constraints;
+    const next = refreshTask({ ...task, constraints, completed: [...task.completed, tag] });
+    return finish(edited.reply, edited.plan, [], next, undefined, true, false, false, "moment");
   }
 
   if (classification.cancelOnly) {
@@ -276,6 +304,12 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (classification.intent === "side_question" && /\b(hospital|hospit|hopital|emergenc|urgencia|urgence)\b/.test(spoken)) {
     task = rememberFact(task, { name: "emergency", retrievedAt: EMERGENCY_VERIFIED_AT, value: "+238 255 11 30" });
     return finish(hospitalReply(task.locale), current, [{ name: "emergency", ok: true }]);
+  }
+
+  if (classification.intent === "side_question" && isTravelLookup(lastUser)) {
+    const table = await loadTimetable(deps.fetchImpl, now);
+    task = rememberFact(task, { name: "get_transport", retrievedAt: table.retrievedAt, value: table.ok ? "timetable" : "unavailable" });
+    return finish(answerTravelQuestion(lastUser, task.locale, table, today), current, [{ name: "get_transport", ok: table.ok }], task, undefined, true, false, false, "ferries");
   }
 
   if (classification.intent === "side_question" && /\b(in the air|flight status|estado do voo|praia flight)\b/.test(spoken)) {
@@ -396,8 +430,6 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     if (!forecastCache.has(key)) forecastCache.set(key, loadDailyForecast(deps.fetchImpl, start, days).catch(() => []));
     return forecastCache.get(key)!;
   };
-  let sailings: Promise<Sailing[]> | null = null;
-  const getSailings = () => (sailings ??= loadSailings(deps.fetchImpl));
   let plan: TripPlan | null = current;
   let builtRequest: TripRequest | null = null;
   const toolEvents: ToolEvent[] = [];
@@ -451,10 +483,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
         const dropped = include.filter((id) => !experience(id));
         const clean: Record<string, unknown> = { ...merged, include: include.filter((id) => experience(id)) };
-        const built = buildPlan({ request: clean as z.input<typeof TripRequestSchema>, forecast: await forecast(String(clean.startDate), Number(clean.days)), sailings: await getSailings(), forecastSource: forecastSourceName });
-        builtRequest = TripRequestSchema.parse(clean);
+        const table = await loadTimetable(deps.fetchImpl, now);
+        const withTravel = attachPublishedTravel(clean, table);
+        const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: await forecast(String(withTravel.startDate), Number(withTravel.days)), sailings: table.sailings, forecastSource: forecastSourceName }), table);
+        builtRequest = TripRequestSchema.parse(withTravel);
         plan = built;
-        toolEvents.push({ name: "propose_itinerary", ok: true, arguments: clean, ...(dropped.length ? { dropped } : {}) });
+        toolEvents.push({ name: "get_transport", ok: table.ok });
+        toolEvents.push({ name: "propose_itinerary", ok: true, arguments: withTravel, ...(dropped.length ? { dropped } : {}) });
         return clipToolBody(summarize(built));
       },
     }),
@@ -474,10 +509,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (offerPlan && !builtRequest) {
     const fallback = composeRequest(null);
     try {
-      const built = buildPlan({ request: fallback as z.input<typeof TripRequestSchema>, forecast: await forecast(String(fallback.startDate), Number(fallback.days)), sailings: await getSailings(), forecastSource: forecastSourceName });
-      builtRequest = TripRequestSchema.parse(fallback);
+      const table = await loadTimetable(deps.fetchImpl, now);
+      const withTravel = attachPublishedTravel(fallback, table);
+      const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: await forecast(String(withTravel.startDate), Number(withTravel.days)), sailings: table.sailings, forecastSource: forecastSourceName }), table);
+      builtRequest = TripRequestSchema.parse(withTravel);
       plan = built;
-      toolEvents.push({ name: "propose_itinerary", ok: true, arguments: fallback });
+      toolEvents.push({ name: "get_transport", ok: table.ok });
+      toolEvents.push({ name: "propose_itinerary", ok: true, arguments: withTravel });
     } catch { /* keep the previous plan when the task is not specific enough */ }
   }
 
