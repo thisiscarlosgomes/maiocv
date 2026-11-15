@@ -40,6 +40,7 @@ function reviewPlan(turn: PlanReplyTurn, messages: { role: string; content: stri
     planTurn: turn.planTurn,
     toolFacts: turn.toolFacts,
     previousReply: context.previousReply,
+    appliedEdit: turn.appliedEdit,
   }, deps);
 }
 

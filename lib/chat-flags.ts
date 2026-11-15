@@ -64,6 +64,8 @@ export type TurnForFlags = {
   failure?: "model_error" | "timeout" | null;
   /** False when the guest was not shown a new plan card. */
   cardShown?: boolean;
+  /** The edit the server applied, when this turn was handled in code. */
+  appliedEdit?: string | null;
 };
 
 const CONTEXT_CHARS = 2000;
@@ -79,6 +81,37 @@ export async function applyFlagIndexes(col: { createIndex: (key: { createdAt: 1 
 
 export function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").replace(/[’']/g, "'").toLowerCase();
+}
+
+function dayLine(plan: TripPlan, index: number): string {
+  const day = plan.days[index];
+  if (!day) return "none";
+  const stops = day.items
+    .filter((item) => item.kind === "place" || item.kind === "food" || item.kind === "experience" || item.kind === "transport" || item.slot === "departure")
+    .slice(0, 6)
+    .map((item) => `${item.slot ?? item.kind}:${item.refId}${item.start ? `@${item.start}` : ""}`);
+  return `${day.date} [${stops.join(", ") || "empty"}]`;
+}
+
+/** Compact before/after of the days that actually changed. "no itinerary change" when the card is the same. */
+export function planDayDiff(before: unknown, after: unknown): string {
+  const left = parseTripPlan(before);
+  const right = parseTripPlan(after);
+  if (!left && !right) return "no plan";
+  if (!left) return "plan created";
+  if (!right) return "plan removed";
+  const lines: string[] = [];
+  if (left.hasCar !== right.hasCar) lines.push(`car ${left.hasCar} -> ${right.hasCar}`);
+  if (left.days[0]?.date !== right.days[0]?.date || left.days.length !== right.days.length) {
+    lines.push(`span ${left.days[0]?.date ?? "?"} x${left.days.length} -> ${right.days[0]?.date ?? "?"} x${right.days.length}`);
+  }
+  const count = Math.max(left.days.length, right.days.length);
+  for (let index = 0; index < count; index += 1) {
+    const from = dayLine(left, index);
+    const to = dayLine(right, index);
+    if (from !== to) lines.push(`day ${index + 1}: ${from} -> ${to}`);
+  }
+  return lines.length ? lines.join("; ").slice(0, 700) : "no itinerary change";
 }
 
 export function summarizePlan(value: unknown): PlanSummary | null {

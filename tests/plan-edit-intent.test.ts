@@ -427,3 +427,53 @@ test("the edit-intent model call is capped under the edit-turn budget", () => {
   assert.match(planRoute, /after\(/);
   assert.match(chatRoute, /after\(/);
 });
+
+const FAST: { phrase: string; locale: "en" | "pt" | "fr"; kind: "boat" | "ferry" | "afternoon" | "land" }[] = [
+  { phrase: "I don't want a boat trip", locale: "en", kind: "boat" },
+  { phrase: "Não quero passeio de barco", locale: "pt", kind: "boat" },
+  { phrase: "Je ne veux pas de sortie en bateau", locale: "fr", kind: "boat" },
+  { phrase: "We'll take the 20:00 ferry", locale: "en", kind: "ferry" },
+  { phrase: "Vamos apanhar o barco das 20:00", locale: "pt", kind: "ferry" },
+  { phrase: "On prend le ferry de 20:00", locale: "fr", kind: "ferry" },
+  { phrase: "leave the last afternoon free", locale: "en", kind: "afternoon" },
+  { phrase: "deixa a última tarde livre", locale: "pt", kind: "afternoon" },
+  { phrase: "laisse le dernier après-midi libre", locale: "fr", kind: "afternoon" },
+  { phrase: "I land mid-afternoon on the first day", locale: "en", kind: "land" },
+  { phrase: "Aterro a meio da tarde no primeiro dia", locale: "pt", kind: "land" },
+  { phrase: "J'atterris en milieu d'après-midi le premier jour", locale: "fr", kind: "land" },
+];
+
+for (const item of FAST) {
+  test(`fast edit skips the model: ${item.phrase}`, async () => {
+    const { plan, task } = planned(item.locale, item.kind === "boat");
+    const started = Date.now();
+    const result = await runPlanAgent(
+      [{ role: "user", content: item.phrase }],
+      plan,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+      task,
+    );
+    assert.ok(Date.now() - started < 3_000, result.reply);
+    assert.ok(result.plan);
+    assert.notEqual(result.plan, plan);
+    if (item.kind === "boat") {
+      assert.equal(result.plan.days.some((day) => day.items.some((stop) => stop.kind === "experience")), false, result.reply);
+      assert.match(result.reply, /boat|barco|bateau/i);
+    } else if (item.kind === "ferry") {
+      const depart = result.plan.days.at(-1)?.items.find((stop) => stop.slot === "departure");
+      assert.equal(depart?.start, "20:00", result.reply);
+      assert.match(result.reply, /20:00/);
+    } else if (item.kind === "afternoon") {
+      assert.ok(visibleStops(result.plan.days.at(-1)!.items) < visibleStops(plan.days.at(-1)!.items), result.reply);
+      assert.deepEqual(result.plan.days[0].items, plan.days[0].items);
+      assert.match(result.reply, /afternoon|tarde|après-midi/i);
+    } else {
+      const arrival = result.plan.days[0].items.find((stop) => stop.kind === "transport");
+      assert.equal(arrival?.start, "15:00", result.reply);
+      for (const stop of result.plan.days[0].items) {
+        if (stop.kind === "transport" || !stop.start) continue;
+        assert.ok(stop.start >= "15:00", stop.start);
+      }
+    }
+  });
+}

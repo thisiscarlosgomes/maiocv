@@ -117,6 +117,34 @@ function relaxReply(locale: TaskLocale, day: number, morning: string, sunset: st
 
 const BOAT = () => EXPERIENCES.find((item) => item.boat && !isExcludedExperience(item.id));
 
+/** Take every boat experience off the open plan. Other stops stay. */
+export function dropBoatTrip(plan: TripPlan, locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; removed: boolean } {
+  const boats = new Set(EXPERIENCES.filter((item) => item.boat).map((item) => item.id));
+  let removed = false;
+  const days = plan.days.map((day) => {
+    const items = day.items.filter((item) => {
+      if (item.kind === "experience" && boats.has(item.refId)) {
+        removed = true;
+        return false;
+      }
+      return true;
+    });
+    return items.length === day.items.length ? day : { ...day, items };
+  });
+  if (!removed) {
+    return {
+      plan,
+      removed: false,
+      reply: say(locale, "There isn't a boat trip on the plan.", "Não há um passeio de barco no plano.", "Il n'y a pas de sortie en bateau dans le plan."),
+    };
+  }
+  return {
+    plan: { ...plan, days },
+    removed: true,
+    reply: say(locale, "I took the boat trip off the plan.", "Tirei o passeio de barco do plano.", "J'ai retiré la sortie en bateau du plan."),
+  };
+}
+
 /** Add the boat listing on one open day, or say plainly when the listings or the sea won't allow it. */
 export function addBoatTrip(plan: TripPlan, locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; added: boolean } {
   const boat = BOAT();
