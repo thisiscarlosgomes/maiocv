@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { toMin } from "../lib/full-day.ts";
-import { formatItinerary, humanPlanDate, localizeGuestLabels, publicPlanReply, stripPlanLeaks } from "../lib/plan-reply.ts";
+import { formatItinerary, humanPlanDate, localizeGuestLabels, planBlurb, publicPlanReply, stripPlanLeaks } from "../lib/plan-reply.ts";
 import type { TripPlan } from "../lib/trip.ts";
 
 const DUMP = "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Enzo (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18";
@@ -26,18 +26,17 @@ test("human dates follow the locale", () => {
   assert.doesNotMatch(humanPlanDate("2026-11-16", "en"), /\d{4}-\d{2}-\d{2}/);
 });
 
-test("leaks and a run-on itinerary become a day list in EN, PT and FR", () => {
+test("a dumped itinerary becomes a two-line blurb, not the day list", () => {
   assert.equal(stripPlanLeaks("Enzo (food listing)"), "Enzo");
   assert.doesNotMatch(stripPlanLeaks("Rental Quad (id blue-rental-quad-big-game)"), /blue-rental|food listing|\(id/);
   for (const locale of ["en", "pt", "fr"] as const) {
     const built = plan(locale);
     const reply = publicPlanReply(DUMP, locale, built);
-    assert.match(reply, /\n/);
-    assert.match(reply, /^#{0,2}.*(?:Day|Dia|Jour) 1 — /m);
-    assert.match(reply, /## (?:Notes|Notas)/);
-    assert.doesNotMatch(reply, /\d{4}-\d{2}-\d{2}/);
-    assert.doesNotMatch(reply, /food listing|\(id |blue-rental-quad-big-game|we list that by id/i);
-    assert.ok(reply.split("\n").filter((line) => /^- \d{2}:\d{2}/.test(line)).length >= 3);
+    assert.equal(reply, planBlurb(built));
+    const sentences = reply.split(/[.!?]+/).filter((part) => part.trim());
+    assert.ok(sentences.length <= 2, reply);
+    assert.ok(reply.length < 180, reply);
+    assert.doesNotMatch(reply, /\d{4}-\d{2}-\d{2}|food listing|## |08:10|Free time|Tempo livre/);
   }
 });
 

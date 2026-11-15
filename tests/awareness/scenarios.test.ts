@@ -279,7 +279,7 @@ test("diet and budget are stored and the reply invents neither a menu nor a pric
 
 test("an unpublished ferry is not given 14:00 and the reply does not say no boat", async () => {
   const result = await ask({
-    content: "We arrive by ferry on Friday and stay 2 days.",
+    content: "We arrive by ferry on Friday and stay 2 days, no car.",
     script: [[{ tool: "propose_itinerary", input: { ...base, startDate: "2026-10-30", days: 2, boatTrips: 0, arrival: { mode: "ferry", dayIndex: 0 } } }]],
     reply: "The timetable has no published trip that day.",
     fetchImpl: awareFetch({ waves: week("2026-10-30", [0.8, 0.9]), sailings: [] }),
@@ -314,7 +314,7 @@ test("an empty ferry payload is not described as no service", async () => {
 
 test("a stated landing time stays unverified and no airline is invented", async () => {
   const result = await ask({
-    content: "We land at 11:00 and stay 2 days from tomorrow.",
+    content: "We land at 11:00 and stay 2 days from tomorrow, no car.",
     script: [[{ tool: "propose_itinerary", input: { ...base, days: 2, boatTrips: 0, arrival: { mode: "flight", dayIndex: 0, time: "11:00" } } }]],
     reply: "11:00 is the time you gave. It is not in the published timetable and it is not live status.",
     fetchImpl: awareFetch({ waves: week("2026-10-28", [0.8, 0.9]), flight: "no-current-records" }),
@@ -364,7 +364,7 @@ test("a toddler surf lesson is unmet and beaches remain", async () => {
 
 test("diving, nightlife and a dolphin cruise go to unmet", async () => {
   const result = await ask({
-    content: "2 days. I want diving, nightlife and a dolphin cruise.",
+    content: "2 days, no car. I want diving, nightlife and a dolphin cruise.",
     script: [[{ tool: "search_experiences", input: { kind: "any", query: "dolphin" } }], [{ tool: "propose_itinerary", input: { ...base, days: 2, boatTrips: 0, include: ["dolphin-cruise"], unmet: ["diving", "nightlife", "dolphin cruise"] } }]],
     reply: "We don't list diving, nightlife or dolphin cruises yet.",
   });

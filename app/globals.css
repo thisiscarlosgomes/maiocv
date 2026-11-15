@@ -1667,6 +1667,7 @@ body:has(.chat-screen) { overflow: hidden; }
 @media (min-width: 701px) { .plan-skel { aspect-ratio: 5 / 2; } }
 @keyframes plan-spin { to { transform: rotate(360deg); } }
 .plan-tripcard { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-card); }
+.chat-message .plan-tripcard { margin: 0 0 12px; }
 .plan-tripcard img, .plan-tripcard-img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 12px; background: var(--maio-surface-data); }
 .plan-tripcard-title { margin: 0; font-size: 17px; font-weight: 500; }
 .plan-tripcard-meta { margin: 2px 0 0; font-size: 13px; color: var(--muted); }

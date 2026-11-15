@@ -8,7 +8,7 @@ import { anchoredCount, toMin } from "../lib/full-day.ts";
 import { planRuleViolations } from "../lib/plan-rules.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { distanceKm, place, type TripPlan } from "../lib/trip.ts";
-import { emptyTask, type Task } from "../lib/awareness/task.ts";
+import { CAR_CHIPS, CAR_QUESTION, emptyTask, type Task } from "../lib/awareness/task.ts";
 import { scriptedModel } from "./plan/mock-model.ts";
 
 const TODAY = new Date("2026-11-15T12:00:00Z");
@@ -182,6 +182,105 @@ test("a car correction rebuilds every day and drops a quad the guest did not ask
   assert.equal(second.task.constraints.pace, "slow");
 });
 
+test("a plan without a car answer asks once, then a chip or a short reply builds that same trip", async () => {
+  const prompts = {
+    en: { plan: "3 days, slow pace", yes: "yes we rent one", no: "nope", unsure: "Not sure yet", hi: "hi" },
+    pt: { plan: "3 dias, ritmo calmo", yes: "sim", no: "não", unsure: "Ainda não sei", hi: "olá" },
+    fr: { plan: "3 jours, rythme calme", yes: "oui", no: "non", unsure: "Pas encore sûr", hi: "bonjour" },
+  } as const;
+  for (const locale of ["en", "pt", "fr"] as const) {
+    const copy = prompts[locale];
+    const asked = await runPlanAgent(
+      [{ role: "user", content: copy.plan }],
+      null,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    );
+    assert.equal(asked.plan, null);
+    assert.equal(asked.intent, "new_objective");
+    assert.equal(asked.task.pendingQuestion, CAR_QUESTION[locale]);
+    assert.equal(asked.task.objective, copy.plan);
+    assert.equal(asked.task.constraints.car, undefined);
+    assert.deepEqual(asked.chips, [...CAR_CHIPS[locale]]);
+    assert.ok(asked.reply.length < 80, asked.reply);
+
+    const greeted = await runPlanAgent(
+      [{ role: "user", content: copy.plan }, { role: "assistant", content: asked.reply }, { role: "user", content: copy.hi }],
+      null,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+      asked.task,
+    );
+    assert.equal(greeted.plan, null);
+    assert.equal(greeted.task.pendingQuestion, CAR_QUESTION[locale]);
+    assert.equal(greeted.task.objective, copy.plan);
+    assert.deepEqual(greeted.chips, [...CAR_CHIPS[locale]]);
+
+    const side = await runPlanAgent(
+      [{ role: "user", content: "what's the hospital number?" }],
+      null,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+      asked.task,
+    );
+    assert.match(side.reply, /255 11 30/);
+    assert.equal(side.plan, null);
+    assert.equal(side.task.pendingQuestion, CAR_QUESTION[locale]);
+    assert.equal(side.task.objective, copy.plan);
+
+    const held = await runPlanAgent(
+      [{ role: "user", content: "make it 4 days" }],
+      null,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+      asked.task,
+    );
+    assert.equal(held.plan, null);
+    assert.equal(held.task.pendingQuestion, CAR_QUESTION[locale]);
+    assert.equal(held.task.constraints.dates?.days, 4);
+    assert.match(held.reply, /Noted|Anotado|Noté/);
+  }
+
+  const withCar = await runPlanAgent(
+    [{ role: "user", content: "3 days, slow pace" }, { role: "assistant", content: CAR_QUESTION.en }, { role: "user", content: "Yes, renting a car" }],
+    null,
+    { model: scriptedModel([[{ tool: "propose_itinerary", input: { startDate: "2026-11-16", days: 3, locale: "en", adults: 2, hasCar: false, boatTrips: 0, pace: "slow" } }]], "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Cafe"), fetchImpl: quietFetch(), now: TODAY },
+    (await runPlanAgent([{ role: "user", content: "3 days, slow pace" }], null, { model: bomb(), fetchImpl: quietFetch(), now: TODAY })).task,
+  );
+  assert.equal(withCar.task.constraints.car, true);
+  assert.equal(withCar.task.pendingQuestion, null);
+  assert.equal(withCar.task.objective, "3 days, slow pace");
+  assert.equal(withCar.plan?.hasCar, true);
+  assert.match(withCar.reply, /with a car/i);
+  assert.doesNotMatch(withCar.reply, /## Day/);
+  assert.ok(withCar.reply.split(/[.!?]+/).filter((part) => part.trim()).length <= 2);
+
+  const noCar = await runPlanAgent(
+    [{ role: "user", content: "3 days, slow pace" }, { role: "assistant", content: CAR_QUESTION.en }, { role: "user", content: "nope" }],
+    null,
+    { model: scriptedModel([[{ tool: "propose_itinerary", input: { startDate: "2026-11-16", days: 3, locale: "en", pace: "slow", hasCar: true, boatTrips: 0, adults: 2 } }]], "Overview - Length: 3 days Day 1 — 2026-11-16 - 08:30 — Beach"), fetchImpl: quietFetch(), now: TODAY },
+    (await runPlanAgent([{ role: "user", content: "3 days, slow pace" }], null, { model: bomb(), fetchImpl: quietFetch(), now: TODAY })).task,
+  );
+  assert.equal(noCar.plan?.hasCar, false);
+  assert.match(noCar.reply, /no car/i);
+  assert.match(noCar.reply, /aluguer/);
+  assert.ok(noCar.plan!.days.flatMap((day) => day.items).filter((item) => item.kind === "place").every((item) => distanceKm(place(item.refId)!, town) <= 3));
+
+  const unsure = await runPlanAgent(
+    [{ role: "user", content: "3 days, slow pace" }, { role: "assistant", content: CAR_QUESTION.en }, { role: "user", content: "Not sure yet" }],
+    null,
+    { model: scriptedModel([[{ tool: "propose_itinerary", input: { startDate: "2026-11-16", days: 3, locale: "en", pace: "slow", hasCar: false, boatTrips: 0, adults: 2 } }]], "Overview - Length: 3 days Day 1 — 2026-11-16 - 08:30 — Beach"), fetchImpl: quietFetch(), now: TODAY },
+    (await runPlanAgent([{ role: "user", content: "3 days, slow pace" }], null, { model: bomb(), fetchImpl: quietFetch(), now: TODAY })).task,
+  );
+  assert.equal(unsure.plan?.hasCar, true);
+  assert.match(unsure.reply, /assuming a rental car/i);
+
+  const upfront = await runPlanAgent(
+    [{ role: "user", content: "3 days, slow pace, with a car" }],
+    null,
+    { model: scriptedModel([[{ tool: "propose_itinerary", input: { startDate: "2026-11-16", days: 3, locale: "en", pace: "slow", hasCar: false, boatTrips: 0, adults: 2 } }]], "Overview - Length: 3 days Day 1 — 2026-11-16 - 08:30 — Beach"), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.equal(upfront.task.pendingQuestion, null);
+  assert.equal(upfront.plan?.hasCar, true);
+  assert.doesNotMatch(upfront.reply, /Will you have a car/);
+});
+
 test("what can you tell me about maio is a short visitor intro, not a catalog count", async () => {
   const prompts = [
     ["en", "what can you tell me about maio"],
@@ -193,7 +292,7 @@ test("what can you tell me about maio is a short visitor intro, not a catalog co
     task.objective = "3 days on Maio";
     const result = await runPlanAgent([{ role: "user", content }], null, { model: bomb(), fetchImpl: quietFetch(), now: TODAY }, task);
     const sentences = result.reply.split(/[.!?]+/).filter((part) => part.trim());
-    assert.ok(sentences.length >= 3 && sentences.length <= 4, result.reply);
+    assert.ok(sentences.length >= 3 && sentences.length <= 3, result.reply);
     assert.doesNotMatch(result.reply, /lists \d+|lista \d+|liste \d+|\b\d+\s+(?:beaches|praias|plages|places|experiences|expériences|sítios)\b/i);
     assert.match(result.reply, /Vila do Maio/);
     assert.match(result.reply, /Porto Inglês/);

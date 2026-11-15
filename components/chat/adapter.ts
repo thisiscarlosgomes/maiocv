@@ -6,7 +6,9 @@ export type ChatShellMessage = {
   content: string;
   /** Charts that replace the text body. */
   body?: ReactNode;
-  /** Trip card, citations, PDF. Rendered under the bubble. */
+  /** Trip card. Rendered above the text so the openable plan leads the reply. */
+  lead?: ReactNode;
+  /** Citations, PDF, and other notes. Rendered under the text. */
   extra?: ReactNode;
 };
 

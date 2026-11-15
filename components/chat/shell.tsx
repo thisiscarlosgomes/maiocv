@@ -17,12 +17,11 @@ export function ChatShell({
 }: ChatAdapter) {
   const reduced = useReducedMotion();
   const pane = useRef<HTMLDivElement>(null);
-  const latestQuestion = useRef<HTMLElement>(null);
-  const scrollTail = useRef<HTMLDivElement>(null);
-  const scrollToQuestion = useRef<number | null>(null);
-  const pendingScroll = useRef(false);
   const seen = useRef(0);
   const field = useRef<HTMLTextAreaElement>(null);
+  /** Follow the latest message. A send always turns this back on. */
+  const stick = useRef(true);
+  const ignoreScroll = useRef(false);
 
   useEffect(() => {
     const screen = pane.current?.closest<HTMLElement>(".chat-screen");
@@ -51,14 +50,30 @@ export function ChatShell({
     };
   }, []);
 
+  function snapToBottom() {
+    const node = pane.current;
+    if (!node) return;
+    ignoreScroll.current = true;
+    node.scrollTop = node.scrollHeight;
+    requestAnimationFrame(() => { ignoreScroll.current = false; });
+  }
+
   useEffect(() => {
     const node = pane.current;
     if (!node) return;
-    const observer = new ResizeObserver(() => updateQuestionSpace());
+    const onScroll = () => {
+      if (ignoreScroll.current) return;
+      stick.current = node.scrollHeight - node.scrollTop - node.clientHeight < 64;
+    };
+    node.addEventListener("scroll", onScroll, { passive: true });
+    const observer = new ResizeObserver(() => { if (stick.current) snapToBottom(); });
     observer.observe(node);
     const log = node.querySelector('[role="log"]');
     if (log) observer.observe(log);
-    return () => observer.disconnect();
+    return () => {
+      node.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -78,36 +93,13 @@ export function ChatShell({
 
   useLayoutEffect(() => {
     const previous = seen.current;
-    if (messages.length > previous) {
-      const added = messages.slice(previous);
-      const userAt = added.findIndex((message) => message.role === "user");
-      if (userAt >= 0) {
-        scrollToQuestion.current = previous + userAt;
-        pendingScroll.current = true;
-      }
-    }
+    const added = messages.length > previous ? messages.slice(previous) : [];
     seen.current = messages.length;
-    const node = pane.current;
-    if (!node || scrollToQuestion.current === null || !latestQuestion.current) return;
-    const questionTop = updateQuestionSpace();
-    if (pendingScroll.current && questionTop !== null) {
-      pendingScroll.current = false;
-      node.scrollTo({ top: questionTop - 12, behavior: reduced ? "instant" : "smooth" });
-    }
-  }, [messages, busy, error, reduced, stage]);
-
-  function updateQuestionSpace(): number | null {
-    const node = pane.current;
-    const question = latestQuestion.current;
-    const tail = scrollTail.current;
-    if (!node || !tail) return null;
-    tail.style.height = "0px";
-    if (!question || scrollToQuestion.current === null) return null;
-    const questionTop = node.scrollTop + question.getBoundingClientRect().top - node.getBoundingClientRect().top;
-    const spaceBelow = node.scrollHeight - questionTop;
-    tail.style.height = `${Math.max(0, node.clientHeight + 12 - spaceBelow)}px`;
-    return questionTop;
-  }
+    if (messages.length === 0) { stick.current = true; return; }
+    if (added.some((message) => message.role === "user")) stick.current = true;
+    if (!stick.current && busy) return;
+    if (added.length > 0 || busy) snapToBottom();
+  }, [messages, busy, error, stage]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -140,11 +132,11 @@ export function ChatShell({
           <div role="log" aria-label={logLabel} aria-live="polite" aria-relevant="additions" data-testid="chat-log">
             {messages.map((message, index) => (
               <motion.article key={index}
-                ref={message.role === "user" && index === scrollToQuestion.current ? latestQuestion : null}
                 className={`chat-message chat-message-${message.role}`}
                 data-testid={message.role === "assistant" ? "assistant-reply" : "user-message"}
                 initial={reduced ? false : message.role === "user" ? { opacity: 0 } : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                {message.lead}
                 {message.body ?? (message.role === "assistant"
                   ? <ChatMarkdown content={message.content}
                       onFollowUp={onFollowUp && index === messages.length - 1 ? onFollowUp : undefined}
@@ -162,7 +154,6 @@ export function ChatShell({
           </div>
         )}
         {error && <p role="alert" className="chat-error">{error}</p>}
-        <div ref={scrollTail} aria-hidden="true" />
       </div>
       {showDockSuggestions && (
         <div className="chat-suggestions chat-suggestions-dock" data-testid="suggestions">

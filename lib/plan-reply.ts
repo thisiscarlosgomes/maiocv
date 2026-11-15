@@ -158,19 +158,56 @@ export function localizeGuestLabels(text: string, locale: TaskLocale): string {
   return next;
 }
 
+/** One or two lines under the trip card. The card holds the stops. */
+export function planBlurb(plan: TripPlan, stance?: "yes" | "no" | "unsure" | null): string {
+  const n = plan.days.length;
+  const slow = plan.pace === "slow";
+  const locale = plan.locale;
+  if (locale === "pt") {
+    const pace = slow ? "ritmo calmo, " : "";
+    const car = plan.hasCar ? "de carro" : "sem carro";
+    const day = `${n} ${n === 1 ? "dia" : "dias"}`;
+    const second = stance === "unsure"
+      ? "Assumo um carro alugado. Diga se não for o caso."
+      : plan.hasCar
+        ? "As praias podem ser na ilha toda."
+        : "A pé ou de aluguer, à volta da Vila do Maio.";
+    return `${day}, ${pace}${car}. ${second}`;
+  }
+  if (locale === "fr") {
+    const pace = slow ? "rythme calme, " : "";
+    const car = plan.hasCar ? "en voiture" : "sans voiture";
+    const day = `${n} ${n === 1 ? "jour" : "jours"}`;
+    const second = stance === "unsure"
+      ? "Je pars sur une voiture de location. Dites-le si ce n'est pas le cas."
+      : plan.hasCar
+        ? "Les plages peuvent être partout sur l'île."
+        : "À pied ou en aluguer, autour de Vila do Maio.";
+    return `${day}, ${pace}${car}. ${second}`;
+  }
+  const pace = slow ? "slow " : "";
+  const car = plan.hasCar ? "with a car" : "no car";
+  const day = `${n} ${pace}${n === 1 ? "day" : "days"}`;
+  const second = stance === "unsure"
+    ? "I'm assuming a rental car. Say if you won't have one."
+    : plan.hasCar
+      ? "Beaches can be anywhere on the island."
+      : "On foot or by aluguer around Vila do Maio.";
+  return `${day}, ${car}. ${second}`;
+}
+
 /**
- * Last step before a reply reaches the chat. Keeps short answers, rebuilds a dumped itinerary,
- * and never lets an id, a source label, or a trip ISO date through.
+ * Last step before a reply reaches the chat. A plan the guest can open as a card
+ * stays a line or two. Short answers pass through. Ids and ISO dates do not.
  */
-export function publicPlanReply(reply: string, locale: TaskLocale, plan: TripPlan | null): string {
+export function publicPlanReply(reply: string, locale: TaskLocale, plan: TripPlan | null, stance?: "yes" | "no" | "unsure" | null): string {
   const cleaned = humanizePlanDates(stripPlanLeaks(reply), locale).replace(/\n{3,}/g, "\n\n").trim();
   if (plan && (looksLikeItineraryDump(reply) || looksLikeItineraryDump(cleaned) || (UNFINISHED.test(cleaned) && plan.days.length > 0 && cleaned.length > 180))) {
-    return localizeGuestLabels(formatItinerary(plan), locale);
+    return planBlurb(plan, stance);
   }
   if (MENU.test(cleaned) || (plan && UNFINISHED.test(cleaned))) {
     const first = cleaned.split(/(?<=[.!?])\s+/)[0]?.trim() ?? cleaned;
-    const short = plan && first.length < 40 ? `${first} ${intro(plan)}`.trim() : first;
-    return localizeGuestLabels(short, locale);
+    return localizeGuestLabels(first, locale);
   }
   return localizeGuestLabels(expandRunOn(cleaned).trim(), locale);
 }

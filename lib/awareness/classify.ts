@@ -1,7 +1,7 @@
 import { EXPERIENCES, addDays, experience } from "../trip.ts";
 import { resolveReference, type ReferenceHit } from "./context.ts";
 import {
-  emptyTask, mergeConstraints, refreshTask, rememberPlace, type Task, type TaskConstraints, type TaskLocale, type TaskScope,
+  emptyTask, isCarPending, mergeConstraints, refreshTask, rememberPlace, type Task, type TaskConstraints, type TaskLocale, type TaskScope,
 } from "./task.ts";
 
 export type Intent = "continuation" | "correction" | "side_question" | "cancel_pending" | "new_objective";
@@ -15,6 +15,8 @@ export type Classification = {
   reference: ReferenceHit;
   /** The utterance is only "never mind" (or the pt/fr equivalent). */
   cancelOnly: boolean;
+  /** Set when this turn answers the car question or states a car outright. "unsure" plans with a car. */
+  carStance: "yes" | "no" | "unsure" | null;
   /** hi / olá / bonjour / thanks / ok. The task stays as it is. */
   smallTalk: boolean;
   /** Dates, party, car, quiet evenings, or arrival changed — the plan must be rebuilt. */
@@ -135,9 +137,9 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const party = extractParty(n);
   if (party) patch.party = party;
 
-  const howTo = /\b(?:how|como|comment)\b/.test(n);
-  if (!howTo && /\b(?:no car|sem carro|sans voiture|without a car)\b/.test(n)) patch.car = false;
-  else if (/\b(?:rented a car|rent(?:ed)? a car|we have a car|with a car|alugamos(?: um)? carro|temos carro|com carro|loue une voiture|avec une voiture|on a loue)\b/.test(n)) patch.car = true;
+  const stance = carPhrase(n);
+  if (stance === "no") patch.car = false;
+  else if (stance === "yes" || stance === "unsure") patch.car = true;
 
   if (/\bquiet\b|\bnoite calma\b|\bsoiree calme\b|\blazier\b|\bno bar\b|\bsem bar\b|\bsans bar\b/.test(n)) patch.quietEvenings = true;
   if (/\b(?:slow pace|relaxed pace|easy pace|ritmo calmo|ritmo lento|sem pressa|rythme lent|rythme calme)\b/.test(n)) patch.pace = "slow";
@@ -229,12 +231,19 @@ function isTimetableQuestion(text: string): boolean {
     && !/\b(?:stay|days|dias|jours|plan)\b/.test(text);
 }
 
+export function isBusinessLookup(text: string): boolean {
+  const n = normalizeUtterance(text);
+  return /\b(?:phone|telefone|telephone|numero de telefone|numero de telephone)\b/.test(n)
+    || /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(n);
+}
+
 function isFactualAside(text: string): boolean {
   return /\b(?:hospital|hospit|hopital|emergency|emergencia|urgence)\b/.test(text)
     || /\b(?:in the air|flight status|estado do voo|le vol est|praia flight)\b/.test(text)
     || /\b(?:what should i pack|o que levar|que mettre dans)\b/.test(text)
     || /\b(?:pay by card|posso pagar|carte bancaire|card payment)\b/.test(text)
-    || /\b(?:phone number|numero de telefone)\b/.test(text)
+    || /\b(?:phone|telefone|telephone|numero de telefone|numero de telephone)\b/.test(text)
+    || /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(text)
     || /\b(?:directions?|como chegar|itineraire)\b/.test(text);
 }
 
@@ -283,6 +292,34 @@ export function isGeneralIslandQuestion(text: string): boolean {
   return aboutIsland || beaches || safe || services || eat || around;
 }
 
+const HOW_AROUND = /\b(?:how|como|comment)\b.*\b(?:around|desloc|deplacer|car|carro|voiture)\b/;
+const CAR_NO = /\b(?:no car|without a car|sem carro|sans voiture)\b/;
+const CAR_YES = /\b(?:with a car|have a car|has a car|rent(?:ing|ed)?(?: a)? car|we(?:'ll| will) rent|yes we rent|com carro|de carro|vamos alugar|alug(?:ar|amos|uei)|temos carro|lou(?:er|ons|e) une voiture|avec une voiture|on a loue|on loue)\b/;
+const CAR_UNSURE = /\b(?:not sure(?: yet)?|unsure|ainda nao sei|nao sei|pas encore sur|pas sur|je ne sais pas)\b/;
+
+/** Explicit car wording. A how-to ("how do we get around without a car") is not an answer. */
+function carPhrase(text: string): "yes" | "no" | "unsure" | null {
+  if (HOW_AROUND.test(text)) return null;
+  if (CAR_UNSURE.test(text)) return "unsure";
+  if (CAR_NO.test(text)) return "no";
+  if (CAR_YES.test(text)) return "yes";
+  return null;
+}
+
+/**
+ * Car answer for this turn. Short yes/no ("sim", "oui", "nope") count only while the car question is waiting.
+ * "unsure" still plans with a car.
+ */
+export function resolveCarStance(text: string, pending: string | null): "yes" | "no" | "unsure" | null {
+  const n = bare(text);
+  const phrase = carPhrase(n);
+  if (phrase) return phrase;
+  if (!isCarPending(pending)) return null;
+  if (/^(?:yes|yeah|yep|yup|sure|sim|oui|si)$/.test(n)) return "yes";
+  if (/^(?:no|nope|nah|nao|non)$/.test(n)) return "no";
+  return null;
+}
+
 function newObjectiveCue(text: string): boolean {
   return /\b(?:forget the trip|ignore (?:the )?(?:trip|food|plan)|start over|start again|new (?:plan|trip)|esquece a viagem|esquecer a viagem|comecar de novo|oublie(?:z)? le voyage|nouveau voyage|recommencer)\b/.test(text);
 }
@@ -297,11 +334,14 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   const reference = resolveReference(text, task.lastPlaces);
   const research = isResearchQuestion(text);
   const patch = extractConstraints(text, ctx.today);
+  const carStance = resolveCarStance(text, task.pendingQuestion);
+  if (carStance === "no") patch.car = false;
+  else if (carStance === "yes" || carStance === "unsure") patch.car = true;
   const referenceOnly = Boolean(reference.kind) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined;
   const asking = isGeneralIslandQuestion(text) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined && !patch.pace;
   const planShaping = hasPlanSignal(patch) && !referenceOnly && !asking;
   const dietOnly = Boolean(patch.diet || patch.budget) && !planShaping;
-  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false };
+  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false, carStance };
   const side = { ...base, intent: "side_question" as const, planShaping: false, patch: {}, research: false, reference: { kind: null, place: null, from: null, to: null } as ReferenceHit };
 
   if (CANCEL_EXACT.test(n)) {
@@ -310,17 +350,20 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   if (isSmallTalk(n)) {
     return { ...side, smallTalk: true, objective: task.objective ?? undefined };
   }
+  if (isBusinessLookup(text) && !patch.dates?.days && !patch.dates?.start) {
+    return { ...side, patch: {}, planShaping: false, objective: task.objective ?? undefined };
+  }
   if (isTimetableQuestion(text) || /\bin the air\b|\bflight status\b|\bestado do voo\b/.test(n)) {
     return { ...base, intent: "side_question", planShaping: false, patch: {}, research: false };
   }
   if (newObjectiveCue(n) || (research && task.objective)) {
     return { ...base, intent: "new_objective", planShaping: !research && planShaping, objective: clipObjective(text) };
   }
-  if ((isGeneralIslandQuestion(text) || isPlaceListQuestion(text)) && !planShaping && !research) {
+  if ((isGeneralIslandQuestion(text) || isPlaceListQuestion(text) || isBusinessLookup(text)) && !planShaping && !research) {
     return { ...side, objective: task.objective ?? undefined };
   }
   if (!task.objective) {
-    if (isPlaceListQuestion(text) && !planShaping) return side;
+    if ((isPlaceListQuestion(text) || isBusinessLookup(text)) && !planShaping) return side;
     if (research || (isQuestion(n) && !planShaping)) {
       return { ...base, intent: research ? "new_objective" : "side_question", planShaping: false, objective: research ? clipObjective(text) : undefined };
     }

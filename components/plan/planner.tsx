@@ -158,7 +158,7 @@ export function Planner({ locale }: { locale: Locale }) {
       messages={messages.map((m) => ({
         role: m.role,
         content: m.content,
-        extra: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : undefined,
+        lead: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : undefined,
       }))}
       draft={draft}
       busy={busy}
@@ -218,7 +218,7 @@ export function Planner({ locale }: { locale: Locale }) {
 function TripCard({ plan, locale, s, onOpen }: { plan: TripPlan; locale: Locale; s: PlanStrings; onOpen: () => void }) {
   const img = cover(plan, locale, s);
   return (
-    <div className="plan-tripcard">
+    <div className="plan-tripcard" data-testid="plan-trip-card">
       <SafeImg className="plan-tripcard-img" src={img} />
       <div><p className="plan-tripcard-title">{plan.title}</p><p className="plan-tripcard-meta mono">{dateRange(plan.days, locale)} · {stopCount(plan)} {s.stops}</p></div>
       <button type="button" className="plan-primary" onClick={onOpen}>{s.openTrip}</button>

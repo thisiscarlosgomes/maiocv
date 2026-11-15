@@ -1,10 +1,11 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
-import { applyClassification, classify, experienceIdsMentioned, extractConstraints, normalizeUtterance, type Intent } from "./awareness/classify.ts";
+import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
-import { emptyTask, followUpChips, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
+import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
+import { loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
 import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
@@ -150,8 +151,9 @@ function pendingFrom(task: Task, reply: string, intent: Intent): Task {
   return { ...task, pendingQuestion: question ? question.slice(0, 200) : null };
 }
 
-function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false): PlanAgentResult {
+function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null): PlanAgentResult {
   let next = refreshTask(pendingFrom(task, reply, intent));
+  if (keepPending && isCarPending(task.pendingQuestion)) next = { ...next, pendingQuestion: task.pendingQuestion };
   let text = reply.trim();
   const unpublished = plan?.days.some((day) => day.items.some((item) => item.kind === "transport" && !item.start));
   if (unpublished && !/publish/i.test(text) && !/\b(?:day|dia|jour)\s+\d/i.test(text)) {
@@ -160,13 +162,14 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
       : "The timetable has no published time, so the plan does not set one.";
     text = `${text} ${extra}`.trim();
   }
-  text = publicPlanReply(text, next.locale, plan);
+  text = publicPlanReply(text, next.locale, plan, stance);
   if (!preservePlaces) {
     const found = presentedPlaces(text, next.locale);
     // A list, a recommendation or a side answer replaces the previous list. One incidental name does not.
     if (found.length >= 2) next = { ...next, lastPlaces: found };
   }
-  const chips = (chipsOverride ?? followUpChips(next)).slice(0, 2);
+  const carChips = isCarPending(next.pendingQuestion) ? CAR_CHIPS[next.locale] : null;
+  const chips = (carChips ?? chipsOverride ?? followUpChips(next)).slice(0, carChips ? 3 : 2);
   return { reply: text, plan, toolEvents, task: next, chips, intent };
 }
 
@@ -231,7 +234,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
 
-  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces);
+  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance);
 
   const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
   const composeRequest = (modelInput: Record<string, unknown> | null): Record<string, unknown> => {
@@ -329,6 +332,30 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(say(task.locale, `That is ${hit.name}.`, `É ${hit.name}.`, `C'est ${hit.name}.`), current, [], task, undefined, true);
   }
 
+  if (isBusinessLookup(lastUser) && !classification.planShaping) {
+    const catalog = await loadBusinesses(deps.fetchImpl);
+    const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(spoken);
+    if (pharmacy) {
+      const found = pharmacyRecords(catalog.records);
+      const listed = found.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ");
+      const reply = found.length
+        ? say(task.locale, `Pharmacy: ${listed}.`, `Farmácia: ${listed}.`, `Pharmacie : ${listed}.`)
+        : say(task.locale,
+          `No pharmacy is in the Maio business list. For urgent care, Hospital do Maio is ${EMERGENCY.find((item) => item.id === "hospital")!.number}.`,
+          `Não há farmácia na lista de negócios do Maio. Para urgências, o Hospital do Maio é ${EMERGENCY.find((item) => item.id === "hospital")!.number}.`,
+          `Pas de pharmacie dans la liste des commerces de Maio. Pour les urgences, l'hôpital de Maio est le ${EMERGENCY.find((item) => item.id === "hospital")!.number}.`);
+      return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
+    }
+    const name = lastUser.split(/\b(?:for|do|de|da|du|pour)\b/i).pop()?.replace(/\b(?:phone|number|numero|telefone|telephone|the|a|o|um|uma|le|la)\b/gi, " ").replace(/[?!.]/g, "").trim() ?? "";
+    const hit = searchBusinesses(catalog.records, name)[0];
+    const reply = !hit
+      ? say(task.locale, "I don't have that business on the Maio list, so I won't invent a number.", "Não tenho esse negócio na lista do Maio, por isso não invento um número.", "Je n'ai pas ce commerce dans la liste de Maio, donc je n'invente pas de numéro.")
+      : hit.phone
+        ? say(task.locale, `${hit.name}: ${hit.phone}.`, `${hit.name}: ${hit.phone}.`, `${hit.name} : ${hit.phone}.`)
+        : say(task.locale, `${hit.name} is listed. No phone number is published.`, `${hit.name} está na lista. Não há telefone publicado.`, `${hit.name} est dans la liste. Aucun numéro n'est publié.`);
+    return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
+  }
+
   if (classification.intent === "side_question" && !classification.planShaping) {
     const listed = answerPlaceList(lastUser, task.locale);
     if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, []);
@@ -350,6 +377,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
+  const planning = classification.planShaping
+    && classification.intent !== "side_question"
+    && !classification.smallTalk
+    && !classification.cancelOnly
+    && !classification.research;
+  if (planning && typeof task.constraints.car !== "boolean") {
+    const q = CAR_QUESTION[task.locale];
+    const again = isCarPending(seeded.pendingQuestion) || isCarPending(task.pendingQuestion);
+    const reply = again ? say(task.locale, "Noted.", "Anotado.", "Noté.") : q;
+    return finish(reply, current, [], { ...task, pendingQuestion: q }, [...CAR_CHIPS[task.locale]], false, true);
+  }
+
   const forecastCache = new Map<string, Promise<DailySea[]>>();
   const forecast = (start: string, days: number) => {
     const key = `${start}:${days}`;
@@ -365,16 +404,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   const tools = {
     search_experiences: tool({
-      description: "List experiences, food places and beaches on Maio from Visit Maio data. Returns ids to use in the plan.",
+      description: "List experiences and food on Maio. Phones come from the Maio API when it is reachable; the day graph falls back to the local fixture.",
       inputSchema: z.object({ kind: z.enum(["sea", "land", "food", "any"]).default("any"), query: z.string().max(60).optional() }),
       execute: async ({ kind, query }) => {
         const q = query?.toLowerCase();
         const match = (text: string) => !q || q.split(/\s+/).some((word) => word.length > 2 && text.toLowerCase().includes(word));
+        const catalog = await loadBusinesses(deps.fetchImpl);
+        const phoneFor = (title: string) => catalog.source === "api" ? searchBusinesses(catalog.records, title).find((item) => item.phone)?.phone : undefined;
         const exps = kind === "food" ? [] : EXPERIENCES.filter((item) => (kind === "any" || item.kind === kind) && match(`${item.title} ${item.description.en} ${item.description.pt}`))
-          .map((item) => ({ id: item.id, title: item.title, kind: item.kind, location: item.location, seaDependent: item.seaDependent, boat: item.boat, minAge: item.example.minAge, slots: item.example.slots, durationMin: item.example.durationMin }));
-        const eats = kind === "food" || kind === "any" ? FOOD.filter((item) => match(`${item.title} ${item.description.en}`)).map((item) => ({ id: item.id, title: item.title, location: item.location })) : [];
+          .map((item) => ({ id: item.id, title: item.title, kind: item.kind, location: item.location, seaDependent: item.seaDependent, boat: item.boat, minAge: item.example.minAge, slots: item.example.slots, durationMin: item.example.durationMin, ...(phoneFor(item.title) ? { phone: phoneFor(item.title) } : {}) }));
+        const eats = kind === "food" || kind === "any" ? FOOD.filter((item) => match(`${item.title} ${item.description.en}`)).map((item) => ({ id: item.id, title: item.title, location: item.location, ...(phoneFor(item.title) ? { phone: phoneFor(item.title) } : {}) })) : [];
         toolEvents.push({ name: "search_experiences", ok: true, arguments: { kind, query } });
-        return clipToolBody({ experiences: exps, food: eats, note: exps.length + eats.length ? undefined : "Nothing matches in Visit Maio data." });
+        return clipToolBody({ experiences: exps, food: eats, businesses: catalog.source, note: exps.length + eats.length ? undefined : "Nothing matches in Visit Maio data." });
       },
     }),
     get_sea_forecast: tool({

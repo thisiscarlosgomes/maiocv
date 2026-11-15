@@ -121,9 +121,9 @@ export function buildDay(args: {
     }
     return free(slot, "free-time", start, dur);
   };
-  const sunsetAndDinner = (clock: number) => {
+  const sunsetAndDinner = (clock: number, preferFar = false) => {
     const s = Math.max(sunsetStart, clock);
-    outing("sunset", s, 45, { sunset: true });
+    outing("sunset", s, 45, { sunset: true, preferFar });
     meal("dinner", Math.max(toMin(T.dinner), s + 60), 90, "dinner-free");
   };
 
@@ -190,8 +190,9 @@ export function buildDay(args: {
   else free("breakfast", "breakfast-stay", breakfastAt, 45);
 
   let clock: number;
+  const spread = pools.hasCar && i > 0;
   if (am && tour) { add("morning", { kind: "experience", refId: tour.id, start: am, durationMin: tour.example.durationMin }); clock = toMin(am) + tour.example.durationMin; }
-  else { outing("morning", toMin(T.morning), 150, { sheltered: rough }); clock = toMin(T.morning) + 150; }
+  else { outing("morning", toMin(T.morning), 150, { sheltered: rough, preferFar: spread }); clock = toMin(T.morning) + 150; }
 
   const lunch = Math.max(toMin(T.lunch), clock + 15);
   meal("lunch", lunch, 75, "lunch-free");
@@ -199,10 +200,10 @@ export function buildDay(args: {
   free("rest", "rest", rest, 75);
 
   if (pm && tour) { add("activity", { kind: "experience", refId: tour.id, start: pm, durationMin: tour.example.durationMin }); clock = toMin(pm) + tour.example.durationMin; }
-  else if (am) { outing("activity", Math.max(toMin(T.activity), rest + 90), 105, { sheltered: rough }); clock = Math.max(toMin(T.activity), rest + 90) + 105; }
-  else { const a = Math.max(toMin(T.activity), rest + 90); outing("activity", a, 105, { sheltered: rough }); clock = a + 105; }
+  else if (am) { outing("activity", Math.max(toMin(T.activity), rest + 90), 105, { sheltered: rough, preferFar: spread }); clock = Math.max(toMin(T.activity), rest + 90) + 105; }
+  else { const a = Math.max(toMin(T.activity), rest + 90); outing("activity", a, 105, { sheltered: rough, preferFar: spread }); clock = a + 105; }
 
-  sunsetAndDinner(clock);
+  sunsetAndDinner(clock, spread);
   const dinnerEnd = toMin(items[items.length - 1].start) + items[items.length - 1].durationMin;
   if (pools.drinks && !args.quietNight) {
     const bar = picker.pick(picker.bars(), foodPt, from, day, "venue", slow);

@@ -145,9 +145,9 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   }
   if (about) {
     return say(locale,
-      `Maio is a small, quiet Cape Verdean island, with long sandy beaches and an easy pace. Vila do Maio, also called Porto Inglês, is the harbour town: the ferry, the market and most meals are there. ${rotchaName} is a short walk from town, and ${morroName} is a little further along the coast; a car reaches the quieter stretches. Around town you walk or take an aluguer taxi, and a rental car is what opens the rest of the island.`,
-      `O Maio é uma ilha pequena e tranquila de Cabo Verde, com praias longas de areia e um ritmo calmo. Vila do Maio, também chamada Porto Inglês, é a vila do porto: o barco, o mercado e a maior parte das refeições ficam aí. A ${rotchaName} fica a um passo da vila, e a ${morroName} um pouco mais à frente na costa; de carro, as praias mais calmas ficam ao alcance. Na vila anda-se a pé ou de táxi aluguer, e um carro alugado é o que abre o resto da ilha.`,
-      `Maio est une petite île calme du Cap-Vert, avec de longues plages de sable et un rythme tranquille. Vila do Maio, aussi appelée Porto Inglês, est le bourg du port : le ferry, le marché et la plupart des repas y sont. ${rotchaName} est à une courte marche du bourg, et ${morroName} est un peu plus loin sur la côte ; une voiture ouvre les plages plus calmes. En ville on marche ou on prend un taxi aluguer, et une voiture de location ouvre le reste de l'île.`);
+      `Maio is a small, quiet Cape Verdean island, with long beaches and an easy pace. Vila do Maio, also called Porto Inglês, is the harbour town, a short walk from ${rotchaName}, with ${morroName} a little further along. Around town you walk or take an aluguer taxi, and a car opens the rest of the island.`,
+      `O Maio é uma ilha pequena e tranquila, com praias longas e um ritmo calmo. Vila do Maio, também chamada Porto Inglês, é a vila do porto, a um passo da ${rotchaName}, com a ${morroName} um pouco mais à frente. Na vila anda-se a pé ou de aluguer, e um carro abre o resto da ilha.`,
+      `Maio est une petite île calme, avec de longues plages et un rythme tranquille. Vila do Maio, aussi appelée Porto Inglês, est le bourg du port, à une courte marche de ${rotchaName}, avec ${morroName} un peu plus loin. En ville on marche ou on prend un aluguer, et une voiture ouvre le reste de l'île.`);
   }
   return null;
 }
