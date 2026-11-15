@@ -1,17 +1,17 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isFourByFourQuestion, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
-import { applyDateShift, applyLength, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, isCarRentalQuestion, isTravelChoice, parseDateShift, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
-import { answerIslandQuestion, answerPlaceList, fourByFourReply, sideQuestionFallback } from "./island-answer.ts";
+import { applyDateShift, applyLength, beachSwapDay, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, inclusiveDays, isCarRentalQuestion, isTravelChoice, looksLikePlanEdit, parseDateShift, parseLengthEdit, resolveDayOfMonth, resolveFollowUp, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
+import { answerIslandQuestion, answerPlaceList, fourByFourReply, isSunsetClockQuestion, sideQuestionFallback, sunsetTimeReply } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, looksLikeItineraryDump, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
-import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, dropBoatTrip, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
+import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, dropBoatTrip, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply, swapDayBeach } from "./plan-edits.ts";
 import { gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
-import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from "./agora.ts";
+import { forecastSourceName, loadDailyForecast, loadSunsets, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule } from "./essentials.ts";
@@ -417,7 +417,11 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (classification.intent === "side_question" && isTravelLookup(lastUser) && !specificFerry) {
     const table = await loadTimetable(deps.fetchImpl, now);
     noteTransport(table.retrievedAt, table.ok ? transportFact(table, today, lastUser) : "unavailable");
-    return finish(answerTravelQuestion(lastUser, task.locale, table, today), current, [{ name: "get_transport", ok: table.ok }], task, undefined, true, false, false, "ferries");
+    const clock = maioClock(now);
+    return finish(answerTravelQuestion(lastUser, task.locale, table, today, {
+      time: clock.time,
+      planEnd: current?.days.at(-1)?.date ?? null,
+    }), current, [{ name: "get_transport", ok: table.ok }], task, undefined, true, false, false, "ferries");
   }
 
   if (classification.intent === "side_question" && /\b(in the air|flight status|estado do voo|praia flight)\b/.test(spoken)) {
@@ -518,6 +522,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (classification.intent === "side_question" && !classification.planShaping && isFourByFourQuestion(lastUser)) {
+    const askWhere = /\b(?:where|onde|ou )\b/.test(spoken) && /\b(?:rent|alug|louer|location)\b/.test(spoken);
+    if (!askWhere) return finish(fourByFourReply(task.locale, null, false), current, [], task);
     let rentals: { name: string; phone: string }[] | null = null;
     let api = false;
     try {
@@ -525,7 +531,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       api = catalog.source === "api";
       rentals = api ? carRentalRecords(catalog.records) : null;
     } catch { /* the road answer still stands without a rental name */ }
-    return finish(fourByFourReply(task.locale, rentals), current, [{ name: "maio-businesses", ok: api }], task);
+    return finish(fourByFourReply(task.locale, rentals, true), current, [{ name: "maio-businesses", ok: api }], task);
+  }
+
+  if (isSunsetClockQuestion(lastUser) && !classification.planShaping) {
+    const dates = current?.days.length ? current.days.map((day) => day.date) : [today];
+    const rows = await loadSunsets(deps.fetchImpl, dates);
+    return finish(sunsetTimeReply(task.locale, rows), current, [{ name: "astronomy", ok: rows.length > 0 }], task, undefined, true);
   }
 
   if (classification.intent === "side_question" && !classification.planShaping) {
@@ -549,9 +561,21 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
-  const dateShift = dayEdit ? null : parseDateShift(lastUser, today, task.constraints.dates?.start ?? current?.days[0]?.date);
+  const beachDay = current ? beachSwapDay(lastUser) : null;
+  const follow = resolveFollowUp(lastUser, seeded.pendingQuestion ?? task.pendingQuestion, Boolean(current));
+  const dateShift = dayEdit || beachDay || follow ? null : parseDateShift(lastUser, today, task.constraints.dates?.start ?? current?.days[0]?.date);
   if (dateShift === "ask" && (current || task.constraints.dates?.start)) {
     return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+  }
+  if (dateShift && dateShift !== "ask" && dateShift.end && !dateShift.start && !dateShift.shiftDays) {
+    const baseStart = task.constraints.dates?.start ?? current?.days[0]?.date;
+    const counted = baseStart ? inclusiveDays(baseStart, dateShift.end) : undefined;
+    if (!counted || counted > 7) {
+      return finish(say(task.locale,
+        "That leaving day doesn't fit this trip. Which day are you leaving?",
+        "Esse dia de saída não cabe nesta viagem. Em que dia sai?",
+        "Ce jour de départ ne tient pas dans ce voyage. Quel jour partez-vous ?"), current);
+    }
   }
   if (dateShift && dateShift !== "ask" && !parseLengthEdit(lastUser)) {
     const baseStart = task.constraints.dates?.start ?? current?.days[0]?.date;
@@ -762,6 +786,36 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return null;
   }
 
+  if (follow?.kind === "ask-replace") {
+    return finish(say(task.locale, "What should I replace — a stop on a specific day?", "O que devo trocar — uma paragem num dia?", "Que dois-je remplacer — un arrêt un jour précis ?"), current);
+  }
+  if (follow?.kind === "ask-change") {
+    return finish(say(task.locale, "What should I change?", "O que devo mudar?", "Que voulez-vous changer ?"), current);
+  }
+  if (follow?.kind === "start-day" && current) {
+    const anchor = current.days[0]?.date;
+    const placed = anchor ? resolveDayOfMonth(today, follow.day, anchor) : null;
+    const span = anchor && placed ? applyDateShift(anchor, current.days.length, { start: placed }) : null;
+    if (!span) return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+    const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { dates: { start: span.start, days: span.days } }) });
+    const rebuilt = await rebuildPlan(nextTask);
+    if (!rebuilt || samePlanShape(rebuilt.plan, current)) return finish(lengthUnchangedReply(current, task.locale), current);
+    const reply = shiftDiffReply(current, rebuilt.plan, task.locale) ?? lengthUnchangedReply(current, task.locale);
+    return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+  }
+  if (current && beachDay) {
+    const edited = swapDayBeach(current, beachDay, task.locale);
+    if (!edited) return finish(whichDayQuestion(current, task.locale), current);
+    appliedEdit = "swap_beach";
+    return finish(edited.reply, edited.changed ? edited.plan : current, [], task, undefined, true, false, false, "moment");
+  }
+  if (current && /\b(?:replace|swap|troca|trocar|remplace|remplacer)\b/.test(spoken) && /\b(?:beach|praia|plage)\b/.test(spoken)) {
+    return finish(whichDayQuestion(current, task.locale), current);
+  }
+  if (!current && looksLikePlanEdit(lastUser) && !(typeof task.constraints.car === "boolean" && task.constraints.dates?.start)) {
+    return finish(clarifyEdit(task.locale, false), null);
+  }
+
   if (current && typeof task.constraints.car === "boolean" && !dateShift && !lengthEdit) {
     let intent: EditIntent | null = dayEdit;
     if (!intent && gatewayReady() && /\b(?:day|dia|jour|pack|relax|easier|quiet|slow|calm|cheio|calmo|calme)\b/i.test(lastUser)) {
@@ -780,6 +834,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (dateShift && dateShift !== "ask" && !lengthEdit && current && typeof task.constraints.car === "boolean") {
     const rebuilt = await rebuildPlan(task);
     if (!rebuilt || samePlanShape(rebuilt.plan, current)) {
+      if (dateShift.end && current.days.at(-1)?.date === dateShift.end) return finish(lengthUnchangedReply(current, task.locale), current);
       return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
     }
     const reply = shiftDiffReply(current, rebuilt.plan, task.locale);
@@ -929,8 +984,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       const rebuilt = await rebuildPlan(task);
       if (rebuilt) return finish("", rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, true, "forecast");
     }
-    const grounded = answerIslandQuestion(lastUser, task.locale) ?? sideQuestionFallback(task.locale);
-    return finish(grounded, current, toolEvents, task);
+    const grounded = answerIslandQuestion(lastUser, task.locale);
+    if (grounded) return finish(grounded, current, toolEvents, task);
+    if (looksLikePlanEdit(lastUser) || follow) return finish(clarifyEdit(task.locale, Boolean(current)), current, toolEvents, task);
+    return finish(sideQuestionFallback(task.locale), current, toolEvents, task);
   }
   modelMs += Date.now() - tModel;
 
@@ -963,6 +1020,19 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(say(task.locale, "The days stay on the card.", "Os dias ficam no cartão.", "Les jours restent sur la carte."), current, toolEvents, task, undefined, true);
   }
   return finish(generated.text, safe ?? current, toolEvents, task, undefined, false, false, built);
+}
+
+function clarifyEdit(locale: TaskLocale, hasPlan: boolean): string {
+  if (!hasPlan) {
+    return say(locale,
+      "I don't have a trip to change yet. Tell me the days and whether you'll have a car.",
+      "Ainda não tenho uma viagem para mudar. Diga os dias e se vão de carro.",
+      "Je n'ai pas encore de voyage à modifier. Dites-moi les jours et si vous aurez une voiture.");
+  }
+  return say(locale,
+    "What should I change — a stop on a specific day, or the dates?",
+    "O que devo mudar — uma paragem num dia, ou as datas?",
+    "Que dois-je changer — un arrêt un jour précis, ou les dates ?");
 }
 
 function wantsNewPlan(text: string): boolean {

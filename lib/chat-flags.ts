@@ -270,10 +270,23 @@ function isGenericFallback(reply: string): boolean {
 }
 
 function looksLikePlanSummary(reply: string): boolean {
-  if (looksLikeItineraryDump(reply) || looksLikeSchedule(reply)) return true;
   const text = fold(reply);
   if (/\b(?:here is the \d+-day plan|aqui esta o plano|voici le plan)\b/.test(text)) return true;
-  return /\b(?:day|dia|jour)\s+\d+\b/.test(text) && (reply.match(/\b\d{1,2}:\d{2}\b/g)?.length ?? 0) >= 2;
+  const dayStop = /\b(?:day|dia|jour)\s+\d+\b/.test(text);
+  const clocks = reply.match(/\b\d{1,2}:\d{2}\b/g)?.length ?? 0;
+  const stops = /\b(?:beach|praia|plage|lunch|almoco|dejeuner|dinner|jantar|breakfast|pequeno|petit-dejeuner)\b/.test(text);
+  // A timetable of clock times is not a plan. A day heading or a stop list is.
+  if (dayStop && (clocks >= 1 || stops)) return true;
+  if ((looksLikeItineraryDump(reply) || looksLikeSchedule(reply)) && (dayStop || /\b(?:overview|pace\s*:|length\s*:)\b/.test(text))) return true;
+  return false;
+}
+
+function earlierUser(turns: FlagTurn[] | undefined): string {
+  if (!turns?.length) return "";
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    if (turns[i].role === "user") return turns[i].content.trim();
+  }
+  return "";
 }
 
 const EMERGENCY_DIGITS = new Set(EMERGENCY.flatMap((item) => {
@@ -369,7 +382,9 @@ export function inspectTurn(turn: TurnForFlags): string[] {
   }
 
   const previous = (turn.previousReply ?? "").trim();
-  if (trimmed.length >= 8 && trimmed === previous) reasons.push("repeated_reply");
+  const earlier = fold(earlierUser(turn.previousTurns));
+  const differentAsk = earlier.length > 0 && earlier !== asked;
+  if (trimmed.length >= 8 && trimmed === previous && differentAsk) reasons.push("repeated_reply");
 
   if (trimmed && inventedContact(trimmed, turn.toolFacts ?? "")) reasons.push("invented_contact");
 

@@ -1,6 +1,7 @@
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { isWestCoast } from "./full-day.ts";
+import { humanPlanDate } from "./plan-reply.ts";
 import { FOOD, PLACES, distanceKm, food, place } from "./trip.ts";
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { isFourByFourQuestion, isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
@@ -23,12 +24,17 @@ function restaurantNames(): string[] {
 
 const hospital = EMERGENCY.find((item) => item.id === "hospital")!;
 
-/** Dirt-road answer. Rentals come from the business API when the caller has them; null means the list was not read. */
-export function fourByFourReply(locale: TaskLocale, rentals: { name: string; phone: string }[] | null): string {
+/** Dirt-road answer. The rental sentence is only for a guest who asked where to rent. */
+export function fourByFourReply(locale: TaskLocale, rentals: { name: string; phone: string }[] | null, mentionRental = false): string {
   const real = place("praia-real");
   const morrinho = place("cadjetinha-morrinho-beach");
   const realName = (locale === "pt" ? real?.name.pt : real?.name.en) ?? "Praia Real";
   const morrinhoName = (locale === "pt" ? morrinho?.name.pt : morrinho?.name.en) ?? "Morrinho";
+  const road = say(locale,
+    `I won't say a 4x4 is required, because the listings don't grade the road. ${realName} and ${morrinhoName} are off the paved town roads, on dirt or sand. A rental car is how people get there.`,
+    `Não digo que um 4x4 é obrigatório, porque as listas não classificam a estrada. ${realName} e ${morrinhoName} ficam fora das estradas da vila, em terra ou areia. Vai-se de carro alugado.`,
+    `Je ne dis pas qu'un 4x4 est obligatoire, parce que les listes ne notent pas la route. ${realName} et ${morrinhoName} sont hors des routes de la ville, sur terre ou sable. On y va en voiture de location.`);
+  if (!mentionRental) return road;
   const rental = rentals === null
     ? say(locale,
       "Car-rental names live on the Maio business list. I won't invent a company.",
@@ -43,10 +49,40 @@ export function fourByFourReply(locale: TaskLocale, rentals: { name: string; pho
         "The Maio business list has no car-rental name right now, so I won't invent a company.",
         "A lista de negócios do Maio não tem agora um aluguer de carros, por isso não invento uma empresa.",
         "La liste des commerces de Maio n'a pas de location de voiture pour l'instant, donc je n'invente pas d'enseigne.");
+  return `${road} ${rental}`;
+}
+
+/** "What time is sunset?" Names a clock. "Where is a good sunset?" does not. */
+export function isSunsetClockQuestion(text: string): boolean {
+  const n = normalizeUtterance(text);
+  if (!/\b(?:sunset|por do sol|coucher)\b/.test(n)) return false;
+  const clock = /\b(?:time|when|horas?|heures?|quando|quand)\b/.test(n);
+  if (/\b(?:where|best|which beach|qual praia|ou voir|meilleur)\b/.test(n) && !clock) return false;
+  return clock;
+}
+
+/** Times already converted to Atlantic/Cape_Verde HH:MM. No offer to look anything up. */
+export function sunsetTimeReply(locale: TaskLocale, rows: { date: string; time: string }[]): string {
+  if (!rows.length) {
+    return say(locale,
+      "I don't have a calculated sunset time for that day.",
+      "Não tenho uma hora calculada do pôr do sol para esse dia.",
+      "Je n'ai pas d'heure calculée pour le coucher de soleil ce jour-là.");
+  }
+  const first = humanPlanDate(rows[0].date, locale);
+  const last = humanPlanDate(rows[rows.length - 1].date, locale);
+  if (rows.length === 1) {
+    return say(locale,
+      `Sunset on ${first} is ${rows[0].time} (calculated).`,
+      `O pôr do sol em ${first} é às ${rows[0].time} (calculado).`,
+      `Le coucher du soleil le ${first} est à ${rows[0].time} (calculé).`);
+  }
+  const times = [...new Set(rows.map((row) => row.time))];
+  const clock = times.length === 1 ? times[0] : `${times[0]}–${times[times.length - 1]}`;
   return say(locale,
-    `I won't say a 4x4 is required, because the listings don't grade the road. ${realName} and ${morrinhoName} are off the paved town roads, on dirt or sand. A rental car is how people get there. ${rental}`,
-    `Não digo que um 4x4 é obrigatório, porque as listas não classificam a estrada. ${realName} e ${morrinhoName} ficam fora das estradas da vila, em terra ou areia. Vai-se de carro alugado. ${rental}`,
-    `Je ne dis pas qu'un 4x4 est obligatoire, parce que les listes ne notent pas la route. ${realName} et ${morrinhoName} sont hors des routes de la ville, sur terre ou sable. On y va en voiture de location. ${rental}`);
+    `Sunset is about ${clock} on ${first} – ${last} (calculated).`,
+    `O pôr do sol é cerca das ${clock} de ${first} a ${last} (calculado).`,
+    `Le coucher du soleil est vers ${clock} du ${first} au ${last} (calculé).`);
 }
 
 export function sideQuestionFallback(locale: TaskLocale): string {
@@ -158,7 +194,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
       `Sítios para um café nas listas do Visit Maio incluem ${names}. As listas não têm menus nem preços.`,
       `Les adresses pour un café dans les listes Visit Maio comprennent ${names}. Les listes n'ont ni menus ni prix.`);
   }
-  if (sunset && !/\b(?:days?|dias?|jours?)\b/.test(n)) {
+  if (sunset && !isSunsetClockQuestion(text) && !/\b(?:days?|dias?|jours?)\b/.test(n)) {
     const west = PLACES.filter((item) => item.category === "beach" && isWestCoast(item)).slice(0, 3);
     const names = west.map((item) => locale === "pt" ? item.name.pt : item.name.en).join(", ");
     return say(locale,
