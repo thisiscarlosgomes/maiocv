@@ -1,7 +1,7 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isFourByFourQuestion, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
-import { applyDateShift, applyLength, beachSwapDay, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, inclusiveDays, isCarRentalQuestion, isTravelChoice, looksLikePlanEdit, parseDateShift, parseLengthEdit, resolveDayOfMonth, resolveFollowUp, say as sayRouter } from "./plan-router.ts";
+import { applyDateShift, applyLength, beachSwapDay, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, inclusiveDays, isCarRentalQuestion, isTravelChoice, looksLikePlanEdit, parseDateShift, parseLengthEdit, refersToFerry, refersToFlight, resolveDayOfMonth, resolveFollowUp, say as sayRouter } from "./plan-router.ts";
 import { answerIslandQuestion, answerPlaceList, fourByFourReply, isSunsetClockQuestion, sideQuestionFallback, sunsetTimeReply } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, looksLikeItineraryDump, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
@@ -281,6 +281,36 @@ function hospitalReply(locale: TaskLocale): string {
     `Hôpital de Maio : ${hospital.number}. Vérifié le ${verified}.`);
 }
 
+function policeReply(locale: TaskLocale): string {
+  const police = EMERGENCY.find((item) => item.id === "police")!;
+  const verified = verifiedDate(EMERGENCY_VERIFIED_AT, locale);
+  return say(locale,
+    `Police: ${police.number}. Verified ${verified}.`,
+    `Polícia: ${police.number}. Confirmado em ${verified}.`,
+    `Police : ${police.number}. Vérifié le ${verified}.`);
+}
+
+/** Name the sailing or flight this turn is planning around. Null when the guest did not point at one. */
+function travelLead(locale: TaskLocale, task: Task, text: string): string | null {
+  if (!refersToFerry(text) && !refersToFlight(text)) return null;
+  const arrival = task.constraints.arrival;
+  const departure = task.constraints.departure;
+  const leg = arrival ?? departure;
+  const when = task.constraints.dates?.start ? humanPlanDate(task.constraints.dates.start, locale) : "";
+  const flight = leg?.mode === "flight" || refersToFlight(text);
+  if (!leg?.time || !when) {
+    return say(locale,
+      flight ? "I don't have a published time for that flight, so I won't invent one." : "I don't have a published time for that ferry, so I won't invent one.",
+      flight ? "Não tenho uma hora publicada para esse voo, por isso não invento." : "Não tenho uma hora publicada para esse barco, por isso não invento.",
+      flight ? "Je n'ai pas d'heure publiée pour ce vol, donc je n'en invente pas." : "Je n'ai pas d'heure publiée pour ce ferry, donc je n'en invente pas.");
+  }
+  const role = arrival ? "arrival" : "departure";
+  return say(locale,
+    `The ${leg.time} ${flight ? "flight" : "ferry"} on ${when} is the ${role}.`,
+    `O ${flight ? "voo" : "barco"} das ${leg.time} em ${when} é a ${role === "arrival" ? "chegada" : "partida"}.`,
+    `Le ${flight ? "vol" : "ferry"} de ${leg.time} le ${when} est ${role === "arrival" ? "l'arrivée" : "le départ"}.`);
+}
+
 function namedRestaurants(): string[] {
   return FOOD.filter((item) => venueType(item) === "restaurant").slice(0, 3).map((item) => item.title);
 }
@@ -405,6 +435,22 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (classification.intent === "side_question" && /\b(hospital|hospit|hopital|emergenc|urgencia|urgence)\b/.test(spoken)) {
     task = rememberFact(task, { name: "emergency", retrievedAt: EMERGENCY_VERIFIED_AT, value: "+238 255 11 30" });
     return finish(hospitalReply(task.locale), current, [{ name: "emergency", ok: true }]);
+  }
+
+  if (classification.intent === "side_question" && /\b(police|policia|gendarmerie)\b/.test(spoken)) {
+    const police = EMERGENCY.find((item) => item.id === "police")!;
+    task = rememberFact(task, { name: "emergency", retrievedAt: EMERGENCY_VERIFIED_AT, value: police.number });
+    return finish(policeReply(task.locale), current, [{ name: "emergency", ok: true }]);
+  }
+
+  if (classification.intent === "side_question" && /\b(contact|contacto|contato)\b/.test(spoken) && !isBusinessLookup(lastUser)) {
+    const hospital = EMERGENCY.find((item) => item.id === "hospital")!;
+    const police = EMERGENCY.find((item) => item.id === "police")!;
+    const reply = say(task.locale,
+      `Published contacts: Hospital do Maio ${hospital.number}, police ${police.number}. I won't invent another number.`,
+      `Contactos publicados: Hospital do Maio ${hospital.number}, polícia ${police.number}. Não invento outro número.`,
+      `Contacts publiés : hôpital de Maio ${hospital.number}, police ${police.number}. Je n'invente pas d'autre numéro.`);
+    return finish(reply, current, [{ name: "emergency", ok: true }]);
   }
 
   const noteTransport = (retrievedAt: string, value: string) => {
@@ -604,7 +650,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (planning && typeof task.constraints.car !== "boolean") {
     const q = CAR_QUESTION[task.locale];
     const again = isCarPending(seeded.pendingQuestion) || isCarPending(task.pendingQuestion);
-    const reply = again ? say(task.locale, "Noted.", "Anotado.", "Noté.") : q;
+    const lead = travelLead(task.locale, task, lastUser);
+    const reply = again
+      ? say(task.locale, "Noted.", "Anotado.", "Noté.")
+      : lead ? `${lead} ${q}` : q;
     return finish(reply, current, [], { ...task, pendingQuestion: q }, [...CAR_CHIPS[task.locale]], false, true);
   }
 
@@ -854,6 +903,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (lengthEdit && current && typeof task.constraints.car === "boolean") {
+    appliedEdit = lengthEdit.kind === "add" ? "add_day" : lengthEdit.kind === "drop-last" ? "remove_day" : "set_dates";
     const rebuilt = await rebuildPlan(task);
     if (!rebuilt) return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
     const reply = lengthDiffReply(current, rebuilt.plan, task.locale) ?? lengthUnchangedReply(current, task.locale);
@@ -897,13 +947,49 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     }
   }
 
+  if (current && typeof task.constraints.car === "boolean" && (refersToFerry(lastUser) || refersToFlight(lastUser))) {
+    const lead = travelLead(task.locale, task, lastUser);
+    if (lead) {
+      const citedStart = task.constraints.arrival ? task.constraints.dates?.start : current.days[0]?.date;
+      const citedTime = task.constraints.arrival?.time;
+      const sameStart = !citedStart || citedStart === current.days[0]?.date;
+      const arrival = current.days[0]?.items.find((item) => item.kind === "transport");
+      const sameArrival = !citedTime || arrival?.start === citedTime;
+      if (sameStart && sameArrival) {
+        const reply = say(task.locale,
+          `${lead} The plan already starts with that arrival.`,
+          `${lead} O plano já começa com essa chegada.`,
+          `${lead} Le plan commence déjà par cette arrivée.`);
+        return finish(reply, current, [], task, undefined, true, false, false, "moment");
+      }
+      appliedEdit = "set_arrival";
+      const rebuilt = await rebuildPlan(task);
+      if (rebuilt) {
+        const same = samePlanShape(rebuilt.plan, current);
+        const reply = say(task.locale,
+          same ? `${lead} The plan already starts with that arrival.` : `${lead} The plan now starts with that arrival.`,
+          same ? `${lead} O plano já começa com essa chegada.` : `${lead} O plano passa a começar com essa chegada.`,
+          same ? `${lead} Le plan commence déjà par cette arrivée.` : `${lead} Le plan commence maintenant par cette arrivée.`);
+        return finish(reply, same ? current : rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+      }
+      return finish(lead, current, [], task, undefined, true, false, false, "moment");
+    }
+  }
+
   const offerPlan = (classification.planShaping || Boolean(lengthEdit)) && task.scope.mode !== "research" && classification.intent !== "side_question";
   const exotic = /\b(?:dolphin|nightlife|nightclub|golfinho|dauphin|boite|diving|mergulho|plongee)\b/.test(spoken);
   const anchored = (task.constraints.dates?.days ?? 0) > 0 || Boolean(task.constraints.dates?.start);
   const freshPlan = !current && offerPlan && typeof task.constraints.car === "boolean" && anchored && !exotic;
   if (freshPlan) {
     const rebuilt = await rebuildPlan(task);
-    if (rebuilt) return finish("", rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, true, "forecast");
+    if (rebuilt) {
+      const lead = travelLead(task.locale, task, lastUser);
+      if (lead) {
+        const line = planBlurb(rebuilt.plan, classification.carStance).split("\n")[0] ?? "";
+        return finish(`${lead}\n${line}`, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, false, "forecast");
+      }
+      return finish("", rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, true, "forecast");
+    }
   }
 
   const tools = {

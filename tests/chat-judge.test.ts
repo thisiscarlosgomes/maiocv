@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JUDGE_BACKOFF_MS, JUDGE_FREE_TIER_RATE, JUDGE_INTERVAL_MS, attemptJudgeModels, createJudgeGate, judgeCallSettings, judgeCap, judgeEnabled, judgeErrorType, judgeHealthSnapshot, judgePrompt, judgeRate, judgeResponseSchema, memoryJudgeBudget, providerErrorCode, resetJudgeHealth, reviewWithJudge, scheduleTurnReview, type JudgeVerdict } from "../lib/chat-judge.ts";
 import { handleFlagHealth } from "../lib/chat-flags-http.ts";
+import { buildPlan } from "../lib/trip-planner.ts";
 import { memoryFlagStore } from "../lib/chat-flags-store.ts";
 import { handleMaioChat } from "../lib/maio-chat-proxy.ts";
 import type { TurnForFlags } from "../lib/chat-flags.ts";
@@ -102,6 +103,26 @@ test("the judge prompt uses the turn and not request identifiers", () => {
   assert.equal(prompt.includes("SpyBrowser"), false);
   assert.equal(prompt.includes("user-7"), false);
   assert.equal(prompt.includes("sid"), false);
+});
+
+test("adding a day, with the longer span in the diff, is a correct change", () => {
+  const forecast = ["2026-11-18", "2026-11-19", "2026-11-20"].map((date) => ({ date, waveHeightM: 0.8, windKmh: 16, tempMaxC: 28, sunset: "18:10" }));
+  const request = { startDate: "2026-11-18", locale: "fr" as const, adults: 2, hasCar: true, boatTrips: 0, pace: "slow" as const };
+  const before = buildPlan({ request: { ...request, days: 2 }, forecast, sailings: [] });
+  const after = buildPlan({ request: { ...request, days: 3 }, forecast, sailings: [] });
+  const prompt = judgePrompt({
+    ...clean(),
+    locale: "fr",
+    userMessage: "un jour de plus",
+    botReply: "Le voyage fait maintenant 3 jours, du 18 au 20 novembre.",
+    planBefore: before,
+    planAfter: after,
+    planTurn: true,
+    appliedEdit: "add_day",
+  });
+  assert.match(prompt, /un jour de plus/);
+  assert.match(prompt, /x2 -> 2026-11-18 x3/);
+  assert.match(prompt, /Do not say the plan should have stayed the old length/);
 });
 
 test("Ask Maio returns the reply before a slow judge finishes", async () => {

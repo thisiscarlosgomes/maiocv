@@ -90,6 +90,26 @@ test("a plan summary on a non-plan turn is flagged in English, Portuguese, and F
   }
   const phrase = inspectTurn(turn({ botReply: "Here is the 3-day plan.", planTurn: false, userMessage: "where is the pharmacy?" }));
   assert.ok(phrase.includes("plan_reemitted"));
+  const day = inspectTurn(turn({
+    botReply: "Day 2 (Tue 17 Nov): Praia do Morro, lunch, sunset.",
+    planTurn: false,
+    userMessage: "what's on day 2",
+    cardShown: true,
+  }));
+  assert.equal(day.includes("plan_reemitted"), false, day.join(","));
+  const lunch = inspectTurn(turn({
+    botReply: "Lunch on day 2 is at 12:30.",
+    planTurn: false,
+    userMessage: "Where is lunch on day 2?",
+    cardShown: true,
+  }));
+  assert.equal(lunch.includes("plan_reemitted"), false, lunch.join(","));
+  const bothDays = inspectTurn(turn({
+    botReply: "Day 1 is the beach at 09:00. Day 2 is lunch at 12:30.",
+    planTurn: false,
+    userMessage: "what's on day 2",
+  }));
+  assert.ok(bothDays.includes("plan_reemitted"));
   const timetable = "Flights from Maio on Sun 15 Nov: 16:55 (7B-171), 12:45 (7B-171), 15:30 (7B-171) to Praia. Published timetable, not live status.";
   const clocks = inspectTurn(turn({ botReply: timetable, planTurn: false, userMessage: "whens the next flight", cardShown: false }));
   assert.equal(clocks.includes("plan_reemitted"), false, timetable);
