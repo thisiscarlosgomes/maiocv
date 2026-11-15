@@ -1,0 +1,54 @@
+{
+  "ac": [
+    {
+      "hex": "nogps",
+      "flight": "SKIP",
+      "alt_baro": 1000
+    },
+    {
+      "hex": "badlat",
+      "flight": "NOPE",
+      "lat": 91,
+      "lon": 0
+    },
+    {
+      "hex": "far01",
+      "flight": "   ",
+      "r": "D4-TEST",
+      "t": "AT76",
+      "lat": 16.7,
+      "lon": -22.9,
+      "alt_baro": "ground",
+      "gs": 0,
+      "track": 180,
+      "dst": 90.2,
+      "dir": 40,
+      "seen": 4,
+      "emergency": "none"
+    },
+    {
+      "hex": "min01",
+      "lat": 15.1,
+      "lon": -23.1
+    },
+    {
+      "hex": "near01",
+      "flight": "VR4071  ",
+      "r": "D4-CCV",
+      "t": "AT76",
+      "lat": 15.2,
+      "lon": -23.2,
+      "alt_baro": 12000,
+      "gs": 210.4,
+      "track": 35,
+      "dst": 12.4,
+      "dir": 90,
+      "seen": 1,
+      "emergency": "general"
+    }
+  ],
+  "ctime": 1,
+  "msg": "No error",
+  "now": 1,
+  "total": 5
+}

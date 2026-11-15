@@ -3,6 +3,7 @@ import { THEME_INIT_SCRIPT } from "../lib/theme";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Geist_Mono } from "next/font/google";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import "../packages/maio-ui/maio-ui.css";
 import { currentLocale } from "../lib/request-locale";

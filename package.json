@@ -24,6 +24,7 @@
     "jspdf": "^4.2.1",
     "maio-tokens": "file:./packages/maio-tokens",
     "maio-ui": "file:./packages/maio-ui",
+    "maplibre-gl": "^5.24.1",
     "mongodb": "^7.8.0",
     "next": "16.1.1",
     "react": "19.2.3",

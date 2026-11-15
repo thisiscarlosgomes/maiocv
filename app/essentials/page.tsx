@@ -1,5 +1,7 @@
 import { SkipLink } from "maio-ui";
 import { Header, Footer } from "../../components/site-shell";
+import { CABO_VERDE_RADIUS_NM, FLIGHT_CACHE_TTL_MS, MAIO_LATITUDE, MAIO_LONGITUDE } from "../../lib/adsb/flights";
+import { LiveFlights } from "../../components/live-flights";
 import { flightRouteLabel, loadEssentials, scheduleSource, verifiedDate, visibleCaveat } from "../../lib/essentials";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT, humanContactUrl } from "../../lib/emergency";
 import { t, type MessageKey } from "../../lib/i18n";
@@ -26,7 +28,8 @@ export default async function EssentialsPage() {
     <>
       <SkipLink href="#conteudo">{t("skip.content", undefined, locale)}</SkipLink>
       <Header active="essentials" />
-      <main id="conteudo" className="wrap essentials">
+      <main id="conteudo">
+        <div className="wrap essentials essentials-lead">
         <h1>{t("ess.title", undefined, locale)}</h1>
         <section aria-labelledby="emergency">
           <h2 id="emergency">{t("ess.emergency", undefined, locale)}</h2>
@@ -57,7 +60,17 @@ export default async function EssentialsPage() {
               <li key={route.url}><a href={route.url}>{flightRouteLabel(route.id, locale)}</a></li>
             ))}
           </ul>
+          <p><a href="#voos">{t("flights.jump", undefined, locale)}</a></p>
         </section>
+        </div>
+        <LiveFlights
+          locale={locale}
+          radiusNm={CABO_VERDE_RADIUS_NM}
+          refreshMs={FLIGHT_CACHE_TTL_MS}
+          latitude={MAIO_LATITUDE}
+          longitude={MAIO_LONGITUDE}
+        />
+        <div className="wrap essentials essentials-follow">
         <section aria-labelledby="pay">
           <h2 id="pay">{t("ess.pay", undefined, locale)}</h2>
           <p>
@@ -73,6 +86,7 @@ export default async function EssentialsPage() {
           <p>{t("ess.pay.venues.empty", undefined, locale)}</p>
           {contact ? <p><a href={contact}>{t("ess.pay.suggest", undefined, locale)}</a></p> : null}
         </section>
+        </div>
       </main>
       <Footer />
     </>
