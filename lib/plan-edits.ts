@@ -2,7 +2,7 @@ import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { resolveOverlaps } from "./full-day.ts";
 import { applyLength, planQuestionKind, type LengthEdit } from "./plan-router.ts";
 import { humanPlanDate, itemLabel } from "./plan-reply.ts";
-import { EXPERIENCES, FOOD, PLACES, food, isExcludedExperience, localizedPlaceName, type PlanItem, type TripPlan } from "./trip.ts";
+import { EXPERIENCES, FOOD, PLACES, distanceKm, food, isExcludedExperience, localizedPlaceName, place, type PlanItem, type TripPlan } from "./trip.ts";
 
 /** Meals and anchored places. Free rows and the arrival header are not stops. */
 export function visibleStops(items: PlanItem[]): number {
@@ -289,6 +289,54 @@ export function lengthUnchangedReply(plan: TripPlan, locale: TaskLocale): string
 
 export function nextLength(plan: TripPlan, edit: LengthEdit): { start: string; days: number } {
   return applyLength(plan.days[0].date, plan.days.length, edit);
+}
+
+/** Swap the beach on one day for a different listed beach. One line, no rebuild of the other days. */
+export function swapDayBeach(plan: TripPlan, dayNumber: number, locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; changed: boolean } | null {
+  const index = dayNumber - 1;
+  const day = plan.days[index];
+  if (!day) return null;
+  const beaches = day.items
+    .map((item, itemIndex) => ({ item, itemIndex }))
+    .filter(({ item }) => item.kind === "place" && place(item.refId)?.category === "beach");
+  if (!beaches.length) {
+    return {
+      plan,
+      changed: false,
+      reply: say(locale, `Day ${dayNumber} has no beach to replace.`, `O dia ${dayNumber} não tem praia para trocar.`, `Le jour ${dayNumber} n'a pas de plage à remplacer.`),
+    };
+  }
+  const target = beaches.find(({ item }) => item.slot === "morning") ?? beaches[0];
+  const current = place(target.item.refId);
+  const used = new Set(plan.days.flatMap((item) => item.items.map((stop) => stop.refId)));
+  const town = place("cidade-porto-ingles");
+  const candidates = PLACES.filter((spot) => {
+    if (spot.category !== "beach" || spot.id === target.item.refId) return false;
+    if (!plan.hasCar && town && distanceKm(spot, town) > 3) return false;
+    return true;
+  });
+  const next = candidates.find((spot) => !used.has(spot.id)) ?? candidates[0];
+  if (!next || !current) {
+    return {
+      plan,
+      changed: false,
+      reply: say(locale,
+        `Day ${dayNumber} already uses the only beach I can swap in.`,
+        `O dia ${dayNumber} já usa a única praia que posso trocar.`,
+        `Le jour ${dayNumber} utilise déjà la seule plage que je peux échanger.`),
+    };
+  }
+  const oldName = localizedPlaceName(current.name, locale);
+  const newName = localizedPlaceName(next.name, locale);
+  const items = day.items.map((item, itemIndex) => itemIndex === target.itemIndex ? { ...item, refId: next.id } : item);
+  return {
+    changed: true,
+    plan: { ...plan, days: plan.days.map((item, itemIndex) => itemIndex === index ? { ...day, items } : item) },
+    reply: say(locale,
+      `Day ${dayNumber}: ${oldName} is now ${newName}.`,
+      `Dia ${dayNumber}: ${oldName} passa a ${newName}.`,
+      `Jour ${dayNumber} : ${oldName} devient ${newName}.`),
+  };
 }
 
 /** Put a listed place or restaurant onto one day. No change when it is already there. */

@@ -300,8 +300,11 @@ export function claimsUnappliedEdit(text: string): boolean {
   return /\b(?:day|dia|jour)\s+\d+\b[\s\S]{0,160}\b(?:packed|busier|lighter|easier|quieter|relaxed|fuller|cheio|mais leve|plus l[eé]ger|plus charg)\b/i.test(text);
 }
 
-const START_CUE = /\b(?:going on|go on|arriv(?:e|ing|ons)?|land on|we land|actually|chego|vou(?: a| no| dia)?|j'arrive|j arrive|finalement|start(?:ing)? on|a partir)\b/;
-const END_CUE = /\b(?:until|till|through|ate dia|ate o dia|jusqu|depart(?:ing)?|leaving on|leave on|end(?:ing)? on|fim dia|partir le)\b/;
+/** A real arrival. A hedge ("actually", "finalement") is not one of these. */
+const HARD_START = /\b(?:going on|go on|arriv(?:e|ing|ons)?|land on|we land|chego|vou(?: a| no| dia)?|j'arrive|j arrive|start(?:ing)? on|a partir)\b/;
+const HEDGE_START = /\b(?:actually|finalement|en fait|na verdade)\b/;
+/** Leaving, departing, until. "saio no dia 22" and "je pars le 22" name the end. */
+const END_CUE = /\b(?:until|till|through|ate dia|ate o dia|jusqu(?:'au| au)?|depart(?:ing)?(?: on)?|leaving(?: on)?|leave on|end(?:ing)? on|fim dia|partir le|pars le|je pars|saio|saimos|parto|partimos|partons)\b/;
 
 function bareDay(text: string, allowA = false): number | undefined {
   const n = loosen(text);
@@ -402,13 +405,67 @@ export function pairedStay(text: string, today: string, anchor?: string): { star
 
 export type DateShift = { start?: string; end?: string; days?: number; shiftDays?: number };
 
+/** "replace the beach on day 1" / "troca a praia do dia 1" / "remplace la plage du jour 1". */
+export function beachSwapDay(text: string): number | null {
+  const n = loosen(text);
+  if (!/\b(?:replace|swap|troca|trocar|substitui|remplace|remplacer)\b/.test(n)) return null;
+  if (!/\b(?:beach|praia|plage)\b/.test(n)) return null;
+  const match = n.match(/\b(?:day|dia|jour)\s+(\d{1,2})\b/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  return day >= 1 && day <= 14 ? day : null;
+}
+
+const BARE_REPLACE = /^(?:replace|swap|change|troca|trocar|substitui|remplace|remplacer|muda|mudar)$/;
+const SHORT_YES = /^(?:yes|yeah|yep|yup|sure|sim|oui|si|claro)$/;
+
+function pendingKind(pending: string | null): "start" | "changes" | null {
+  if (!pending) return null;
+  const n = loosen(pending);
+  if (/which day should the trip start|para que dia mudo|quel jour pour le debut/.test(n)) return "start";
+  if (/want changes|quer mudanc|changer quelque chose|voulez changer/.test(n)) return "changes";
+  return null;
+}
+
+export type FollowUp =
+  | { kind: "ask-replace" }
+  | { kind: "ask-change" }
+  | { kind: "start-day"; day: number };
+
 /**
- * A start or end move against an open trip.
- * Start alone keeps the length. End alone keeps the start. Both replace the span.
- * "ask" means the guest named a date idea we cannot place.
+ * A short reply to the question we just asked.
+ * A bare day after "which day should the trip start?", yes after "want changes?",
+ * or "replace" on its own when a plan is open.
  */
+export function resolveFollowUp(text: string, pending: string | null, hasPlan: boolean): FollowUp | null {
+  const n = loosen(text).replace(/[.!?…]+$/g, "").trim();
+  if (!n || n.length > 48) return null;
+  const asked = pendingKind(pending);
+  if (asked === "changes" && SHORT_YES.test(n)) return { kind: "ask-change" };
+  if (asked === "start") {
+    const day = n.match(/^(?:the |dia |le |o )?(\d{1,2})(?:st|nd|rd|th)?$/);
+    if (day) {
+      const value = Number(day[1]);
+      if (value >= 1 && value <= 31) return { kind: "start-day", day: value };
+    }
+  }
+  if (hasPlan && BARE_REPLACE.test(n)) return { kind: "ask-replace" };
+  return null;
+}
+
+/** An edit we should clarify, not hand to the island fallback, when the model misses. */
+export function looksLikePlanEdit(text: string): boolean {
+  const n = loosen(text);
+  const bare = n.replace(/[.!?…]+$/g, "").trim();
+  if (BARE_REPLACE.test(bare) || SHORT_YES.test(bare) || /^\d{1,2}$/.test(bare)) return true;
+  if (beachSwapDay(text)) return true;
+  if (parseLengthEdit(text)) return true;
+  return /\b(?:replace|swap|troca|trocar|remplace|remplacer|change|muda|mudar|altera|laisse|laisser|remplis|remplir)\b/.test(n)
+    && /\b(?:day|dia|jour|beach|praia|plage|afternoon|tarde|apres-midi|stop|paragem|matin|manha|morning|libre|livre|free)\b/.test(n);
+}
+
 export function parseDateShift(text: string, today: string, anchor?: string): DateShift | "ask" | null {
-  if (isTravelQuestion(text) || isTravelChoice(text) || planQuestionKind(text)) return null;
+  if (isTravelQuestion(text) || isTravelChoice(text) || planQuestionKind(text) || beachSwapDay(text)) return null;
   const n = loosen(text);
   if (/\b(?:next week|proxima semana|semaine prochaine)\b/.test(n)) return { shiftDays: 7 };
   const later = n.match(/\b(?:a|one|um|un) day later\b|\b(?:um dia mais tarde|un jour plus tard|decale(?:r| de)? (?:d')?un jour)\b/);
@@ -430,15 +487,17 @@ export function parseDateShift(text: string, today: string, anchor?: string): Da
   if (spelled.start && stated) return { start: spelled.start, days: stated };
   if (spelled.start) return { start: spelled.start };
   if (spelled.end) return { end: spelled.end };
-  const startCue = START_CUE.test(n);
+  const hardStart = HARD_START.test(n);
+  const hedge = HEDGE_START.test(n);
   const endCue = END_CUE.test(n);
-  const day = bareDay(n, startCue);
+  const day = bareDay(n, hardStart || hedge);
   if (!day) return null;
   const placed = resolveDayOfMonth(today, day, anchor);
   if (!placed) return "ask";
-  if (startCue && endCue) return "ask";
+  // "actually… leaving on the 22nd" is an end. A hedge alone ("actually the 18th") stays a start.
+  if (hardStart && endCue) return "ask";
   if (endCue) return { end: placed };
-  if (startCue) return { start: placed };
+  if (hardStart || hedge) return { start: placed };
   return "ask";
 }
 
@@ -450,8 +509,9 @@ export function applyDateShift(start: string, days: number, shift: DateShift): {
   if (shift.start) nextStart = shift.start;
   if (shift.end) {
     const counted = inclusiveDays(shift.start ?? nextStart, shift.end);
-    if (!counted) return null;
-    nextDays = Math.min(7, counted);
+    // An end before the start, or a stay longer than the trip max, is not applied.
+    if (!counted || counted > 7) return null;
+    nextDays = counted;
   } else if (shift.days) nextDays = Math.min(7, Math.max(1, shift.days));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(nextStart) || nextDays < 1) return null;
   return { start: nextStart, days: nextDays };

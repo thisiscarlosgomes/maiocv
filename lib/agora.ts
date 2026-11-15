@@ -275,3 +275,38 @@ async function fetchDailyForecast(fetchImpl: typeof fetch, startDate: string, da
 }
 
 export const forecastSourceName = openMeteo.name;
+
+/** HH:MM in Atlantic/Cape_Verde for an ISO instant. Sunset from the astronomy API is UTC. */
+export function capeVerdeHm(iso: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Atlantic/Cape_Verde",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+  if (!/^\d{2}$/.test(hour) || !/^\d{2}$/.test(minute)) return null;
+  return `${hour}:${minute}`;
+}
+
+/** solarEvents.sunset for each date, converted to Cape Verde local time. */
+export async function loadSunsets(fetchImpl: typeof fetch, dates: string[]): Promise<{ date: string; time: string }[]> {
+  const unique = [...new Set(dates)].filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).slice(0, 7);
+  const rows = await Promise.all(unique.map(async (date) => {
+    try {
+      const response = await fetchImpl(`https://api.maio.cv/api/v1/astronomy/sky?date=${date}&time=12:00`, { signal: AbortSignal.timeout(4000) });
+      if (!response.ok) return null;
+      const body = asRecord(await response.json());
+      const sunset = asRecord(body.solarEvents).sunset;
+      if (typeof sunset !== "string") return null;
+      const time = capeVerdeHm(sunset);
+      return time ? { date, time } : null;
+    } catch {
+      return null;
+    }
+  }));
+  return rows.filter((row): row is { date: string; time: string } => !!row);
+}

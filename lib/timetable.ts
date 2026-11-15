@@ -142,25 +142,62 @@ function wantsFlight(text: string): boolean {
   return /\b(?:flights?|voos?|vols?|avion)\b/i.test(text.normalize("NFD").replace(/\p{M}/gu, ""));
 }
 
+export type TravelContext = { time?: string; planEnd?: string | null };
+
+function byClock<T extends { date: string; departure: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.departure.localeCompare(b.departure));
+}
+
+/** Still ahead of "now" in Atlantic/Cape_Verde. A missing clock keeps the whole day. */
+function stillAhead(date: string, departure: string, today: string, time?: string): boolean {
+  if (date > today) return true;
+  if (date < today) return false;
+  return !time || departure > time;
+}
+
+function flightLabel(leg: FlightLeg): string {
+  return `${leg.departure}${leg.flight ? ` (${leg.flight})` : ""}`;
+}
+
+/** French weekday abbreviations carry periods ("dim.") that are not sentence ends. */
+function travelDate(iso: string, locale: TaskLocale): string {
+  const label = humanPlanDate(iso, locale);
+  return locale === "fr" ? label.replace(/\./g, "").replace(/\s+/g, " ").trim() : label;
+}
+
 /** Short answer for a ferry or flight question. Times come only from the payload. */
-export function answerTravelQuestion(text: string, locale: TaskLocale, table: Timetable, today: string): string {
+export function answerTravelQuestion(text: string, locale: TaskLocale, table: Timetable, today: string, context: TravelContext = {}): string {
   if (!table.ok) return downReply(locale);
   const when = mentionedDate(text, today);
   const flight = wantsFlight(text);
   const published = say(locale, "Published timetable, not live status.", "Horário publicado, não é estado ao vivo.", "Horaire publié, pas un statut en direct.");
   if (flight) {
-    const fromMaio = /\b(?:from maio|do maio|de maio|depuis maio|depuis)\b/i.test(text.normalize("NFD").replace(/\p{M}/gu, "")) || !/\b(?:to maio|para o maio|vers maio)\b/i.test(text);
-    const pool = table.flights.filter((leg) => fromMaio ? leg.from === "MMO" : leg.to === "MMO");
-    const onDay = when ? pool.filter((leg) => leg.date === when) : pool.filter((leg) => leg.date >= today).slice(0, 3);
-    if (onDay.length) {
-      const day = humanPlanDate(onDay[0].date, locale);
-      const rows = onDay.map((leg) => `${leg.departure}${leg.flight ? ` (${leg.flight})` : ""}`).join(", ");
-      return say(locale,
-        `Flights from Maio on ${day}: ${rows} to Praia. ${published}`,
-        `Voos do Maio em ${day}: ${rows} para a Praia. ${published}`,
-        `Vols depuis Maio le ${day} : ${rows} vers Praia. ${published}`);
+    const folded = text.normalize("NFD").replace(/\p{M}/gu, "");
+    const fromMaio = /\b(?:from maio|do maio|de maio|depuis maio|depuis)\b/i.test(folded) || !/\b(?:to maio|para o maio|vers maio)\b/i.test(folded);
+    const pool = byClock(table.flights.filter((leg) => fromMaio ? leg.from === "MMO" : leg.to === "MMO"));
+    const onDay = when
+      ? pool.filter((leg) => leg.date === when)
+      : byClock(pool.filter((leg) => stillAhead(leg.date, leg.departure, today, context.time)));
+    const nextDay = onDay[0]?.date;
+    const shown = nextDay ? onDay.filter((leg) => leg.date === nextDay) : [];
+    if (shown.length) {
+      const day = travelDate(shown[0].date, locale);
+      const rows = shown.map(flightLabel).join(", ");
+      const last = context.planEnd && context.planEnd > today && context.planEnd !== shown[0].date
+        ? pool.filter((leg) => leg.date === context.planEnd)
+        : [];
+      const extra = last.length
+        ? say(locale,
+          ` On your last day, ${travelDate(last[0].date, locale)}: ${last.map(flightLabel).join(", ")}.`,
+          ` No seu último dia, ${travelDate(last[0].date, locale)}: ${last.map(flightLabel).join(", ")}.`,
+          ` Votre dernier jour, ${travelDate(last[0].date, locale)} : ${last.map(flightLabel).join(", ")}.`)
+        : "";
+      const lead = when
+        ? say(locale, `Flights from Maio on ${day}: ${rows} to Praia.`, `Voos do Maio em ${day}: ${rows} para a Praia.`, `Vols depuis Maio le ${day} : ${rows} vers Praia.`)
+        : say(locale, `Next flights from Maio: ${day} at ${rows} to Praia.`, `Próximos voos do Maio: ${day} às ${rows} para a Praia.`, `Prochains vols depuis Maio : ${day} à ${rows} vers Praia.`);
+      return `${lead}${extra} ${published}`;
     }
-    const near = nearest(when ? pool : pool, when ?? today);
+    const near = nearest(pool, when ?? today);
     if (!near) return say(locale,
       `No flight from Maio is in the published timetable. ${published}`,
       `Não há voo do Maio no horário publicado. ${published}`,
@@ -176,13 +213,13 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
     : /\b(?:to maio|para o maio|vers maio)\b/i.test(text.normalize("NFD").replace(/\p{M}/gu, ""))
       ? table.sailings.filter(toIsland)
       : pool;
-  const upcoming = directed.filter((row) => !when && row.date >= today || when && row.date === when);
-  const hit = (when ? upcoming[0] : upcoming.sort((a, b) => a.date.localeCompare(b.date) || a.departure.localeCompare(b.departure))[0]) ?? null;
+  const upcoming = byClock(directed.filter((row) => when ? row.date === when : stillAhead(row.date, row.departure, today, context.time)));
+  const hit = upcoming[0] ?? null;
   if (hit) {
     return say(locale,
-      `Next ferry: ${humanPlanDate(hit.date, locale)} at ${hit.departure}, ${hit.from} to ${hit.to}. ${published}`,
-      `Próximo barco: ${humanPlanDate(hit.date, locale)} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
-      `Prochain ferry : ${humanPlanDate(hit.date, locale)} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
+      `Next ferry: ${travelDate(hit.date, locale)} at ${hit.departure}, ${hit.from} to ${hit.to}. ${published}`,
+      `Próximo barco: ${travelDate(hit.date, locale)} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
+      `Prochain ferry : ${travelDate(hit.date, locale)} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
   }
   const near = nearest(directed, when ?? today);
   if (!near) return say(locale,

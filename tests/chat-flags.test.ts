@@ -90,6 +90,9 @@ test("a plan summary on a non-plan turn is flagged in English, Portuguese, and F
   }
   const phrase = inspectTurn(turn({ botReply: "Here is the 3-day plan.", planTurn: false, userMessage: "where is the pharmacy?" }));
   assert.ok(phrase.includes("plan_reemitted"));
+  const timetable = "Flights from Maio on Sun 15 Nov: 16:55 (7B-171), 12:45 (7B-171), 15:30 (7B-171) to Praia. Published timetable, not live status.";
+  const clocks = inspectTurn(turn({ botReply: timetable, planTurn: false, userMessage: "whens the next flight", cardShown: false }));
+  assert.equal(clocks.includes("plan_reemitted"), false, timetable);
 });
 
 test("empty replies, fallbacks, model errors, and timeouts are flagged in English, Portuguese, and French", () => {
@@ -129,13 +132,36 @@ test("plan dates that miss an explicit guest date are flagged in English, Portug
 
 test("an identical bot reply twice in a row is flagged in English, Portuguese, and French", () => {
   const lines = [
-    ["en", "The beach is calm today."],
-    ["pt", "A praia está calma hoje."],
-    ["fr", "La plage est calme aujourd'hui."],
+    ["en", "The beach is calm today.", "where is the beach?", "and the hospital?"],
+    ["pt", "A praia está calma hoje.", "onde fica a praia?", "e o hospital?"],
+    ["fr", "La plage est calme aujourd'hui.", "où est la plage ?", "et l'hôpital ?"],
   ] as const;
-  for (const [locale, botReply] of lines) {
-    assert.ok(inspectTurn(turn({ locale, botReply, previousReply: botReply })).includes("repeated_reply"), locale);
+  for (const [locale, botReply, previousAsk, nextAsk] of lines) {
+    const stuck = inspectTurn(turn({
+      locale,
+      botReply,
+      previousReply: botReply,
+      userMessage: nextAsk,
+      previousTurns: [{ role: "user", content: previousAsk }, { role: "assistant", content: botReply }],
+    }));
+    assert.ok(stuck.includes("repeated_reply"), locale);
     assert.equal(inspectTurn(turn({ locale, botReply, previousReply: "A different sentence here." })).includes("repeated_reply"), false);
+  }
+  const repeatedAsk = [
+    ["en", "Export as PDF", "The print dialog is open. Save the trip as a PDF from there."],
+    ["en", "Do I need a 4x4?", "I won't say a 4x4 is required, because the listings don't grade the road."],
+    ["pt", "Exportar em PDF", "A janela de impressão está aberta. Guarde a viagem em PDF a partir daí."],
+    ["fr", "Exporter en PDF", "La fenêtre d'impression est ouverte. Enregistrez le voyage en PDF depuis là."],
+  ] as const;
+  for (const [locale, userMessage, botReply] of repeatedAsk) {
+    const reasons = inspectTurn(turn({
+      locale,
+      userMessage,
+      botReply,
+      previousReply: botReply,
+      previousTurns: [{ role: "user", content: userMessage }, { role: "assistant", content: botReply }],
+    }));
+    assert.equal(reasons.includes("repeated_reply"), false, userMessage);
   }
 });
 
