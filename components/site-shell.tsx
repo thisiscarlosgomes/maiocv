@@ -5,7 +5,7 @@ import { ThemeSwitch } from "./theme-switch";
 import { LangSwitch } from "./lang-switch";
 import { CHATGPT_URL } from "../lib/content";
 import { t } from "../lib/i18n";
-import { localize } from "../lib/locale";
+import { essentialsPath, localize } from "../lib/locale";
 import { currentLocale, currentPath } from "../lib/request-locale";
 
 export function Logo() {
@@ -31,6 +31,7 @@ export async function Header({ active = "home" }: { active?: "home" | "faq" | "e
       menuLabel={copy("nav.menu")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives"), compact: "hide" },
+        { href: essentialsPath(locale), label: copy("nav.visit"), current: active === "essentials" },
         { href: localize(locale, "/faq"), label: copy("footer.faq"), current: active === "faq" },
         { href: localize(locale, "/chat"), label: copy("nav.chat"), current: active === "chat" },
       ]}
@@ -48,6 +49,7 @@ export async function Footer() {
       label={copy("footer.nav")}
       links={[
         { href: `${localize(locale, "/")}#iniciativas`, label: copy("nav.initiatives") },
+        { href: essentialsPath(locale), label: copy("nav.visit") },
         { href: `${localize(locale, "/faq")}#como-funciona`, label: copy("footer.how") },
         { href: `${localize(locale, "/faq")}#perguntas`, label: copy("footer.faq") },
         { href: CHATGPT_URL, label: copy("footer.chatgpt") },

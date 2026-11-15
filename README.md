@@ -21,6 +21,16 @@ Production: https://www.maio.cv
 
 Vercel project: `maiocv`, team: `forkctokcs-projects`. Pushing the GitHub production branch `main` deploys production. The project root is this repository. `vercel.json` uses `npm ci` and `npm run build`.
 
+## Live flights
+
+The visit page lists aircraft transmitting within 180 nautical miles of Maio, which covers Cabo Verde. The browser calls `/api/flights`. That route reads `ADSB_LOL_API_KEY` on the server and sends it only as the `x-api-key` header. A missing key, or an upstream failure with nothing cached, leaves the section on an empty state. Successful reads are cached for 3 minutes. A 429 keeps the last positions and waits for `Retry-After`.
+
+```bash
+ADSB_LOL_API_KEY=
+```
+
+Set the same name in Vercel for production and preview. Do not commit the value. Positions are published by adsb.lol under the Open Data Commons Open Database License (ODbL). Only transmitting aircraft appear.
+
 ## Routes and SEO
 
 Pages use `/pt`, `/en` and `/fr` prefixes. `/` selects the saved or browser language. The FAQ is `/faq` within each language; the previous `/mcp` URL redirects there.
