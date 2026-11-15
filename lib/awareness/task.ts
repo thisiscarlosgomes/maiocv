@@ -179,6 +179,30 @@ export function isCarPending(question: string | null | undefined): boolean {
   return (Object.values(CAR_QUESTION) as string[]).includes(question);
 }
 
+export type GuestChip =
+  | { kind: "relax"; day: number }
+  | { kind: "boat" }
+  | { kind: "pdf" };
+
+/** Correction chips, in the guest's language. These are actions, not new trips. */
+export function parseGuestChip(text: string): GuestChip | null {
+  const n = text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/['’]/g, "'").replace(/[.!?…]+$/g, "").replace(/\s+/g, " ").trim();
+  const relax = n.match(/^(?:make day (\d+) more relaxed|deixa o dia (\d+) mais calmo|rends le jour (\d+) plus calme)$/);
+  if (relax) {
+    const day = Number(relax[1] ?? relax[2] ?? relax[3]);
+    return day >= 1 && day <= 14 ? { kind: "relax", day } : null;
+  }
+  if (/^(?:add a boat trip|acrescenta um passeio de barco|ajoute une sortie en bateau)$/.test(n)) return { kind: "boat" };
+  if (/^(?:export as pdf|exportar em pdf|exporter en pdf)$/.test(n)) return { kind: "pdf" };
+  return null;
+}
+
+export function relaxChip(locale: TaskLocale, day: number): string {
+  if (locale === "pt") return `Deixa o dia ${day} mais calmo`;
+  if (locale === "fr") return `Rends le jour ${day} plus calme`;
+  return `Make day ${day} more relaxed`;
+}
+
 const VOICE: Record<TaskLocale, { days: string; party: string; partyNoCar: string; beaches: string; relax: string; boat: string; rent: string; pdf: string }> = {
   en: {
     days: "3 days, slow pace",
@@ -244,10 +268,18 @@ export function followUpChips(task: Task): string[] {
     if (chips.length < 3) chips.push(copy.beaches);
     return [...new Set(chips)].slice(0, 3);
   }
-  if ((c.dates?.days ?? 1) >= 2) chips.push(copy.relax);
-  const boatDone = task.completed.includes("boat") || (c.boatTrips ?? 0) > 0;
+  const relaxed = new Set(task.completed.flatMap((item) => {
+    const match = /^relax-day-(\d+)$/.exec(item);
+    return match ? [Number(match[1])] : [];
+  }));
+  const days = c.dates?.days ?? 1;
+  for (let day = 2; day <= days; day += 1) {
+    if (!relaxed.has(day)) { chips.push(relaxChip(locale, day)); break; }
+  }
+  const boatDone = task.completed.includes("boat") || task.completed.includes("boat-skipped") || (c.boatTrips ?? 0) > 0;
   if (!boatDone) chips.push(copy.boat);
-  chips.push(c.car === false ? copy.rent : copy.pdf);
+  if (task.completed.includes("pdf")) chips.push(copy.beaches);
+  else chips.push(c.car === false ? copy.rent : copy.pdf);
   return [...new Set(chips)].slice(0, 3);
 }
 

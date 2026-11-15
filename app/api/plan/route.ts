@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     }
     const result = await runPlanAgent(messages, current, { model, fetchImpl: fetch }, task);
     const signed = signTask(result.task);
-    return Response.json({ reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent });
+    return Response.json({ reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status });
   } catch {
     return Response.json({ error: "Planner unavailable" }, { status: 502 });
   }

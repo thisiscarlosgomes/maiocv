@@ -135,9 +135,14 @@ export function contactLinks(op: Operator | null): { whatsapp: string | null; ca
 }
 
 
+/** Meals and anchored places. A free row or the arrival header is not a stop. */
+export function visibleStops(items: PlanDay["items"]): number {
+  return items.filter((item) => item.kind === "food" || item.kind === "place" || item.kind === "experience").length;
+}
+
 /** "3 stops · 25 min driving" (walking when everything is close and there's no car). Straight-line estimate. */
 export function daySummary(day: PlanDay, s: PlanStrings, hasCar: boolean): string {
-  const stops = day.items.filter((i) => i.kind !== "transport");
+  const stops = day.items.filter((item) => item.kind === "food" || item.kind === "place" || item.kind === "experience");
   const pts = stops.map(itemPoint).filter((p): p is { lat: number; lon: number } => !!p);
   let km = 0;
   for (let i = 1; i < pts.length; i += 1) km += distanceKm(pts[i - 1], pts[i]);

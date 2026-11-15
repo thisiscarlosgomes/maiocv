@@ -161,7 +161,7 @@ export function ChatShell({
             ))}
           </div>
         )}
-        {busy && (
+        {busy && thinking.trim() && (
           <div role="status" className="chat-status chat-thinking" data-testid="typing">
             <span className="thinking-dots" aria-hidden="true"><span /><span /><span /></span>
             <span className="thinking-label">{thinking}</span>

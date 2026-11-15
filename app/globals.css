@@ -1713,10 +1713,9 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-stop-title { display: block; font-size: 17px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 .plan-stop-meta { display: block; font-size: 15px; line-height: 1.35; color: var(--muted); }
 .plan-weekday { color: var(--muted); }
-.plan-daymap { display: inline-flex; align-items: center; min-height: 44px; margin-top: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .plan-unmet { margin: 32px 0 0; font-size: 15px; color: var(--maio-text-data); }
 .plan-foot { margin: 48px 0 0; font-size: 13px; color: var(--muted); }
-.plan-stop:focus-visible, .plan-btn:focus-visible, .plan-chip:focus-visible, .plan-send:focus-visible, .plan-primary:focus-visible, .plan-back:focus-visible, .plan-daymap:focus-visible, .plan-sheet-close:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.plan-stop:focus-visible, .plan-btn:focus-visible, .plan-chip:focus-visible, .plan-send:focus-visible, .plan-primary:focus-visible, .plan-back:focus-visible, .plan-sheet-close:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
 @media (min-width: 701px) {
   .plan-title { font-size: 48px; }
   .plan-cover { aspect-ratio: 5 / 2; }

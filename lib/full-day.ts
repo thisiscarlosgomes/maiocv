@@ -114,10 +114,15 @@ export function buildDay(args: {
   const free = (slot: Slot, refId: string, start: number, durationMin: number, note?: string) => add(slot, { kind: "free", refId, start: toTime(start), durationMin, ...(note ? { note } : {}) });
   const foodPt = (f: { placeId: string }) => place(f.placeId)!;
   const slow = pools.pace === "slow";
-  const meal = (slot: Slot, start: number, dur: number, fallback: string) => {
-    const list = picker.restaurants();
-    const r = picker.pick(list, foodPt, from, day, "meal", true) ?? picker.pick(list, foodPt, from, day, "meal", false);
-    if (r) add(slot, { kind: "food", refId: r.id, start: toTime(start), durationMin: dur, ...(r.note ? { note: r.note } : {}) });
+  // Dinner may use a bar once every restaurant in range has been used. Lunch holds the one repeat
+  // so a leftover place fills dinner instead of a "back again" lunch and an empty dinner.
+  const meal = (slot: Slot, start: number, dur: number, fallback: string, holdRepeat = false) => {
+    const restaurants = picker.restaurants();
+    const bars = picker.bars().filter((bar) => !restaurants.some((restaurant) => restaurant.id === bar.id));
+    const pool = slot === "dinner" ? [...restaurants, ...bars] : restaurants;
+    const fresh = picker.pick(pool, foodPt, from, day, "meal", true);
+    const chosen = fresh ?? (holdRepeat ? null : picker.pick(pool, foodPt, from, day, "meal", false));
+    if (chosen) add(slot, { kind: "food", refId: chosen.id, start: toTime(start), durationMin: dur, ...(chosen.note ? { note: chosen.note } : {}) });
     else free(slot, fallback, start, dur);
   };
   const outing = (slot: Slot, start: number, dur: number, opts: { sheltered?: boolean; sunset?: boolean; beachOnly?: boolean; preferFar?: boolean } = {}) => {
@@ -147,7 +152,7 @@ export function buildDay(args: {
     if (args.arrivalReadyMin == null) return items;
     let clock = args.arrivalReadyMin;
     free("transfer", "transfer", clock - 30, 30);
-    if (clock <= toMin("14:00")) { const l = Math.max(clock, toMin(T.lunch)); meal("lunch", l, 75, "lunch-free"); clock = l + 90; }
+    if (clock <= toMin("14:00")) { const l = Math.max(clock, toMin(T.lunch)); meal("lunch", l, 75, "lunch-free", true); clock = l + 90; }
     if (clock + 90 <= sunsetStart) outing("activity", Math.max(clock, toMin("15:30")), 90, { sheltered: rough, beachOnly: true });
     sunsetAndDinner(clock);
     return items;
@@ -181,7 +186,7 @@ export function buildDay(args: {
     const spread = pools.hasCar && i > 0;
     outing("morning", morningAt, 120, { sheltered: rough, preferFar: spread });
     const lunch = Math.max(toMin("13:00"), morningAt + 120 + 45);
-    meal("lunch", lunch, 90, "lunch-free");
+    meal("lunch", lunch, 90, "lunch-free", true);
     let clock = lunch + 90;
     const tour = args.tour ?? null;
     if (tour) {
@@ -210,7 +215,7 @@ export function buildDay(args: {
   else { outing("morning", toMin(T.morning), 150, { sheltered: rough, preferFar: spread }); clock = toMin(T.morning) + 150; }
 
   const lunch = Math.max(toMin(T.lunch), clock + 15);
-  meal("lunch", lunch, 75, "lunch-free");
+  meal("lunch", lunch, 75, "lunch-free", true);
   const rest = Math.max(toMin(T.rest), lunch + 90);
   free("rest", "rest", rest, 75);
 

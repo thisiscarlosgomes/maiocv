@@ -69,7 +69,7 @@ test("ask maio suggestion labels are guest voice in every language", () => {
 
 test("a departure row is just Depart, without an unpublished-time aside", () => {
   const plan = buildPlan({
-    request: { startDate: "2026-11-16", days: 2, locale: "en", adults: 2, hasCar: false, boatTrips: 0, departure: { mode: "flight" } },
+    request: { startDate: "2026-11-16", days: 2, locale: "en", adults: 2, hasCar: false, boatTrips: 0, departure: { mode: "flight", time: "17:30" } },
     forecast,
     sailings: [],
   });
