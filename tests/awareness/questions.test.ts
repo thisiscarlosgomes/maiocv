@@ -160,6 +160,12 @@ for (const item of CASES) {
     assertGuestReply(result.reply, { min: 40 });
     assert.ok(result.reply.split(/[.!?]/).filter((part) => part.trim()).length >= 2, result.reply);
     assert.doesNotMatch(result.reply, /^That is /);
+    if (/\bmaio\b/i.test(item.q) && /\b(?:tell|about|like|dizer|como é|parle|comment)\b/i.test(item.q)) {
+      assert.doesNotMatch(result.reply, /lists \d+|lista \d+|liste \d+|\b\d+\s+(?:beaches|praias|plages|places|experiences|expériences|sítios)\b/i);
+      const sentences = result.reply.split(/[.!?]+/).filter((part) => part.trim());
+      assert.ok(sentences.length >= 3 && sentences.length <= 3, result.reply);
+      assert.match(result.reply, /Vila do Maio|Porto Inglês/);
+    }
   });
 }
 
@@ -179,14 +185,14 @@ test("the first one after a saved list names that place and keeps the trip", asy
 
 test("a dumped model itinerary is rewritten with human dates and no ids", async () => {
   const dump = "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Cafe (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game)";
-  const result = await ask("3 days, slow pace", {
+  const result = await ask("3 days, slow pace, no car", {
     reply: dump,
     task: null,
   });
   // The scripted model is only reached when this is a plan, not a side question.
   assert.ok(result.plan);
-  assert.match(result.reply, /\n/);
-  assert.match(result.reply, /## Day 1 — /);
+  assert.match(result.reply, /no car/i);
+  assert.doesNotMatch(result.reply, /## Day 1/);
   assert.doesNotMatch(result.reply, /blue-rental|food listing|\d{4}-\d{2}-\d{2}/);
   assert.equal(result.task.constraints.pace, "slow");
   assert.equal(result.task.constraints.dates?.days, 3);

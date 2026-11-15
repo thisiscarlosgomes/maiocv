@@ -1,8 +1,9 @@
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
-import { EXPERIENCES, FOOD, PLACES } from "./trip.ts";
-import type { TaskLocale } from "./awareness/task.ts";
-import { normalizeUtterance } from "./awareness/classify.ts";
+import { FOOD, PLACES, distanceKm, food, place } from "./trip.ts";
+import type { LastPlace, TaskLocale } from "./awareness/task.ts";
+import { isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
+import { venueType } from "./plan-rules.ts";
 
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
   return locale === "pt" ? pt : locale === "fr" ? fr : en;
@@ -20,18 +21,80 @@ function restaurantNames(): string[] {
 }
 
 const hospital = EMERGENCY.find((item) => item.id === "hospital")!;
+const TOWN = place("cidade-porto-ingles")!;
+
+/** Vila table, then the market cafe, then the pizzeria. Same order the guest can point at. */
+const VILA_TABLES = ["food-001", "food-006", "food-002", "food-005"];
+
+function joinNames(names: string[], locale: TaskLocale): string {
+  if (names.length <= 1) return names[0] ?? "";
+  const conj = locale === "pt" ? "e" : locale === "fr" ? "et" : "and";
+  return `${names.slice(0, -1).join(", ")} ${conj} ${names[names.length - 1]}`;
+}
+
+function asFoodPlace(id: string): LastPlace | null {
+  const item = food(id);
+  if (!item || venueType(item) !== "restaurant") return null;
+  const spot = place(item.placeId);
+  return { id: item.id, name: item.title, area: item.location, ...(spot ? { lat: spot.lat, lon: spot.lon } : {}) };
+}
+
+/**
+ * A numbered list the guest can follow with "the first one".
+ * Returns null when this is not a list request.
+ */
+export function answerPlaceList(text: string, locale: TaskLocale): { reply: string; places: LastPlace[] } | null {
+  if (!isPlaceListQuestion(text)) return null;
+  const n = normalizeUtterance(text);
+  const vila = /\b(?:vila do maio|porto ingles|na vila|in town|en ville)\b/.test(n);
+  const wantBeach = /\b(?:beach|beaches|praia|praias|plage|plages)\b/.test(n) && !/\b(?:restaurant|restaurante|pizzeria|cafe)\b/.test(n);
+  if (wantBeach) {
+    const rows = PLACES.filter((item) => item.category === "beach" && (!vila || distanceKm(item, TOWN) <= 3)).slice(0, 3);
+    const places: LastPlace[] = rows.map((item) => ({
+      id: item.id,
+      name: locale === "pt" ? item.name.pt : item.name.en,
+      area: item.location,
+      lat: item.lat,
+      lon: item.lon,
+    }));
+    const names = joinNames(places.map((item) => item.name), locale);
+    return {
+      places,
+      reply: say(locale,
+        `Three beaches to start with are ${names}. I don't rank a single best one.`,
+        `Três praias para começar são ${names}. Não escolho uma única melhor.`,
+        `Trois plages pour commencer : ${names}. Je n'en classe pas une seule comme la meilleure.`),
+    };
+  }
+  const rows = (vila ? VILA_TABLES : [...VILA_TABLES, "food-003"]).map(asFoodPlace).filter((item): item is LastPlace => !!item).slice(0, 3);
+  if (!rows.length) return null;
+  const names = joinNames(rows.map((item) => item.name), locale);
+  const where = vila ? "Vila do Maio" : "Maio";
+  return {
+    places: rows,
+    reply: say(locale,
+      `In ${where}, three places to eat are ${names}. The listings have no menus and no prices, so you arrange the meal with the place.`,
+      `Em ${where}, três sítios para comer são ${names}. As listas não têm menus nem preços, por isso combinam a refeição com o sítio.`,
+      `À ${where}, trois adresses pour manger sont ${names}. Les listes n'ont ni menus ni prix, donc vous voyez le repas avec l'adresse.`),
+  };
+}
 
 /**
  * A few sentences drawn from Visit Maio listings and the emergency card.
  * Returns null when the question is not a general island question.
  */
 export function answerIslandQuestion(text: string, locale: TaskLocale): string | null {
+  if (isPlaceListQuestion(text)) return null;
   const n = normalizeUtterance(text);
   const spots = beaches(locale, 3);
   const names = spots.map((item) => item.name);
   const listed = names.join(", ");
   const beachCount = PLACES.filter((item) => item.category === "beach").length;
   const verified = verifiedDate(EMERGENCY_VERIFIED_AT, locale);
+  const rotcha = place("praia-bitche-rotcha");
+  const morro = place("praia-do-morro");
+  const rotchaName = locale === "pt" ? rotcha?.name.pt : rotcha?.name.en;
+  const morroName = locale === "pt" ? morro?.name.pt : morro?.name.en;
 
   const about = /\b(?:maio|island|ilha|ile)\b/.test(n) && /\b(?:tell|about|what|whats|how|like|fale|fala|conta|o que|como|parle|comment|quel|quelle|c'est|qu'est|quest)\b/.test(n);
   const beachQ = /\b(?:beach|beaches|praia|praias|plage|plages)\b/.test(n);
@@ -82,9 +145,9 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   }
   if (about) {
     return say(locale,
-      `Maio is the island these listings describe. Visit Maio lists ${beachCount} beaches, including ${listed}, plus ${FOOD.length} places to eat and ${EXPERIENCES.length} experiences. I use those names and the sea forecast when I build a day, and I don't invent a place that isn't in the list.`,
-      `O Maio é a ilha que estas listas descrevem. O Visit Maio lista ${beachCount} praias, entre elas ${listed}, mais ${FOOD.length} sítios para comer e ${EXPERIENCES.length} experiências. Uso esses nomes e a previsão do mar quando monto um dia, e não invento um sítio que não esteja na lista.`,
-      `Maio est l'île que ces listes décrivent. Visit Maio liste ${beachCount} plages, dont ${listed}, plus ${FOOD.length} adresses pour manger et ${EXPERIENCES.length} expériences. J'utilise ces noms et la prévision de mer quand je construis une journée, et je n'invente pas un lieu absent de la liste.`);
+      `Maio is a small, quiet Cape Verdean island, with long beaches and an easy pace. Vila do Maio, also called Porto Inglês, is the harbour town, a short walk from ${rotchaName}, with ${morroName} a little further along. Around town you walk or take an aluguer taxi, and a car opens the rest of the island.`,
+      `O Maio é uma ilha pequena e tranquila, com praias longas e um ritmo calmo. Vila do Maio, também chamada Porto Inglês, é a vila do porto, a um passo da ${rotchaName}, com a ${morroName} um pouco mais à frente. Na vila anda-se a pé ou de aluguer, e um carro abre o resto da ilha.`,
+      `Maio est une petite île calme, avec de longues plages et un rythme tranquille. Vila do Maio, aussi appelée Porto Inglês, est le bourg du port, à une courte marche de ${rotchaName}, avec ${morroName} un peu plus loin. En ville on marche ou on prend un aluguer, et une voiture ouvre le reste de l'île.`);
   }
   return null;
 }

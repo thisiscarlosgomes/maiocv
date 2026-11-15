@@ -1,7 +1,7 @@
-import { addDays } from "../trip.ts";
+import { EXPERIENCES, addDays, experience } from "../trip.ts";
 import { resolveReference, type ReferenceHit } from "./context.ts";
 import {
-  emptyTask, mergeConstraints, refreshTask, rememberPlace, type Task, type TaskConstraints, type TaskLocale, type TaskScope,
+  emptyTask, isCarPending, mergeConstraints, refreshTask, rememberPlace, type Task, type TaskConstraints, type TaskLocale, type TaskScope,
 } from "./task.ts";
 
 export type Intent = "continuation" | "correction" | "side_question" | "cancel_pending" | "new_objective";
@@ -15,6 +15,8 @@ export type Classification = {
   reference: ReferenceHit;
   /** The utterance is only "never mind" (or the pt/fr equivalent). */
   cancelOnly: boolean;
+  /** Set when this turn answers the car question or states a car outright. "unsure" plans with a car. */
+  carStance: "yes" | "no" | "unsure" | null;
   /** hi / olá / bonjour / thanks / ok. The task stays as it is. */
   smallTalk: boolean;
   /** Dates, party, car, quiet evenings, or arrival changed — the plan must be rebuilt. */
@@ -77,6 +79,8 @@ export function detectLocale(text: string): TaskLocale | undefined {
   if (/\b(?:em portugues|in portuguese|responde em portugues)\b/.test(n)) return "pt";
   if (/\b(?:nous|jours?|voiture|enfant|plage|sans|sommes)\b/.test(n) && /\b(?:nous|jours?|voiture|enfant|sommes)\b/.test(n)) return "fr";
   if (/\b(?:dias?|somos|sem carro|amanha|crianca|bebe|voces?)\b/.test(n)) return "pt";
+  if (/\b(?:lista|listar|restaurantes|praias|na vila|quais|indique)\b/.test(n)) return "pt";
+  if (/\b(?:listez|liste|plages|donnez|quels)\b/.test(n) && /\b(?:restaurant|plage|liste)\b/.test(n)) return "fr";
   return undefined;
 }
 
@@ -133,9 +137,9 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const party = extractParty(n);
   if (party) patch.party = party;
 
-  const howTo = /\b(?:how|como|comment)\b/.test(n);
-  if (!howTo && /\b(?:no car|sem carro|sans voiture|without a car)\b/.test(n)) patch.car = false;
-  else if (/\b(?:rented a car|rent(?:ed)? a car|we have a car|with a car|alugamos(?: um)? carro|temos carro|com carro|loue une voiture|avec une voiture|on a loue)\b/.test(n)) patch.car = true;
+  const stance = carPhrase(n);
+  if (stance === "no") patch.car = false;
+  else if (stance === "yes" || stance === "unsure") patch.car = true;
 
   if (/\bquiet\b|\bnoite calma\b|\bsoiree calme\b|\blazier\b|\bno bar\b|\bsem bar\b|\bsans bar\b/.test(n)) patch.quietEvenings = true;
   if (/\b(?:slow pace|relaxed pace|easy pace|ritmo calmo|ritmo lento|sem pressa|rythme lent|rythme calme)\b/.test(n)) patch.pace = "slow";
@@ -160,6 +164,7 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   if (/\b(?:nightlife|nightclub|vida noturna|boite)\b/.test(n)) interests.push("nightlife");
   if (/\b(?:dolphin|golfinho|dauphin)\b/.test(n)) interests.push("dolphin");
   if (/\bsurf\b/.test(n)) interests.push("surf");
+  for (const id of experienceIdsMentioned(n)) interests.push(id);
   if (interests.length) patch.interests = interests;
 
   const time = clockOf(n);
@@ -210,7 +215,7 @@ function hasPlanSignal(patch: TaskConstraints): boolean {
   return Boolean(
     patch.dates?.start || patch.dates?.days || patch.party || patch.car !== undefined
     || patch.quietEvenings || patch.arrival || patch.departure || patch.boatTrips !== undefined
-    || patch.interests?.some((item) => item === "beach" || item === "boat"),
+    || patch.interests?.some((item) => item === "beach" || item === "boat" || experience(item)),
   );
 }
 
@@ -226,12 +231,19 @@ function isTimetableQuestion(text: string): boolean {
     && !/\b(?:stay|days|dias|jours|plan)\b/.test(text);
 }
 
+export function isBusinessLookup(text: string): boolean {
+  const n = normalizeUtterance(text);
+  return /\b(?:phone|telefone|telephone|numero de telefone|numero de telephone)\b/.test(n)
+    || /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(n);
+}
+
 function isFactualAside(text: string): boolean {
   return /\b(?:hospital|hospit|hopital|emergency|emergencia|urgence)\b/.test(text)
     || /\b(?:in the air|flight status|estado do voo|le vol est|praia flight)\b/.test(text)
     || /\b(?:what should i pack|o que levar|que mettre dans)\b/.test(text)
     || /\b(?:pay by card|posso pagar|carte bancaire|card payment)\b/.test(text)
-    || /\b(?:phone number|numero de telefone)\b/.test(text)
+    || /\b(?:phone|telefone|telephone|numero de telefone|numero de telephone)\b/.test(text)
+    || /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(text)
     || /\b(?:directions?|como chegar|itineraire)\b/.test(text);
 }
 
@@ -245,6 +257,29 @@ export function isSmallTalk(text: string): boolean {
   return SMALL_TALK.test(bare(text));
 }
 
+/** "list three restaurants in Vila do Maio" / "lista três restaurantes" / "liste trois restaurants". */
+export function isPlaceListQuestion(text: string): boolean {
+  const n = normalizeUtterance(text);
+  const subject = /\b(?:restaurants?|restaurantes?|pizzerias?|beaches|praias?|plages?)\b/.test(n);
+  if (!subject) return false;
+  if (/\b(?:list|lists|name|recommend|suggest|show|give|which|what are|lista|listar|liste|listez|indique|indica|recomenda|sugere|quais|montre|donnez|donne|quels|quelles)\b/.test(n)) return true;
+  // "3 restaurants in Vila", not "3 days" and not "no car".
+  return /\b(?:two|three|four|dois|duas|tres|quatro|deux|trois|quatre|\d+)\s+(?:restaurants?|restaurantes?|pizzerias?|praias?|beaches|plages?)\b/.test(n);
+}
+
+/** Experience ids the guest actually named (a quad, a jet ski), not ones a previous draft assumed. */
+export function experienceIdsMentioned(text: string): string[] {
+  const n = normalizeUtterance(text);
+  const ids: string[] = [];
+  for (const exp of EXPERIENCES) {
+    const title = normalizeUtterance(exp.title);
+    if (title.length > 4 && n.includes(title)) ids.push(exp.id);
+    else if (/\bquads?\b/.test(n) && exp.id.includes("quad")) ids.push(exp.id);
+    else if (/\bjet ?skis?\b/.test(n) && exp.id.includes("jetski")) ids.push(exp.id);
+  }
+  return ids;
+}
+
 /** Visitor questions about the island itself, not a request to build or change a plan. */
 export function isGeneralIslandQuestion(text: string): boolean {
   const n = normalizeUtterance(text);
@@ -255,6 +290,34 @@ export function isGeneralIslandQuestion(text: string): boolean {
   const eat = /\b(?:where (?:to|should|can) (?:we |i )?(?:eat|have)|onde comer|ou manger|où manger)\b/.test(n);
   const around = /\b(?:get around|getting around|desloc|deplacer|aluguer)\b/.test(n);
   return aboutIsland || beaches || safe || services || eat || around;
+}
+
+const HOW_AROUND = /\b(?:how|como|comment)\b.*\b(?:around|desloc|deplacer|car|carro|voiture)\b/;
+const CAR_NO = /\b(?:no car|without a car|sem carro|sans voiture)\b/;
+const CAR_YES = /\b(?:with a car|have a car|has a car|rent(?:ing|ed)?(?: a)? car|we(?:'ll| will) rent|yes we rent|com carro|de carro|vamos alugar|alug(?:ar|amos|uei)|temos carro|lou(?:er|ons|e) une voiture|avec une voiture|on a loue|on loue)\b/;
+const CAR_UNSURE = /\b(?:not sure(?: yet)?|unsure|ainda nao sei|nao sei|pas encore sur|pas sur|je ne sais pas)\b/;
+
+/** Explicit car wording. A how-to ("how do we get around without a car") is not an answer. */
+function carPhrase(text: string): "yes" | "no" | "unsure" | null {
+  if (HOW_AROUND.test(text)) return null;
+  if (CAR_UNSURE.test(text)) return "unsure";
+  if (CAR_NO.test(text)) return "no";
+  if (CAR_YES.test(text)) return "yes";
+  return null;
+}
+
+/**
+ * Car answer for this turn. Short yes/no ("sim", "oui", "nope") count only while the car question is waiting.
+ * "unsure" still plans with a car.
+ */
+export function resolveCarStance(text: string, pending: string | null): "yes" | "no" | "unsure" | null {
+  const n = bare(text);
+  const phrase = carPhrase(n);
+  if (phrase) return phrase;
+  if (!isCarPending(pending)) return null;
+  if (/^(?:yes|yeah|yep|yup|sure|sim|oui|si)$/.test(n)) return "yes";
+  if (/^(?:no|nope|nah|nao|non)$/.test(n)) return "no";
+  return null;
 }
 
 function newObjectiveCue(text: string): boolean {
@@ -271,11 +334,14 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   const reference = resolveReference(text, task.lastPlaces);
   const research = isResearchQuestion(text);
   const patch = extractConstraints(text, ctx.today);
+  const carStance = resolveCarStance(text, task.pendingQuestion);
+  if (carStance === "no") patch.car = false;
+  else if (carStance === "yes" || carStance === "unsure") patch.car = true;
   const referenceOnly = Boolean(reference.kind) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined;
   const asking = isGeneralIslandQuestion(text) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined && !patch.pace;
   const planShaping = hasPlanSignal(patch) && !referenceOnly && !asking;
   const dietOnly = Boolean(patch.diet || patch.budget) && !planShaping;
-  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false };
+  const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research), smallTalk: false, carStance };
   const side = { ...base, intent: "side_question" as const, planShaping: false, patch: {}, research: false, reference: { kind: null, place: null, from: null, to: null } as ReferenceHit };
 
   if (CANCEL_EXACT.test(n)) {
@@ -284,16 +350,20 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   if (isSmallTalk(n)) {
     return { ...side, smallTalk: true, objective: task.objective ?? undefined };
   }
+  if (isBusinessLookup(text) && !patch.dates?.days && !patch.dates?.start) {
+    return { ...side, patch: {}, planShaping: false, objective: task.objective ?? undefined };
+  }
   if (isTimetableQuestion(text) || /\bin the air\b|\bflight status\b|\bestado do voo\b/.test(n)) {
     return { ...base, intent: "side_question", planShaping: false, patch: {}, research: false };
   }
   if (newObjectiveCue(n) || (research && task.objective)) {
     return { ...base, intent: "new_objective", planShaping: !research && planShaping, objective: clipObjective(text) };
   }
-  if (isGeneralIslandQuestion(text) && !planShaping && !research) {
+  if ((isGeneralIslandQuestion(text) || isPlaceListQuestion(text) || isBusinessLookup(text)) && !planShaping && !research) {
     return { ...side, objective: task.objective ?? undefined };
   }
   if (!task.objective) {
+    if ((isPlaceListQuestion(text) || isBusinessLookup(text)) && !planShaping) return side;
     if (research || (isQuestion(n) && !planShaping)) {
       return { ...base, intent: research ? "new_objective" : "side_question", planShaping: false, objective: research ? clipObjective(text) : undefined };
     }
@@ -330,6 +400,8 @@ export function applyClassification(task: Task, result: Classification): Task {
   }
   if (result.intent === "side_question") {
     const next = { ...task, locale: result.locale ?? task.locale };
+    // An ordinal reads the list. Moving that place to the end would make "the second one" miss.
+    if (result.reference.kind === "ordinal" || result.reference.kind === "that-one") return next;
     return result.reference.place ? rememberPlace(next, result.reference.place) : next;
   }
   const leavingResearch = result.planShaping && task.scope.mode === "research";

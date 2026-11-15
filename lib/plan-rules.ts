@@ -1,5 +1,5 @@
 import { FOOD, PLACES, distanceKm, experience, isExcludedExperience, place, food, type Food, type PlanDay, type PlanItem, type TripPlan } from "./trip.ts";
-import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind, inferSlot, repairDay, restCovered, stopCount } from "./full-day.ts";
+import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, SLOW_ANCHORED_MAX, SLOW_FULL_RANGE, SLOW_SLOTS, anchoredCount, dayKind, inferSlot, repairDay, restCovered, stopCount } from "./full-day.ts";
 
 /** Plan rules enforced in code after generation (Carlos, Oct 27):
  *  1. At most one tour/experience across the whole trip.
@@ -78,7 +78,8 @@ export function enforcePlanRules(plan: TripPlan, opts: { requested?: string[]; h
     d.items.sort((a, b) => toMin(a.start) - toMin(b.start));
   }
   // Rule 5: repair the full-day structure (fills gaps with generic rows; never adds a venue).
-  return { ...plan, days: days.map((d, i) => repairDay(d, i)) };
+  // A slow day is not padded back up to the seven-slot template.
+  return { ...plan, days: days.map((d, i) => repairDay(d, i, plan.pace)) };
 }
 
 /** For tests/evals: list rule violations. */
@@ -92,9 +93,14 @@ export function planRuleViolations(plan: TripPlan): string[] {
   }
   for (const d of plan.days) {
     const kind = dayKind(d), n = stopCount(d);
-    const range = kind === "full" ? FULL_DAY_RANGE : kind === "arrival" ? ARRIVAL_RANGE : DEPARTURE_RANGE;
+    const slow = plan.pace === "slow" && kind === "full";
+    const range = kind === "full" ? (slow ? SLOW_FULL_RANGE : FULL_DAY_RANGE) : kind === "arrival" ? ARRIVAL_RANGE : DEPARTURE_RANGE;
     if (n < range.min || n > range.max) out.push(`${kind} day ${d.date}: ${n} stops (want ${range.min}-${range.max})`);
-    if (kind === "full") { const slots = new Set(d.items.map(inferSlot)); for (const s of FULL_DAY_SLOTS) if (!slots.has(s) && !(s === "rest" && restCovered(d.items))) out.push(`${d.date}: missing ${s}`); }
+    if (kind === "full") {
+      const slots = new Set(d.items.map(inferSlot));
+      for (const s of (slow ? SLOW_SLOTS : FULL_DAY_SLOTS)) if (!slots.has(s) && !(s === "rest" && restCovered(d.items))) out.push(`${d.date}: missing ${s}`);
+      if (slow && anchoredCount(d.items) > SLOW_ANCHORED_MAX) out.push(`${d.date}: ${anchoredCount(d.items)} anchored stops (max ${SLOW_ANCHORED_MAX})`);
+    }
     else if (d.items.some((i) => i.kind === "experience")) out.push(`${kind} day ${d.date} has a tour`);
     const lunchDinner = d.items.filter((i) => (inferSlot(i) === "lunch" || inferSlot(i) === "dinner" || inferSlot(i) === "breakfast") && i.kind === "food" && isBar(i.refId));
     for (const i of lunchDinner) out.push(`meal at bar ${i.refId} on ${d.date}`);

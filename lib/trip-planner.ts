@@ -61,6 +61,29 @@ function ageOk(exp: Experience, req: TripRequest): boolean {
 
 const titles = { pt: (n: number) => `${n} ${n === 1 ? "dia" : "dias"} no Maio`, en: (n: number) => `${n} ${n === 1 ? "day" : "days"} on Maio`, fr: (n: number) => `${n} ${n === 1 ? "jour" : "jours"} à Maio` };
 
+/** Quad, jet ski and similar. A slow day never adds one unless the guest named it. */
+export function isAdrenalineExperience(exp: Experience): boolean {
+  return /quad|jet[\s-]?ski|off-?road|buggy|\batv\b/i.test(`${exp.id} ${exp.title}`);
+}
+
+const NOTES = {
+  en: {
+    given: "Time you gave. It is not in the published timetable and it is not live status.",
+    unpublished: "Time not published yet. Confirm with the operator. No published sailing is not the same as no service.",
+    unset: "Time not set. Confirm with the operator.",
+  },
+  pt: {
+    given: "Hora que indicou. Não está no horário publicado e não é um estado ao vivo.",
+    unpublished: "Hora ainda por publicar. Confirme com o operador. Sem saída publicada não é o mesmo que não haver serviço.",
+    unset: "Hora por definir. Confirme com o operador.",
+  },
+  fr: {
+    given: "Heure que vous avez indiquée. Elle n'est pas dans l'horaire publié et ce n'est pas un statut en direct.",
+    unpublished: "Heure pas encore publiée. Confirmez auprès de l'opérateur. Aucune traversée publiée n'est une absence de service.",
+    unset: "Heure non fixée. Confirmez auprès de l'opérateur.",
+  },
+} as const;
+
 export type PlannerInput = { request: z.input<typeof TripRequestSchema>; forecast: DailySea[]; sailings: Sailing[]; forecastSource?: string };
 
 export function buildPlan({ request: raw, forecast, sailings, forecastSource = "Open-Meteo" }: PlannerInput): TripPlan {
@@ -88,20 +111,20 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
       const published = Boolean(sailing && (!req.arrival.time || req.arrival.time === sailing.departure));
       arrival = {
         id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
-        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}` : "Time you gave. It is not in the published timetable and it is not live status.",
+        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}` : NOTES[req.locale].given,
       };
       arrivalReady = toMin(at) + (req.arrival.mode === "ferry" ? 150 : 60);
       kinds[arrivalIndex] = "arrival";
     } else {
       arrival = {
         id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, durationMin: 0,
-        note: "Time not published yet. Confirm with the operator. No published sailing is not the same as no service.",
+        note: NOTES[req.locale].unpublished,
       };
     }
   }
   // Departure: the last day, when the guest leaves on it (and it isn't also the arrival day).
   const leave = req.departure && req.days > 1 && kinds[req.days - 1] === "full"
-    ? { mode: req.departure.mode, time: req.departure.time ?? "16:00", note: req.departure.time ? undefined : "Time not set. Confirm with the operator." }
+    ? { mode: req.departure.mode, time: req.departure.time ?? "16:00", note: req.departure.time ? undefined : NOTES[req.locale].unset }
     : undefined;
   if (leave) kinds[req.days - 1] = "departure";
   const earlyExit = !!leave && toMin(leave.time) < toMin("12:00");
@@ -111,8 +134,10 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   const safe = (i: number) => status[i] === "calm" || status[i] === "moderate";
   const calmest = [...fullDays].filter(safe).sort((a, b) => (sea[a]?.waveHeightM ?? 9) - (sea[b]?.waveHeightM ?? 9));
   const requested = req.include.map(experience).filter((e): e is Experience => !!e && eligible.includes(e));
-  const seaPool = eligible.filter((e) => e.seaDependent).sort((a, b) => Number(b.boat) - Number(a.boat));
-  const landPool = eligible.filter((e) => !e.seaDependent && (!kids || e.example.durationMin <= 180));
+  const slow = req.pace === "slow";
+  // A slow day does not invent a land tour. Quad and jet ski stay out unless that include was named.
+  const seaPool = eligible.filter((e) => e.seaDependent && (!slow || !isAdrenalineExperience(e) || requested.includes(e))).sort((a, b) => Number(b.boat) - Number(a.boat));
+  const landPool = slow ? [] : eligible.filter((e) => !e.seaDependent && (!kids || e.example.durationMin <= 180));
   let tour: { exp: Experience; day: number } | null = null;
   for (const exp of [...requested, ...(req.boatTrips > 0 ? seaPool : []), ...landPool]) {
     const day = exp.seaDependent ? calmest[0] : (fullDays.find((i) => status[i] === "rough") ?? fullDays[0]);
@@ -135,5 +160,5 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     return { date, sea: s ? { status: status[i], waveHeightM: s.waveHeightM, windKmh: s.windKmh, tempMaxC: s.tempMaxC, source: forecastSource } : null, items };
   });
 
-  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, days, unmet: unmet.slice(0, 5) }, { requested: req.include });
+  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, ...(req.pace ? { pace: req.pace } : {}), days, unmet: unmet.slice(0, 5) }, { requested: req.include });
 }

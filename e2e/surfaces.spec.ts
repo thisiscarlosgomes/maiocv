@@ -54,7 +54,7 @@ async function expectClean(page: Page, opts: { long?: boolean; short?: boolean }
   }
   if (opts.short) expect(text.length).toBeLessThan(520);
   const chips = page.locator("[data-testid='suggestions'] button");
-  expect(await chips.count()).toBeLessThanOrEqual(2);
+  expect(await chips.count()).toBeLessThanOrEqual(3);
   const leave = await chips.allInnerTexts();
   expect(leave.join(" ")).not.toMatch(/When do you leave|Quando partem|Quand partez/i);
   expect(await overflow(page)).toBeLessThanOrEqual(1);
@@ -100,15 +100,72 @@ for (const viewport of viewports) {
       await expect(page.getByTestId("chat-send")).toBeDisabled();
       await expect(page.getByTestId("assistant-reply")).toHaveCount(beforePlan + 1);
       await page.unroute("**/api/plan");
-      text = await expectClean(page, { long: true });
-      note(`${viewport.name}/${locale}/plan-3-day`, "pass", text.slice(0, 180));
-      await page.evaluate(() => document.querySelector(".chat-markdown h2")?.scrollIntoView({ block: "start" }));
+      text = await expectClean(page, { short: true });
+      expect(text).toMatch(locale === "pt" ? /carro/ : locale === "fr" ? /voiture/ : /car/i);
+      expect(text.split(/[.!?]+/).filter((part) => part.trim()).length).toBeLessThanOrEqual(2);
+      await expect(page.getByTestId("plan-trip-card")).toHaveCount(0);
+      const carChips = page.getByTestId("suggestions").getByRole("button");
+      await expect(carChips).toHaveCount(3);
+      note(`${viewport.name}/${locale}/car-question`, "pass", text.slice(0, 160));
+
+      await send(page, c.hi);
+      text = await expectClean(page, { short: true });
+      expect(text).toMatch(locale === "pt" ? /Olá/ : locale === "fr" ? /Bonjour/ : /Hi/i);
+      await expect(page.getByTestId("plan-trip-card")).toHaveCount(0);
+      await expect(carChips).toHaveCount(3);
+      note(`${viewport.name}/${locale}/greeting-while-pending`, "pass", text.slice(0, 140));
+
+      await send(page, c.hospital);
+      text = await expectClean(page);
+      expect(text).toMatch(/255 11 30|\+238/);
+      await expect(page.getByTestId("plan-trip-card")).toHaveCount(0);
+      await expect(carChips).toHaveCount(3);
+      note(`${viewport.name}/${locale}/side-while-pending`, "pass", text.slice(0, 140));
+
+      const answer = viewport.name === "desktop"
+        ? (locale === "pt" ? "Sem carro" : locale === "fr" ? "Pas encore sûr" : "Yes, renting a car")
+        : (locale === "pt" ? "não" : locale === "fr" ? "oui" : "yes we rent one");
+      if (viewport.name === "desktop") await page.getByTestId("suggestions").getByRole("button", { name: answer }).click();
+      else await send(page, answer);
+      const planReply = page.getByTestId("assistant-reply").last();
+      await expect(planReply.getByTestId("plan-trip-card")).toHaveCount(1);
+      text = await expectClean(page, { short: true });
+      const prose = (await planReply.locator(".chat-markdown").innerText()).trim();
+      const order = await page.evaluate(() => {
+        const reply = [...document.querySelectorAll("[data-testid='assistant-reply']")].at(-1);
+        const card = reply?.querySelector("[data-testid='plan-trip-card']");
+        const body = reply?.querySelector(".chat-markdown");
+        if (!reply || !card || !body) return false;
+        return Boolean(card.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      expect(order).toBe(true);
+      expect(prose.split(/[.!?]+/).filter((part) => part.trim()).length).toBeLessThanOrEqual(3);
+      expect(prose.length).toBeLessThan(220);
+      expect(prose).not.toMatch(/## |08:30/);
+      note(`${viewport.name}/${locale}/plan-card-first`, "pass", text.slice(0, 180));
       if (locale === "en" && viewport.name === "desktop") {
         await page.screenshot({ path: `${OUT}/plan-after-desktop.png`, fullPage: false });
       }
       if (locale === "en" && viewport.name === "mobile") {
         await page.screenshot({ path: `${OUT}/plan-after-mobile.png`, fullPage: false });
       }
+
+      await page.setViewportSize({ width: viewport.width, height: 640 });
+      const pane = page.locator(".chat-conversation");
+      await expect.poll(async () => pane.evaluate((node) => node.scrollHeight > node.clientHeight + 40)).toBe(true);
+      await pane.evaluate((node) => { node.scrollTop = 0; });
+      await send(page, c.hi);
+      await expect.poll(async () => pane.evaluate((node) => {
+        const last = [...node.querySelectorAll("[data-testid='user-message']")].at(-1);
+        if (!last) return false;
+        const paneBox = node.getBoundingClientRect();
+        const box = last.getBoundingClientRect();
+        return box.top >= paneBox.top - 8 && box.bottom <= paneBox.bottom + 8;
+      })).toBe(true);
+      text = await expectClean(page, { short: true });
+      expect(text).toMatch(locale === "pt" ? /dias/ : locale === "fr" ? /jours/ : /day/i);
+      note(`${viewport.name}/${locale}/scroll-after-plan`, "pass", text.slice(0, 140));
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
       await send(page, c.hi);
       text = await expectClean(page, { short: true });
@@ -163,9 +220,13 @@ for (const viewport of viewports) {
       note(`${viewport.name}/${locale}/research`, "pass", text.slice(0, 140));
 
       const taskBefore = await page.evaluate(() => sessionStorage.getItem("maio.plan.task"));
-      // Research replaces the trip, so plan again before reload.
-      await send(page, c.plan);
-      await expectClean(page, { long: true });
+      // Research replaces the trip. A plan that already names the car does not ask again.
+      const upfront = locale === "pt" ? "3 dias, ritmo calmo, com carro" : locale === "fr" ? "3 jours, rythme calme, avec une voiture" : "3 days, slow pace, with a car";
+      await send(page, upfront);
+      await expect(page.getByTestId("assistant-reply").last().getByTestId("plan-trip-card")).toHaveCount(1);
+      text = await expectClean(page, { short: true });
+      expect(text).not.toMatch(/Will you have a car\?|Vão ter carro\?|Vous aurez une voiture \?/);
+      note(`${viewport.name}/${locale}/car-upfront`, "pass", text.slice(0, 160));
       const task = await page.evaluate(() => sessionStorage.getItem("maio.plan.task"));
       expect(task && task.length).toBeGreaterThan(10);
       await page.reload();

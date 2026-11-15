@@ -161,6 +161,24 @@ export function refreshTask(task: Task): Task {
   };
 }
 
+/** Asked once, before the first plan, when the guest has not said if they have a car. */
+export const CAR_QUESTION: Record<TaskLocale, string> = {
+  en: "Will you have a car?",
+  pt: "Vão ter carro?",
+  fr: "Vous aurez une voiture ?",
+};
+
+export const CAR_CHIPS: Record<TaskLocale, [string, string, string]> = {
+  en: ["Yes, renting a car", "No car", "Not sure yet"],
+  pt: ["Sim, vamos alugar", "Sem carro", "Ainda não sei"],
+  fr: ["Oui, on loue", "Sans voiture", "Pas encore sûr"],
+};
+
+export function isCarPending(question: string | null | undefined): boolean {
+  if (!question) return false;
+  return (Object.values(CAR_QUESTION) as string[]).includes(question);
+}
+
 const BOAT_CHIP = /boat|barco|bateau/i;
 
 function questionOptions(question: string, locale: TaskLocale): string[] {

@@ -4,16 +4,17 @@ import { publicChatAnswer, publicChatGreeting, publicChatResponse } from "../lib
 
 test("greets visitors with supported MaioCV topics only", () => {
   const greeting = publicChatGreeting("hi");
-  assert.match(greeting ?? "", /praias e lugares, empresas, turismo/);
+  assert.equal(greeting, "Olá! Pergunte-me sobre o Maio.");
   assert.doesNotMatch(greeting ?? "", /barcos|voos|transportes/);
   assert.equal(publicChatGreeting("Há barcos hoje?"), null);
   const scope = publicChatGreeting("Que dados posso consultar aqui?");
   assert.match(scope ?? "", /praias e património, turismo, empresas/);
   assert.doesNotMatch(scope ?? "", /barcos|voos|transportes|tempo|surf/);
   assert.equal(publicChatGreeting("Que dados de turismo posso consultar?"), null);
-  assert.match(publicChatGreeting("hi", "en") ?? "", /beaches/);
-  assert.doesNotMatch(publicChatGreeting("hi", "en") ?? "", /praias/);
-  assert.match(publicChatGreeting("hi", "fr") ?? "", /plages/);
+  assert.equal(publicChatGreeting("hi", "en"), "Hello! Ask me about Maio.");
+  assert.doesNotMatch(publicChatGreeting("hi", "en") ?? "", /praias|plages/);
+  assert.equal(publicChatGreeting("hi", "fr"), "Bonjour ! Demandez-moi Maio.");
+  assert.doesNotMatch(publicChatGreeting("hi", "fr") ?? "", /praias|beaches/);
 });
 
 test("keeps the public source but removes internal dataset and workbook details", () => {
