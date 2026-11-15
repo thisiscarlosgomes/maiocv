@@ -1,12 +1,12 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
-import { applyDateShift, applyLength, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, isCarRentalQuestion, parseDateShift, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
+import { applyDateShift, applyLength, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, isCarRentalQuestion, isTravelChoice, parseDateShift, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, looksLikeItineraryDump, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
-import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
+import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, dropBoatTrip, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
 import { gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
@@ -42,6 +42,7 @@ export type PlanReplyTurn = {
   locale: TaskLocale;
   planTurn: boolean;
   toolFacts: string;
+  appliedEdit: string | null;
 };
 export type PlanDeps = { model: LanguageModel; fetchImpl: typeof fetch; now?: Date; onReply?: (turn: PlanReplyTurn) => void };
 
@@ -296,6 +297,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   let task = applyClassification(seeded, classification);
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
+  let appliedEdit: string | null = null;
 
   const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => {
     const changed = Boolean(plan && !samePlanShape(plan, current));
@@ -327,6 +329,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       locale: out.task.locale,
       planTurn: (classification.planShaping === true && classification.intent !== "side_question" && !classification.smallTalk) || changed,
       toolFacts: toolFacts.join("\n").slice(0, 8000),
+      appliedEdit,
     });
     return out;
   };
@@ -674,6 +677,11 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         intent.pace === "packed" ? "Les jours sont plus chargés." : "Les jours sont plus calmes.");
       return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
     }
+    if (intent.kind === "remove_stop" && intent.stop === "boat") {
+      const edited = dropBoatTrip(open, locale);
+      const next = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { boatTrips: 0 }), completed: [...task.completed, edited.removed ? "boat-removed" : "boat-absent"] });
+      return { reply: edited.reply, plan: edited.plan, events: [], task: next, work: "moment" };
+    }
     if ((intent.kind === "remove_stop" || intent.kind === "swap_stop") && intent.stop) {
       const day = resolveDayRef(intent.day, open, today, lastUser);
       if (day === "ambiguous") return { reply: whichDayQuestion(open, locale), plan: open, events: [], task, work: "moment" };
@@ -715,6 +723,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       } catch { /* timeout or gateway miss: the regex path already ran */ }
     }
     if (intent) {
+      appliedEdit = intent.kind === "remove_stop" && intent.stop === "boat" ? "drop_boat" : intent.kind;
       const outcome = await commitOpenEdit(intent);
       if (outcome) return finish(outcome.reply, outcome.plan, outcome.events, outcome.task, undefined, true, false, false, outcome.work);
     }
@@ -750,6 +759,28 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         "Não tenho previsão do mar para esse dia, por isso não vou adivinhar as ondas.",
         "Je n'ai pas de prévision marine pour ce jour, donc je ne devine pas les vagues.");
     return finish(reply, current, [{ name: "get_sea_forecast", ok: Boolean(first) }], task, undefined, true, false, false, "forecast");
+  }
+
+  if (current && typeof task.constraints.car === "boolean" && isTravelChoice(lastUser)) {
+    const time = lastUser.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/);
+    const clock = time ? `${time[1].padStart(2, "0")}:${time[2]}` : task.constraints.departure?.time ?? task.constraints.arrival?.time;
+    if (clock) {
+      appliedEdit = "set_departure";
+      const rebuilt = await rebuildPlan(task);
+      if (rebuilt) {
+        const reply = say(task.locale, `The last day now leaves at ${clock}.`, `O último dia passa a sair às ${clock}.`, `Le dernier jour part maintenant à ${clock}.`);
+        return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+      }
+    }
+  }
+
+  if (current && typeof task.constraints.car === "boolean" && task.constraints.arrival?.time === "15:00" && /\b(?:mid-afternoon|mid afternoon|meio da tarde|milieu de l'apres-midi|milieu d'apres-midi)\b/.test(spoken)) {
+    appliedEdit = "set_arrival";
+    const rebuilt = await rebuildPlan(task);
+    if (rebuilt) {
+      const reply = say(task.locale, "Day 1 now starts after 15:00.", "O dia 1 passa a começar depois das 15:00.", "Le jour 1 commence maintenant après 15:00.");
+      return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+    }
   }
 
   const offerPlan = (classification.planShaping || Boolean(lengthEdit)) && task.scope.mode !== "research" && classification.intent !== "side_question";

@@ -37,7 +37,7 @@ test("a failing judge is stored and a passing or broken judge stores nothing", a
     after: (task) => { pending = task(); },
     judge: async () => {
       await gate;
-      return { ok: false, reasons: ["ignored the date"], severity: "high" };
+      return { ok: false, confidence: "high", reasons: ["the plan ignored the date the guest named"], severity: "high" };
     },
   });
   assert.equal(failing.rows.length, 0);
@@ -46,13 +46,13 @@ test("a failing judge is stored and a passing or broken judge stores nothing", a
   assert.equal(failing.rows.length, 1);
   assert.equal(failing.rows[0].source, "judge");
   assert.equal(failing.rows[0].severity, "high");
-  assert.deepEqual(failing.rows[0].reasons, ["ignored the date"]);
+  assert.deepEqual(failing.rows[0].reasons, ["the plan ignored the date the guest named"]);
   const json = JSON.stringify(failing.rows[0]);
   assert.equal(json.includes("userAgent"), false);
   assert.equal(json.includes("userId"), false);
 
   const passing = memoryFlagStore();
-  await reviewWithJudge(clean(), { env, store: passing, budget: memoryJudgeBudget(), judge: async () => ({ ok: true, reasons: ["fine"], severity: "low" }) });
+  await reviewWithJudge(clean(), { env, store: passing, budget: memoryJudgeBudget(), judge: async () => ({ ok: true, confidence: "low" as const, reasons: ["fine"], severity: "low" as const }) });
   assert.equal(passing.rows.length, 0);
 
   const broken = memoryFlagStore();
@@ -64,7 +64,7 @@ test("the judge is sampled and capped before the model is called", async () => {
   let calls = 0;
   const judge = async (): Promise<JudgeVerdict> => {
     calls += 1;
-    return { ok: false, reasons: ["too long"], severity: "low" };
+    return { ok: false, confidence: "high", reasons: ["the reply invented a phone number"], severity: "high" };
   };
   const skipped = memoryFlagStore();
   await reviewWithJudge(clean(), { env: { ...env, MAIO_JUDGE_RATE: "0" }, store: skipped, budget: memoryJudgeBudget(), judge });
@@ -117,7 +117,7 @@ test("Ask Maio returns the reply before a slow judge finishes", async () => {
     after: (task) => { pending = task(); },
     judge: async () => {
       await gate;
-      return { ok: false, reasons: ["did not answer"], severity: "med" };
+      return { ok: false, confidence: "high", reasons: ["the reply did not answer the hospital question"], severity: "med" };
     },
     fetchImpl: async () => new Response(JSON.stringify({ message: "The hospital is on the main street." }), {
       status: 200,
@@ -144,7 +144,7 @@ test("Ask Maio returns the reply before a slow judge finishes", async () => {
     store: quiet,
     budget: memoryJudgeBudget(),
     after: (task) => { void task(); },
-    judge: async () => { ran = true; return { ok: true, reasons: [], severity: "low" }; },
+    judge: async () => { ran = true; return { ok: true, confidence: "low" as const, reasons: [], severity: "low" as const }; },
     fetchImpl: async () => new Response(JSON.stringify({ message: "L'hôpital est dans la rue principale." }), { status: 200 }),
   });
   await new Promise((resolve) => setTimeout(resolve, 20));

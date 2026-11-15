@@ -183,7 +183,11 @@ export function extractConstraints(text: string, today: string): TaskConstraints
 
   const interests: string[] = [];
   const boatCount = n.match(/\b(one|two|three|1|2|3|uma|duas|deux)\s+(?:boat|barco|bateau|sea outings?)/);
-  if (/\b(?:boat trip|boat|barco|bateau|sea outing|saida de barco|sortie en bateau)\b/.test(n)) {
+  const refusesBoat = /\b(?:don'?t|do not|nao quero|without|ne veux pas)\b.{0,40}\b(?:boat|barco|bateau)\b/.test(n)
+    || /\b(?:sem|sans|no)\s+(?:um\s+|uma\s+|o\s+|a\s+)?(?:passeio de\s+|saida de\s+|sortie en\s+)?(?:boat|barco|bateau)\b/.test(n)
+    || /\b(?:boat|barco|bateau)\b.{0,24}\b(?:off|out)\b/.test(n);
+  if (refusesBoat) patch.boatTrips = 0;
+  else if (/\b(?:boat trip|boat|barco|bateau|sea outing|saida de barco|sortie en bateau)\b/.test(n)) {
     interests.push("boat");
     const count = wordNumber(boatCount?.[1]);
     if (count) patch.boatTrips = count;
@@ -200,11 +204,14 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const time = clockOf(n);
   const mentionsFerry = /\b(?:ferrys?|ferries|barcos?|bateaux?)\b/.test(n);
   const mentionsFlight = /\b(?:flights?|voos?|vols?|avion)\b/.test(n);
+  if (/\b(?:mid-afternoon|mid afternoon|meio da tarde|milieu de l'apres-midi|milieu d'apres-midi)\b/.test(n) && /\b(?:land|aterr\w*|atterr\w*|arriv\w*|chego|arrive)\b/.test(n)) {
+    patch.arrival = { mode: "flight", verified: false, time: "15:00" };
+  }
   const arriving = /\b(?:arriv|chega|arrive|land at|aterr\w*|atterr\w*)\b/.test(n);
-  if (isTravelChoice(text) && !isCarRentalQuestion(text)) {
+  if (!patch.arrival && isTravelChoice(text) && !isCarRentalQuestion(text)) {
     const mode = mentionsFlight && !mentionsFerry ? "flight" : "ferry";
     patch.departure = { mode, ...(time ? { time } : {}) };
-  } else if (arriving && (mentionsFerry || mentionsFlight || /\bland at\b|\baterr|\batterr/.test(n))) {
+  } else if (!patch.arrival && arriving && (mentionsFerry || mentionsFlight || /\bland at\b|\baterr|\batterr/.test(n))) {
     const mode = mentionsFerry && !mentionsFlight ? "ferry" : mentionsFlight || /\bland at\b|\baterr|\batterr/.test(n) ? "flight" : "ferry";
     patch.arrival = { mode, verified: false, ...(time ? { time } : {}) };
   } else if (time && /\b(?:land at|aterr\w*|atterr\w*|chegamos as)\b/.test(n)) {

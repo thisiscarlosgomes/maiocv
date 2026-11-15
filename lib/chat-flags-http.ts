@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { buildFlag, parseFlagPost, type FlagStatus } from "./chat-flags.ts";
 import { judgeHealthSnapshot } from "./chat-judge.ts";
+import { readJudgeHealth, type JudgeDayStats } from "./chat-flags-mongo.ts";
 import { listFlags, recordFlag, updateFlag } from "./chat-flags-store.ts";
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -93,12 +94,16 @@ export async function handleFlagPost(request: Request): Promise<Response> {
   return new Response(null, { status: 204, headers: NO_STORE });
 }
 
-export function handleFlagHealth(request: Request): Response {
+export async function handleFlagHealth(request: Request, read: (day: string) => Promise<JudgeDayStats | null> = readJudgeHealth): Promise<Response> {
   if (!flagsAuthorized(request.headers.get("authorization"))) return unauthorized();
-  const health = judgeHealthSnapshot();
+  const day = new Date().toISOString().slice(0, 10);
+  const memory = judgeHealthSnapshot();
+  const remote = await read(day).catch(() => null);
+  const health = remote ?? { calls: memory.calls, failures: memory.failures, flags: memory.flags, lastError: memory.lastError };
   return Response.json({
     judgeCallsToday: health.calls,
     judgeFailuresToday: health.failures,
+    flagsWrittenToday: health.flags,
     lastErrorType: health.lastError,
   }, { headers: NO_STORE });
 }

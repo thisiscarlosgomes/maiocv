@@ -52,7 +52,17 @@ export function mongoFlagStore(): FlagStore {
   };
 }
 
-type BudgetDoc = { _id: string; count: number; createdAt: Date };
+type BudgetDoc = {
+  _id: string;
+  count: number;
+  createdAt: Date;
+  calls?: number;
+  failures?: number;
+  flags?: number;
+  lastError?: string | null;
+};
+
+export type JudgeDayStats = { calls: number; failures: number; flags: number; lastError: string | null };
 
 let budgetIndexes: Promise<unknown> | undefined;
 
@@ -92,4 +102,27 @@ export async function consumeJudgeBudget(day: string, cap: number): Promise<bool
     const again = await col.findOneAndUpdate({ _id: id, count: { $lt: cap } }, { $inc: { count: 1 } }, { returnDocument: "after" });
     return Boolean(again);
   }
+}
+
+/** Daily judge counters shared by every instance. Missing fields count as zero. */
+export async function readJudgeHealth(day: string): Promise<JudgeDayStats | null> {
+  if (!process.env.ANALYTICS_MONGODB_URI) return null;
+  const col = await budgetCollection();
+  const doc = await col.findOne({ _id: `judge:${day}` });
+  if (!doc) return { calls: 0, failures: 0, flags: 0, lastError: null };
+  return { calls: doc.calls ?? 0, failures: doc.failures ?? 0, flags: doc.flags ?? 0, lastError: doc.lastError ?? null };
+}
+
+export async function bumpJudgeHealth(day: string, event: "call" | "failure" | "flag", errorType?: string | null): Promise<void> {
+  const col = await budgetCollection();
+  const inc = event === "call" ? { calls: 1 } : event === "failure" ? { failures: 1 } : { flags: 1 };
+  await col.updateOne(
+    { _id: `judge:${day}` },
+    {
+      $inc: inc,
+      ...(event === "failure" && errorType ? { $set: { lastError: errorType.slice(0, 40) } } : {}),
+      $setOnInsert: { createdAt: new Date(`${day}T00:00:00.000Z`), count: 0 },
+    },
+    { upsert: true },
+  );
 }

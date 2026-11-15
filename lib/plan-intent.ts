@@ -177,6 +177,16 @@ export function parseEditIntent(text: string, plan: TripPlan | null, today: stri
   if (length?.kind === "add") return { kind: "add_day", days: length.n, where: length.where };
   if (length?.kind === "drop-last") return { kind: "remove_day" };
   if (length?.kind === "set") return { kind: "set_dates", days: length.n };
+  if (plan && (/\b(?:don'?t|do not|nao quero|without|ne veux pas)\b.{0,40}\b(?:boat|barco|bateau)\b/.test(n)
+    || /\b(?:sem|sans|no)\s+(?:um\s+|uma\s+|o\s+|a\s+)?(?:passeio de\s+|saida de\s+|sortie en\s+)?(?:boat|barco|bateau)\b/.test(n)
+    || /\b(?:boat|barco|bateau)\b.{0,24}\b(?:off|out)\b/.test(n))) {
+    return { kind: "remove_stop", stop: "boat" };
+  }
+  if (plan && /\b(?:afternoon|tarde|apres-midi)\b/.test(n) && /\b(?:free|livre|libre)\b/.test(n)) {
+    const named = specificDay(n, plan, today);
+    const day = /\b(?:last|ultimo|dernier)\b/.test(n) ? plan.days.length : named ?? plan.days.length;
+    return { kind: "relax_day", day };
+  }
   if (plan) {
     const day = specificDay(n, plan, today);
     const wholePace = WHOLE_PACE.test(n) && !day;
@@ -215,7 +225,7 @@ export function parseEditIntent(text: string, plan: TripPlan | null, today: stri
   return null;
 }
 
-const LOCAL_KINDS = new Set<EditIntent["kind"]>(["relax_day", "busier_day", "set_party", "add_activity"]);
+const LOCAL_KINDS = new Set<EditIntent["kind"]>(["relax_day", "busier_day", "set_party", "add_activity", "remove_stop"]);
 
 /** Kinds the regex applies itself when the gateway is absent. Dates stay on the date fast path. */
 export function localEditIntent(text: string, plan: TripPlan, today: string): EditIntent | null {
