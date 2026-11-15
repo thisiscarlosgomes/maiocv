@@ -59,10 +59,11 @@ type BudgetDoc = {
   calls?: number;
   failures?: number;
   flags?: number;
+  skips?: number;
   lastError?: string | null;
 };
 
-export type JudgeDayStats = { calls: number; failures: number; flags: number; lastError: string | null };
+export type JudgeDayStats = { calls: number; failures: number; flags: number; skips?: number; lastError: string | null };
 
 let budgetIndexes: Promise<unknown> | undefined;
 
@@ -109,13 +110,13 @@ export async function readJudgeHealth(day: string): Promise<JudgeDayStats | null
   if (!process.env.ANALYTICS_MONGODB_URI) return null;
   const col = await budgetCollection();
   const doc = await col.findOne({ _id: `judge:${day}` });
-  if (!doc) return { calls: 0, failures: 0, flags: 0, lastError: null };
-  return { calls: doc.calls ?? 0, failures: doc.failures ?? 0, flags: doc.flags ?? 0, lastError: doc.lastError ?? null };
+  if (!doc) return { calls: 0, failures: 0, flags: 0, skips: 0, lastError: null };
+  return { calls: doc.calls ?? 0, failures: doc.failures ?? 0, flags: doc.flags ?? 0, skips: doc.skips ?? 0, lastError: doc.lastError ?? null };
 }
 
-export async function bumpJudgeHealth(day: string, event: "call" | "failure" | "flag", errorType?: string | null): Promise<void> {
+export async function bumpJudgeHealth(day: string, event: "call" | "failure" | "flag" | "skip", errorType?: string | null): Promise<void> {
   const col = await budgetCollection();
-  const inc = event === "call" ? { calls: 1 } : event === "failure" ? { failures: 1 } : { flags: 1 };
+  const inc = event === "call" ? { calls: 1 } : event === "failure" ? { failures: 1 } : event === "skip" ? { skips: 1 } : { flags: 1 };
   await col.updateOne(
     { _id: `judge:${day}` },
     {

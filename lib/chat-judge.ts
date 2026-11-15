@@ -1,4 +1,4 @@
-import { generateText, Output } from "ai";
+import { asSchema, generateText, Output } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 import { z } from "zod";
 import { buildFlag, inspectTurn, partyLine, planDayDiff, summarizePlan, trimContext, type FlagSeverity, type TurnForFlags } from "./chat-flags.ts";
@@ -17,12 +17,29 @@ export type JudgeBudget = {
   tryConsume(day: string, cap: number): Promise<boolean>;
 };
 
-const JudgeSchema = z.object({
+/**
+ * OpenAI strict structured output rejects optional properties, maxLength, and maxItems
+ * with HTTP 400 on both gpt-5-nano and gpt-4.1-nano. Length is clipped after the parse.
+ */
+export const JudgeSchema = z.object({
   ok: z.boolean(),
-  reasons: z.array(z.string().max(180)).max(6),
+  reasons: z.array(z.string()),
   severity: z.enum(["low", "med", "high"]),
-  confidence: z.enum(["low", "high"]).optional(),
+  confidence: z.enum(["low", "high"]),
 });
+
+/** JSON schema actually sent as response_format. Tests lock the strict-output rules. */
+export async function judgeResponseSchema(): Promise<Record<string, unknown>> {
+  return asSchema(JudgeSchema).jsonSchema as Promise<Record<string, unknown>>;
+}
+
+/**
+ * gpt-5-nano's gateway catalog does not list temperature. Sending temperature: 0 is a 400.
+ * gpt-4.1-nano accepts temperature, and it does not need one.
+ */
+export function judgeCallSettings(): { maxRetries: number; maxOutputTokens: number } {
+  return { maxRetries: 0, maxOutputTokens: 200 };
+}
 
 let budgetOverride: JudgeBudget | null = null;
 
@@ -50,11 +67,14 @@ export function judgeEnabled(env: Record<string, string | undefined> = process.e
   return env.NODE_ENV === "production";
 }
 
+/** Free-tier default. One in three sampled turns, so the judge does not share the guest's nano budget. */
+export const JUDGE_FREE_TIER_RATE = 0.3;
+
 export function judgeRate(env: Record<string, string | undefined> = process.env): number {
   const raw = env.MAIO_JUDGE_RATE;
-  if (raw === undefined || raw.trim() === "") return 1;
+  if (raw === undefined || raw.trim() === "") return JUDGE_FREE_TIER_RATE;
   const value = Number(raw);
-  if (!Number.isFinite(value)) return 1;
+  if (!Number.isFinite(value)) return JUDGE_FREE_TIER_RATE;
   return Math.min(1, Math.max(0, value));
 }
 
@@ -159,38 +179,54 @@ export function providerErrorCode(error: unknown): string {
   return type === "rate_limit" ? "429" : type;
 }
 
-export const JUDGE_CONCURRENCY = 2;
+/** One judge request at a time, and about one accepted call every 3 seconds. Extra turns are skipped, not queued. */
+export const JUDGE_INTERVAL_MS = 3_000;
+export const JUDGE_BACKOFF_MS = 60_000;
 
-let judgeInFlight = 0;
-const judgeWaiters: (() => void)[] = [];
+export type JudgeGate = {
+  tryBegin(now: number): "ok" | "backoff" | "busy" | "paced";
+  finish(now: number, error?: unknown): void;
+};
 
-export async function withJudgeSlot<T>(run: () => Promise<T>): Promise<T> {
-  if (judgeInFlight >= JUDGE_CONCURRENCY) {
-    await new Promise<void>((resolve) => { judgeWaiters.push(resolve); });
-  }
-  judgeInFlight += 1;
-  try {
-    return await run();
-  } finally {
-    judgeInFlight -= 1;
-    judgeWaiters.shift()?.();
-  }
+export function createJudgeGate(): JudgeGate {
+  let busy = false;
+  let nextAllowedAt = 0;
+  let backoffUntil = 0;
+  return {
+    tryBegin(now) {
+      if (now < backoffUntil) return "backoff";
+      if (busy) return "busy";
+      if (now < nextAllowedAt) return "paced";
+      busy = true;
+      nextAllowedAt = now + JUDGE_INTERVAL_MS;
+      return "ok";
+    },
+    finish(now, error) {
+      busy = false;
+      if (!error) return;
+      const code = providerErrorCode(error);
+      if (code === "429" || code === "rate_limit") backoffUntil = Math.max(backoffUntil, now + JUDGE_BACKOFF_MS);
+    },
+  };
 }
 
-export function resetJudgeSlots() {
-  judgeInFlight = 0;
-  judgeWaiters.length = 0;
+const sharedGate = createJudgeGate();
+
+export function tryBeginJudge(now = Date.now()): "ok" | "backoff" | "busy" | "paced" {
+  return sharedGate.tryBegin(now);
+}
+
+export function finishJudge(now = Date.now(), error?: unknown) {
+  sharedGate.finish(now, error);
 }
 
 /**
- * Try the preferred model. A 429 waits a short jittered beat and tries the cheap model once.
- * Other errors try the fallback immediately. One retry total.
+ * Try the preferred model. A 429 is returned to the caller, which backs the judge off.
+ * Any other error tries the cheap model once. A rate limit does not spend a second call.
  */
 export async function attemptJudgeModels(
   models: readonly string[],
   call: (modelId: string) => Promise<JudgeVerdict>,
-  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }),
-  random: () => number = Math.random,
 ): Promise<JudgeVerdict> {
   const preferred = models[0] ?? JUDGE_MODEL;
   const fallback = models.find((model) => model !== preferred) ?? JUDGE_MODEL_FALLBACK;
@@ -199,29 +235,18 @@ export async function attemptJudgeModels(
   } catch (error) {
     const code = providerErrorCode(error);
     console.warn(`judge model failed: ${preferred} ${code}`);
-    if (code === "429" || code === "rate_limit") {
-      await wait(200 + Math.floor(random() * 400));
-      try {
-        return await call(fallback);
-      } catch (again) {
-        console.warn(`judge retry failed: ${providerErrorCode(again)}`);
-        throw again;
-      }
+    if (code === "429" || code === "rate_limit" || fallback === preferred) throw error;
+    try {
+      return await call(fallback);
+    } catch (again) {
+      console.warn(`judge model failed: ${fallback} ${providerErrorCode(again)}`);
+      throw again;
     }
-    if (fallback !== preferred) {
-      try {
-        return await call(fallback);
-      } catch (again) {
-        console.warn(`judge model failed: ${fallback} ${providerErrorCode(again)}`);
-        throw again;
-      }
-    }
-    throw error;
   }
 }
 
-type JudgeHealth = { day: string; calls: number; failures: number; flags: number; lastError: string | null };
-const judgeHealth: JudgeHealth = { day: "", calls: 0, failures: 0, flags: 0, lastError: null };
+type JudgeHealth = { day: string; calls: number; failures: number; flags: number; skips: number; lastError: string | null };
+const judgeHealth: JudgeHealth = { day: "", calls: 0, failures: 0, flags: 0, skips: 0, lastError: null };
 
 function healthDay(now = new Date()): string {
   return now.toISOString().slice(0, 10);
@@ -234,11 +259,12 @@ function rollHealth(now = new Date()) {
     judgeHealth.calls = 0;
     judgeHealth.failures = 0;
     judgeHealth.flags = 0;
+    judgeHealth.skips = 0;
     judgeHealth.lastError = null;
   }
 }
 
-function persist(now: Date | undefined, event: "call" | "failure" | "flag", errorType?: string | null) {
+function persist(now: Date | undefined, event: "call" | "failure" | "flag" | "skip", errorType?: string | null) {
   if (!process.env.ANALYTICS_MONGODB_URI) return;
   const day = (now ?? new Date()).toISOString().slice(0, 10);
   void bumpJudgeHealth(day, event, errorType).catch(() => { /* health is best-effort */ });
@@ -263,9 +289,15 @@ export function noteJudgeFailure(errorType: string, now = new Date()) {
   persist(now, "failure", judgeHealth.lastError);
 }
 
-export function judgeHealthSnapshot(now = new Date()): { calls: number; failures: number; flags: number; lastError: string | null } {
+export function noteJudgeSkip(now = new Date()) {
   rollHealth(now);
-  return { calls: judgeHealth.calls, failures: judgeHealth.failures, flags: judgeHealth.flags, lastError: judgeHealth.lastError };
+  judgeHealth.skips += 1;
+  persist(now, "skip");
+}
+
+export function judgeHealthSnapshot(now = new Date()): { calls: number; failures: number; flags: number; skips: number; lastError: string | null } {
+  rollHealth(now);
+  return { calls: judgeHealth.calls, failures: judgeHealth.failures, flags: judgeHealth.flags, skips: judgeHealth.skips, lastError: judgeHealth.lastError };
 }
 
 export function resetJudgeHealth() {
@@ -273,6 +305,7 @@ export function resetJudgeHealth() {
   judgeHealth.calls = 0;
   judgeHealth.failures = 0;
   judgeHealth.flags = 0;
+  judgeHealth.skips = 0;
   judgeHealth.lastError = null;
 }
 
@@ -285,9 +318,7 @@ async function callJudgeModel(modelId: string, prompt: string): Promise<JudgeVer
       description: "Whether this Maio reply failed, why, and how serious it is.",
     }),
     prompt,
-    temperature: 0,
-    maxRetries: 0,
-    maxOutputTokens: 200,
+    ...judgeCallSettings(),
     abortSignal: AbortSignal.timeout(8_000),
   });
   const verdict = parseJudgeVerdict(result.output);
@@ -298,7 +329,7 @@ async function callJudgeModel(modelId: string, prompt: string): Promise<JudgeVer
 export async function gatewayJudge(prompt: string, env: Record<string, string | undefined> = process.env): Promise<JudgeVerdict> {
   const preferred = env.MAIO_JUDGE_MODEL?.trim() || JUDGE_MODEL;
   const models = preferred === JUDGE_MODEL_FALLBACK ? [preferred] : [preferred, JUDGE_MODEL_FALLBACK];
-  return withJudgeSlot(() => attemptJudgeModels(models, (modelId) => callJudgeModel(modelId, prompt)));
+  return attemptJudgeModels(models, (modelId) => callJudgeModel(modelId, prompt));
 }
 
 const mongoBudget: JudgeBudget = { tryConsume: (day, cap) => consumeJudgeBudget(day, cap) };
@@ -312,6 +343,8 @@ export type ReviewDeps = {
   now?: Date;
   /** Next.js after() / waitUntil. The judge runs only inside this callback. */
   after?: (task: () => Promise<void>) => void;
+  /** Per-instance pace. Tests pass a private gate so they do not share the process bucket. */
+  gate?: JudgeGate;
 };
 
 function activeBudget(deps: ReviewDeps, env: Record<string, string | undefined>): JudgeBudget | null {
@@ -330,17 +363,34 @@ export async function reviewWithJudge(turn: TurnForFlags, deps: ReviewDeps = {})
     const env = deps.env ?? process.env;
     if (!judgeEnabled(env)) return;
     if (!judgeSampled(judgeRate(env), deps.random)) return;
-    const budget = activeBudget(deps, env);
-    if (!budget) return;
-    const day = (deps.now ?? new Date()).toISOString().slice(0, 10);
-    if (!(await budget.tryConsume(day, judgeCap(env)))) return;
-    const judge = deps.judge ?? ((prompt: string) => gatewayJudge(prompt, env));
-    noteJudgeCall(deps.now);
-    const verdict = await judge(judgePrompt(turn));
-    if (!verdictWarrantsFlag(verdict)) return;
-    const reasons = verdict.reasons.length ? verdict.reasons : ["judge"];
-    noteJudgeFlag(deps.now);
-    recordFlag(buildFlag(turn, { source: "judge", reasons, severity: verdict.severity, now: deps.now }), deps.store);
+    const now = deps.now ?? new Date();
+    const gate = deps.gate ?? sharedGate;
+    const slot = gate.tryBegin(now.getTime());
+    if (slot !== "ok") {
+      noteJudgeSkip(now);
+      return;
+    }
+    let failed: unknown;
+    try {
+      const budget = activeBudget(deps, env);
+      if (!budget) return;
+      const day = now.toISOString().slice(0, 10);
+      if (!(await budget.tryConsume(day, judgeCap(env)))) return;
+      const judge = deps.judge ?? ((prompt: string) => gatewayJudge(prompt, env));
+      noteJudgeCall(now);
+      const verdict = await judge(judgePrompt(turn));
+      if (!verdictWarrantsFlag(verdict)) return;
+      const reasons = verdict.reasons.length ? verdict.reasons : ["judge"];
+      noteJudgeFlag(now);
+      recordFlag(buildFlag(turn, { source: "judge", reasons, severity: verdict.severity, now }), deps.store);
+    } catch (error) {
+      failed = error;
+      const type = providerErrorCode(error);
+      noteJudgeFailure(type, now);
+      console.warn(`judge failed: ${type}`);
+    } finally {
+      gate.finish(now.getTime(), failed);
+    }
   } catch (error) {
     const type = providerErrorCode(error);
     noteJudgeFailure(type, deps.now);

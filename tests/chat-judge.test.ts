@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { JUDGE_CONCURRENCY, attemptJudgeModels, judgeCap, judgeEnabled, judgeErrorType, judgeHealthSnapshot, judgePrompt, judgeRate, memoryJudgeBudget, providerErrorCode, resetJudgeHealth, resetJudgeSlots, reviewWithJudge, scheduleTurnReview, withJudgeSlot, type JudgeVerdict } from "../lib/chat-judge.ts";
+import { JUDGE_BACKOFF_MS, JUDGE_FREE_TIER_RATE, JUDGE_INTERVAL_MS, attemptJudgeModels, createJudgeGate, judgeCallSettings, judgeCap, judgeEnabled, judgeErrorType, judgeHealthSnapshot, judgePrompt, judgeRate, judgeResponseSchema, memoryJudgeBudget, providerErrorCode, resetJudgeHealth, reviewWithJudge, scheduleTurnReview, type JudgeVerdict } from "../lib/chat-judge.ts";
 import { handleFlagHealth } from "../lib/chat-flags-http.ts";
 import { memoryFlagStore } from "../lib/chat-flags-store.ts";
 import { handleMaioChat } from "../lib/maio-chat-proxy.ts";
@@ -33,6 +33,7 @@ test("a failing judge is stored and a passing or broken judge stores nothing", a
     env,
     store: failing,
     budget,
+    gate: createJudgeGate(),
     random: () => 0,
     after: (task) => { pending = task(); },
     judge: async () => {
@@ -52,11 +53,11 @@ test("a failing judge is stored and a passing or broken judge stores nothing", a
   assert.equal(json.includes("userId"), false);
 
   const passing = memoryFlagStore();
-  await reviewWithJudge(clean(), { env, store: passing, budget: memoryJudgeBudget(), judge: async () => ({ ok: true, confidence: "low" as const, reasons: ["fine"], severity: "low" as const }) });
+  await reviewWithJudge(clean(), { env, store: passing, budget: memoryJudgeBudget(), gate: createJudgeGate(), judge: async () => ({ ok: true, confidence: "low" as const, reasons: ["fine"], severity: "low" as const }) });
   assert.equal(passing.rows.length, 0);
 
   const broken = memoryFlagStore();
-  await reviewWithJudge(clean(), { env, store: broken, budget: memoryJudgeBudget(), judge: async () => { throw new Error("gateway down"); } });
+  await reviewWithJudge(clean(), { env, store: broken, budget: memoryJudgeBudget(), gate: createJudgeGate(), judge: async () => { throw new Error("gateway down"); } });
   assert.equal(broken.rows.length, 0);
 });
 
@@ -74,8 +75,9 @@ test("the judge is sampled and capped before the model is called", async () => {
   calls = 0;
   const budget = memoryJudgeBudget();
   const capped = { ...env, MAIO_JUDGE_DAILY_CAP: "1" };
-  await reviewWithJudge(clean(), { env: capped, store: memoryFlagStore(), budget, judge, now: new Date("2026-11-15T12:00:00Z") });
-  await reviewWithJudge(clean(), { env: capped, store: memoryFlagStore(), budget, judge, now: new Date("2026-11-15T13:00:00Z") });
+  const gate = createJudgeGate();
+  await reviewWithJudge(clean(), { env: capped, store: memoryFlagStore(), budget, judge, gate, now: new Date("2026-11-15T12:00:00Z") });
+  await reviewWithJudge(clean(), { env: capped, store: memoryFlagStore(), budget, judge, gate, now: new Date("2026-11-15T13:00:00Z") });
   assert.equal(calls, 1);
   assert.equal(budget.counts.get("2026-11-15"), 1);
 });
@@ -85,8 +87,9 @@ test("the judge is on in production by default and off in development", () => {
   assert.equal(judgeEnabled({ NODE_ENV: "development" }), false);
   assert.equal(judgeEnabled({ NODE_ENV: "production", MAIO_JUDGE: "0" }), false);
   assert.equal(judgeEnabled({ NODE_ENV: "development", MAIO_JUDGE: "1" }), true);
-  assert.equal(judgeRate({}), 1);
+  assert.equal(judgeRate({}), JUDGE_FREE_TIER_RATE);
   assert.equal(judgeRate({ MAIO_JUDGE_RATE: "0.25" }), 0.25);
+  assert.equal(judgeRate({ MAIO_JUDGE_RATE: "1" }), 1);
   assert.equal(judgeCap({}), 2000);
   assert.equal(judgeCap({ MAIO_JUDGE_DAILY_CAP: "10" }), 10);
 });
@@ -143,6 +146,7 @@ test("Ask Maio returns the reply before a slow judge finishes", async () => {
     env,
     store: quiet,
     budget: memoryJudgeBudget(),
+    gate: createJudgeGate(),
     after: (task) => { void task(); },
     judge: async () => { ran = true; return { ok: true, confidence: "low" as const, reasons: [], severity: "low" as const }; },
     fetchImpl: async () => new Response(JSON.stringify({ message: "L'hôpital est dans la rue principale." }), { status: 200 }),
@@ -162,6 +166,7 @@ test("a judge error is logged as a type, without the turn, and counted on the he
       env,
       store: memoryFlagStore(),
       budget: memoryJudgeBudget(),
+      gate: createJudgeGate(),
       judge: async () => { throw new Error("guest said 203.0.113.9 and a long prompt"); },
     });
   } finally {
@@ -193,48 +198,91 @@ test("a judge error is logged as a type, without the turn, and counted on the he
   }
 });
 
-test("a 429 retries the cheap model once after jitter and health stores 429", async () => {
+test("a 429 does not call the other model, backs off for 60s, and health stores 429", async () => {
+  resetJudgeHealth();
   const calls: string[] = [];
-  const waits: number[] = [];
   const limited = Object.assign(new Error("Too many requests"), { statusCode: 429 });
-  const verdict = await attemptJudgeModels(
+  await assert.rejects(() => attemptJudgeModels(
     ["openai/gpt-5-nano", "openai/gpt-4.1-nano"],
     async (modelId) => {
       calls.push(modelId);
-      if (modelId === "openai/gpt-5-nano") throw limited;
-      return { ok: true, reasons: [], severity: "low", confidence: "low" };
+      throw limited;
     },
-    async (ms) => { waits.push(ms); },
-    () => 0.25,
-  );
-  assert.deepEqual(calls, ["openai/gpt-5-nano", "openai/gpt-4.1-nano"]);
-  assert.deepEqual(waits, [300]);
-  assert.equal(verdict.ok, true);
+  ));
+  assert.deepEqual(calls, ["openai/gpt-5-nano"]);
   assert.equal(providerErrorCode(limited), "429");
-  assert.equal(providerErrorCode(new Error("rate limit from the provider")), "429");
 
-  resetJudgeHealth();
+  const gate = createJudgeGate();
+  const now = new Date("2026-11-15T12:00:00Z");
   await reviewWithJudge(clean(), {
     env,
     store: memoryFlagStore(),
     budget: memoryJudgeBudget(),
+    now,
+    gate,
     judge: async () => { throw limited; },
   });
-  assert.equal(judgeHealthSnapshot().lastError, "429");
-  assert.equal(JSON.stringify(judgeHealthSnapshot()).includes("Too many requests"), false);
+  assert.equal(judgeHealthSnapshot(now).lastError, "429");
+  assert.equal(judgeHealthSnapshot(now).failures, 1);
+  assert.equal(JSON.stringify(judgeHealthSnapshot(now)).includes("Too many requests"), false);
+
+  let second = 0;
+  await reviewWithJudge(clean(), {
+    env,
+    store: memoryFlagStore(),
+    budget: memoryJudgeBudget(),
+    now: new Date(now.getTime() + 1_000),
+    gate,
+    judge: async () => { second += 1; return { ok: true, reasons: [], severity: "low", confidence: "low" }; },
+  });
+  assert.equal(second, 0);
+  assert.equal(judgeHealthSnapshot(now).skips, 1);
+  assert.equal(judgeHealthSnapshot(now).failures, 1);
+  assert.equal(gate.tryBegin(now.getTime() + JUDGE_BACKOFF_MS), "ok");
   resetJudgeHealth();
 });
 
-test("judge calls stay within a small concurrency cap", async () => {
-  resetJudgeSlots();
-  let active = 0;
-  let max = 0;
-  await Promise.all(Array.from({ length: 4 }, () => withJudgeSlot(async () => {
-    active += 1;
-    max = Math.max(max, active);
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    active -= 1;
-  })));
-  assert.ok(max <= JUDGE_CONCURRENCY, `saw ${max} in flight`);
-  assert.ok(max >= 1);
+test("a 400 on the preferred model tries the cheap model once", async () => {
+  const calls: string[] = [];
+  const rejected = Object.assign(new Error("Invalid schema for response_format"), { statusCode: 400 });
+  const verdict = await attemptJudgeModels(
+    ["openai/gpt-5-nano", "openai/gpt-4.1-nano"],
+    async (modelId) => {
+      calls.push(modelId);
+      if (modelId === "openai/gpt-5-nano") throw rejected;
+      return { ok: true, reasons: [], severity: "low", confidence: "low" };
+    },
+  );
+  assert.deepEqual(calls, ["openai/gpt-5-nano", "openai/gpt-4.1-nano"]);
+  assert.equal(verdict.ok, true);
+});
+
+test("the judge schema is strict structured output and the call sends no temperature", async () => {
+  const schema = await judgeResponseSchema();
+  const encoded = JSON.stringify(schema);
+  assert.equal(encoded.includes("maxLength"), false);
+  assert.equal(encoded.includes("maxItems"), false);
+  const required = schema.required;
+  assert.ok(Array.isArray(required));
+  for (const key of ["ok", "reasons", "severity", "confidence"]) assert.ok(required.includes(key), key);
+  const settings = judgeCallSettings();
+  assert.equal("temperature" in settings, false);
+});
+
+test("a busy or early judge turn is skipped, not queued", async () => {
+  resetJudgeHealth();
+  const gate = createJudgeGate();
+  const now = new Date("2026-11-15T15:00:00Z");
+  let calls = 0;
+  const judge = async (): Promise<JudgeVerdict> => {
+    calls += 1;
+    return { ok: true, reasons: [], severity: "low", confidence: "low" };
+  };
+  await reviewWithJudge(clean(), { env, store: memoryFlagStore(), budget: memoryJudgeBudget(), now, gate, judge });
+  await reviewWithJudge(clean(), { env, store: memoryFlagStore(), budget: memoryJudgeBudget(), now: new Date(now.getTime() + 500), gate, judge });
+  assert.equal(calls, 1);
+  assert.equal(judgeHealthSnapshot(now).skips, 1);
+  assert.equal(judgeHealthSnapshot(now).failures, 0);
+  assert.equal(gate.tryBegin(now.getTime() + JUDGE_INTERVAL_MS), "ok");
+  resetJudgeHealth();
 });

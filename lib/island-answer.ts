@@ -3,7 +3,7 @@ import { verifiedDate } from "./essentials.ts";
 import { isWestCoast } from "./full-day.ts";
 import { FOOD, PLACES, distanceKm, food, place } from "./trip.ts";
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
-import { isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
+import { isFourByFourQuestion, isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
 import { venueType } from "./plan-rules.ts";
 
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
@@ -22,6 +22,39 @@ function restaurantNames(): string[] {
 }
 
 const hospital = EMERGENCY.find((item) => item.id === "hospital")!;
+
+/** Dirt-road answer. Rentals come from the business API when the caller has them; null means the list was not read. */
+export function fourByFourReply(locale: TaskLocale, rentals: { name: string; phone: string }[] | null): string {
+  const real = place("praia-real");
+  const morrinho = place("cadjetinha-morrinho-beach");
+  const realName = (locale === "pt" ? real?.name.pt : real?.name.en) ?? "Praia Real";
+  const morrinhoName = (locale === "pt" ? morrinho?.name.pt : morrinho?.name.en) ?? "Morrinho";
+  const rental = rentals === null
+    ? say(locale,
+      "Car-rental names live on the Maio business list. I won't invent a company.",
+      "Os nomes de aluguer estão na lista de negócios do Maio. Não invento uma empresa.",
+      "Les noms de location sont dans la liste des commerces de Maio. Je n'invente pas d'enseigne.")
+    : rentals.length
+      ? say(locale,
+        `Car rental from the Maio business list: ${rentals.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ")}.`,
+        `Aluguer na lista de negócios do Maio: ${rentals.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ")}.`,
+        `Location dans la liste des commerces de Maio : ${rentals.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ")}.`)
+      : say(locale,
+        "The Maio business list has no car-rental name right now, so I won't invent a company.",
+        "A lista de negócios do Maio não tem agora um aluguer de carros, por isso não invento uma empresa.",
+        "La liste des commerces de Maio n'a pas de location de voiture pour l'instant, donc je n'invente pas d'enseigne.");
+  return say(locale,
+    `I won't say a 4x4 is required, because the listings don't grade the road. ${realName} and ${morrinhoName} are off the paved town roads, on dirt or sand. A rental car is how people get there. ${rental}`,
+    `Não digo que um 4x4 é obrigatório, porque as listas não classificam a estrada. ${realName} e ${morrinhoName} ficam fora das estradas da vila, em terra ou areia. Vai-se de carro alugado. ${rental}`,
+    `Je ne dis pas qu'un 4x4 est obligatoire, parce que les listes ne notent pas la route. ${realName} et ${morrinhoName} sont hors des routes de la ville, sur terre ou sable. On y va en voiture de location. ${rental}`);
+}
+
+export function sideQuestionFallback(locale: TaskLocale): string {
+  return say(locale,
+    "I can't reach the model just now. Ask about beaches, food, a ferry, or the hospital and I'll answer from the listings.",
+    "Não chego ao modelo agora. Pergunte por praias, comida, um barco ou o hospital e respondo pelas listas.",
+    "Je n'atteins pas le modèle pour l'instant. Demandez les plages, un repas, un ferry ou l'hôpital et je réponds d'après les listes.");
+}
 const TOWN = place("cidade-porto-ingles")!;
 
 /** Vila table, then the market cafe, then the pizzeria. Same order the guest can point at. */
@@ -110,6 +143,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
     && !/\b(?:around there|por ali|la-bas|la bas|pres de la)\b/.test(n);
   const around = /\b(?:get around|getting around|desloc\w*|deplac\w*|aluguer|without a car|sem carro|sans voiture|bus|autocarro)\b/.test(n);
 
+  if (isFourByFourQuestion(text)) return fourByFourReply(locale, null);
   if (turtles) {
     return say(locale,
       `I don't list turtle trips, so I won't invent one. Beaches in the Visit Maio list include ${listed}.`,

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { runPlanAgent } from "../lib/plan-agent.ts";
+import { LIVE_BOATS, LIVE_FLIGHTS } from "./plan/live-window.ts";
 
 const TODAY = new Date("2026-11-15T12:00:00Z");
 
@@ -71,6 +72,74 @@ const SIDES = [
   ["where can I get a coffee?", /coffee|café|cafe/i],
   ["where's a good sunset?", /west|oeste|ouest/i],
 ] as const;
+
+test("yes, renting a car after plan around that ferry does not call the model", async () => {
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    return quietFetch()(input);
+  }) as typeof fetch;
+  const listed = await runPlanAgent(
+    [{ role: "user", content: "Is there a ferry on Wednesday?" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+  );
+  const held = await runPlanAgent(
+    [{ role: "user", content: "plan around that ferry" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+    listed.task,
+  );
+  assert.equal(held.plan, null);
+  assert.equal(held.task.constraints.dates?.start, "2026-11-18");
+  const started = Date.now();
+  const built = await runPlanAgent(
+    [{ role: "user", content: "Yes, renting a car" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+    held.task,
+  );
+  assert.ok(Date.now() - started < 6_000);
+  assert.equal(built.plan?.hasCar, true);
+  assert.equal(built.plan?.days[0]?.date, "2026-11-18");
+  assert.equal(built.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "07:00");
+});
+
+test("a 4x4 question is answered from the listings", async () => {
+  const started = Date.now();
+  const result = await runPlanAgent(
+    [{ role: "user", content: "Do I need a 4x4?" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.ok(Date.now() - started < 4_000, result.reply);
+  assert.match(result.reply, /Praia Real/);
+  assert.match(result.reply, /Morrinho|Cadjetinha/);
+  assert.match(result.reply, /dirt or sand/);
+  assert.match(result.reply, /won't say a 4x4 is required/);
+  assert.equal(result.plan, null);
+});
+
+test("a dirt-road question stays off the model", async () => {
+  const result = await runPlanAgent(
+    [{ role: "user", content: "Are the dirt roads bad?" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.match(result.reply, /dirt or sand/);
+  assert.equal(result.plan, null);
+});
+
+test("a side question whose model aborts still answers", async () => {
+  const result = await runPlanAgent(
+    [{ role: "user", content: "Is the water warm in December?" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.match(result.reply, /listings/);
+  assert.equal(result.plan, null);
+});
 
 for (const [phrase, pattern] of SIDES) {
   test(`side question stays off the model: ${phrase}`, async () => {
