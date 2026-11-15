@@ -1,4 +1,4 @@
-import { deicticDate, isCarRentalQuestion, isTravelChoice, isTravelQuestion, latestTransport, refersToFerry, refersToFlight, shortWeekday, spokenDates } from "../plan-router.ts";
+import { deicticDate, inclusiveDays, isCarRentalQuestion, isTravelChoice, isTravelQuestion, latestTransport, parseDateShift, refersToFerry, refersToFlight, shortWeekday, spokenDates } from "../plan-router.ts";
 import { EXPERIENCES, addDays, experience } from "../trip.ts";
 import { resolveReference, type ReferenceHit } from "./context.ts";
 import {
@@ -122,8 +122,10 @@ function weekdayHits(text: string): { day: number; index: number; name: string }
 export function extractConstraints(text: string, today: string): TaskConstraints {
   const n = normalizeUtterance(text);
   const patch: TaskConstraints = {};
+  const shift = parseDateShift(text, today);
+  const relativeMove = Boolean(shift && shift !== "ask" && shift.shiftDays);
   const days = n.match(/\b(\d+)\s*(?:days?|dias?|jours?)\b/);
-  if (days) patch.dates = { ...(patch.dates ?? {}), days: Number(days[1]) };
+  if (days && !relativeMove) patch.dates = { ...(patch.dates ?? {}), days: Number(days[1]) };
   const scheduling = /\b(?:\d+\s*(?:days?|dias?|jours?)|from|partir|arriv|stay|fica|plan|plano|voyage|viagem)\b/.test(n);
   if (scheduling && /\b(?:today|hoje|aujourd'hui|aujourdhui)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: today };
   if (scheduling && /\b(?:tomorrow|amanha|demain)\b/.test(n)) patch.dates = { ...(patch.dates ?? {}), start: addDays(today, 1) };
@@ -150,6 +152,14 @@ export function extractConstraints(text: string, today: string): TaskConstraints
   const spelled = spokenDates(text, today);
   if (spelled.start) patch.dates = { ...(patch.dates ?? {}), start: spelled.start };
   if (spelled.days) patch.dates = { ...(patch.dates ?? {}), days: spelled.days };
+  if (shift && shift !== "ask") {
+    if (shift.start) patch.dates = { ...(patch.dates ?? {}), start: shift.start };
+    if (shift.days) patch.dates = { ...(patch.dates ?? {}), days: shift.days };
+    if (shift.end && patch.dates?.start) {
+      const counted = inclusiveDays(patch.dates.start, shift.end);
+      if (counted) patch.dates = { ...patch.dates, days: Math.min(7, counted) };
+    }
+  }
   const beachOrdinal = /\bsegunda\b\s+(?:praia|beach|plage|one)\b/.test(n) || /^a segunda\b/.test(n);
   if (!patch.dates?.start && dateContext && !quietNight && !beachOrdinal) {
     const short = shortWeekday(n);

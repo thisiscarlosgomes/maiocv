@@ -293,8 +293,97 @@ export function planQuestionKind(text: string): "day" | "leave" | "lunch" | null
   return null;
 }
 
+/** A reply that tells the guest the trip changed. PT and FR included. */
 export function claimsUnappliedEdit(text: string): boolean {
-  return /\b(?:done\b|i added|i've added|i have added|acrescentei|adicionei|j'ai ajout|atualizei o plano|i removed|i made it|i extended)\b/i.test(text);
+  return /\b(?:done\b|all set|i(?:'ve| have)? (?:moved|added|updated|removed|extended)|moved your|updated the (?:plan|trip)|i made it|acrescentei|adicionei|mudei|alterei|atualizei|pronto|já está|ja esta|c'est fait|tout est (?:bon|regle)|j'ai (?:ajout|deplac|modifi|mis a jour))\b/i.test(text);
+}
+
+const START_CUE = /\b(?:going on|go on|arriv(?:e|ing|ons)?|land on|we land|actually|chego|vou(?: a| no| dia)?|j'arrive|j arrive|finalement|start(?:ing)? on|a partir)\b/;
+const END_CUE = /\b(?:until|till|through|ate dia|ate o dia|jusqu|depart(?:ing)?|leaving on|leave on|end(?:ing)? on|fim dia|partir le)\b/;
+
+function bareDay(text: string, allowA = false): number | undefined {
+  const n = loosen(text);
+  const prefix = allowA ? "the|dia|le|a|no dia" : "the|dia|le|no dia";
+  const match = n.match(new RegExp(`\\b(?:${prefix})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`)) ?? n.match(/\b(\d{1,2})(?:st|nd|rd|th)\b/);
+  if (match && /^\s*[- ]?(?:year|ano|ans)\b/.test(n.slice((match.index ?? 0) + match[0].length))) return undefined;
+  const day = match ? Number(match[1]) : undefined;
+  return day && day >= 1 && day <= 31 ? day : undefined;
+}
+
+/** Place a day-of-month on or after today, preferring the open trip's month. */
+export function resolveDayOfMonth(today: string, day: number, anchor?: string): string | null {
+  if (anchor && /^\d{4}-\d{2}-\d{2}$/.test(anchor)) {
+    const year = Number(anchor.slice(0, 4));
+    const month = Number(anchor.slice(5, 7));
+    const same = isoInYear(year, month, day);
+    if (same && same >= today) return same;
+  }
+  const cursor = new Date(`${today}T12:00:00Z`);
+  for (let i = 0; i < 14; i += 1) {
+    const iso = isoInYear(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, day);
+    if (iso && iso >= today) return iso;
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1, 1);
+  }
+  return null;
+}
+
+export type DateShift = { start?: string; end?: string; days?: number; shiftDays?: number };
+
+/**
+ * A start or end move against an open trip.
+ * Start alone keeps the length. End alone keeps the start. Both replace the span.
+ * "ask" means the guest named a date idea we cannot place.
+ */
+export function parseDateShift(text: string, today: string, anchor?: string): DateShift | "ask" | null {
+  if (isTravelQuestion(text) || isTravelChoice(text) || planQuestionKind(text)) return null;
+  const n = loosen(text);
+  if (/\b(?:next week|proxima semana|semaine prochaine)\b/.test(n)) return { shiftDays: 7 };
+  const later = n.match(/\b(?:a|one|um|un) day later\b|\b(?:um dia mais tarde|un jour plus tard|decale(?:r| de)? (?:d')?un jour)\b/);
+  if (later) return { shiftDays: 1 };
+  const earlier = n.match(/\b(?:a|one) day earlier\b|\b(?:um dia mais cedo|un jour plus tot)\b/);
+  if (earlier) return { shiftDays: -1 };
+  const pushed = n.match(/\b(?:push|move|shift|adiar|decale(?:r)?) (?:it |o |le |de )?(?:by |d')?(\d+|two|dois|deux) (?:days?|dias|jours)\b/);
+  if (pushed) {
+    const count = wordNumber(pushed[1]);
+    if (count) return { shiftDays: /\bearlier|mais cedo|plus tot|back\b/.test(n) ? -count : count };
+  }
+  const spelled = spokenDates(text, today);
+  const stated = wordNumber(n.match(/\b(\d+|two|three|four|five|six|seven|dois|tres|quatro|dois|deux|trois|quatre)\s*(?:days|dias|jours)\b/)?.[1]);
+  if (spelled.start && spelled.end && spelled.days) return { start: spelled.start, days: spelled.days };
+  if (spelled.start && stated) return { start: spelled.start, days: stated };
+  if (spelled.start) return { start: spelled.start };
+  if (spelled.end) return { end: spelled.end };
+  const startCue = START_CUE.test(n);
+  const endCue = END_CUE.test(n);
+  const day = bareDay(n, startCue);
+  if (!day) return null;
+  const placed = resolveDayOfMonth(today, day, anchor);
+  if (!placed) return "ask";
+  if (startCue && endCue) return "ask";
+  if (endCue) return { end: placed };
+  if (startCue) return { start: placed };
+  return "ask";
+}
+
+/** Apply a shift to the open span. Start alone keeps the length. End alone keeps the start. */
+export function applyDateShift(start: string, days: number, shift: DateShift): { start: string; days: number } | null {
+  let nextStart = start;
+  let nextDays = days;
+  if (shift.shiftDays) nextStart = addDays(start, shift.shiftDays);
+  if (shift.start) nextStart = shift.start;
+  if (shift.end) {
+    const counted = inclusiveDays(shift.start ?? nextStart, shift.end);
+    if (!counted) return null;
+    nextDays = Math.min(7, counted);
+  } else if (shift.days) nextDays = Math.min(7, Math.max(1, shift.days));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nextStart) || nextDays < 1) return null;
+  return { start: nextStart, days: nextDays };
+}
+
+export function hasDateIntent(text: string): boolean {
+  if (isTravelQuestion(text) || isTravelChoice(text) || planQuestionKind(text)) return false;
+  if (parseLengthEdit(text)) return true;
+  return parseDateShift(text, "2000-01-01") !== null;
 }
 
 export function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
