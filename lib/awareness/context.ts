@@ -1,5 +1,5 @@
-import { distanceKm, FOOD, PLACES, place } from "../trip.ts";
-import type { LastPlace, Task } from "./task.ts";
+import { distanceKm, EXPERIENCES, FOOD, PLACES, place } from "../trip.ts";
+import type { LastPlace, Task, TaskLocale } from "./task.ts";
 
 /** Last messages the model may see. Older turns survive only as capped recall, never as the task. */
 export const WINDOW_MESSAGES = 25;
@@ -65,8 +65,8 @@ export type ReferenceHit = {
 
 const ORDINALS: { pattern: RegExp; index: number }[] = [
   { pattern: /\b(?:the |a |la |o |le )?first\b|\b(?:a |o )?primeir[oa]\b|\b(?:la |le )?premi[eè]re?\b|\b1(?:st|er|re|a)\b/, index: 0 },
-  { pattern: /\b(?:the |a |la )?second(?: one)?\b|\b(?:a )?segunda(?: praia)?\b|\b(?:la |le )?(?:deuxi[eè]me|seconde)\b|\b2(?:nd|e|a)\b/, index: 1 },
-  { pattern: /\b(?:the |a |la )?third\b|\b(?:a )?terceira\b|\b(?:la |le )?troisi[eè]me\b|\b3(?:rd|e|a)\b/, index: 2 },
+  { pattern: /\b(?:the |a |la |o |le )?second(?: one)?\b|\b(?:a |o )?segund[oa](?: praia)?\b|\b(?:la |le )?(?:deuxi[eè]me|seconde)\b|\b2(?:nd|e|a)\b/, index: 1 },
+  { pattern: /\b(?:the |a |la |o )?third\b|\b(?:a |o )?terceir[oa]\b|\b(?:la |le )?troisi[eè]me\b|\b3(?:rd|e|a)\b/, index: 2 },
   { pattern: /\b(?:the )?fourth\b|\b(?:a )?quarta(?: praia)?\b|\b(?:la |le )?quatri[eè]me\b/, index: 3 },
   { pattern: /\b(?:the )?fifth\b|\b(?:a )?quinta(?: praia)?\b|\b(?:la |le )?cinqui[eè]me\b/, index: 4 },
 ];
@@ -109,6 +109,63 @@ export function lookupPlace(query: string): LastPlace | null {
     if (score > (best?.score ?? 0)) best = { score, item };
   }
   return best && best.score >= 60 ? asPlace(best.item) : null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Places, restaurants and experiences named in a reply, in the order a guest reads them.
+ * A longer name wins over a shorter one inside it ("Praia de Bitche Rotcha" beats "Rotcha").
+ */
+export function presentedPlaces(text: string, locale: TaskLocale = "en"): LastPlace[] {
+  const hay = norm(text);
+  const hits: { start: number; end: number; place: LastPlace }[] = [];
+  const consider = (label: string, item: LastPlace) => {
+    const needle = norm(label).trim();
+    if (needle.length < 4) return;
+    const re = new RegExp(`(^|[^a-z0-9])${escapeRegExp(needle)}(?![a-z0-9])`, "g");
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(hay))) {
+      const start = match.index + match[1].length;
+      hits.push({ start, end: start + needle.length, place: item });
+    }
+  };
+  for (const item of FOOD) {
+    const spot = place(item.placeId);
+    consider(item.title, { id: item.id, name: item.title, area: item.location, ...(spot ? { lat: spot.lat, lon: spot.lon } : {}) });
+  }
+  for (const item of PLACES) {
+    const record: LastPlace = {
+      id: item.id,
+      name: locale === "pt" ? item.name.pt : item.name.en,
+      area: item.location,
+      lat: item.lat,
+      lon: item.lon,
+    };
+    consider(item.name.en, record);
+    if (norm(item.name.pt) !== norm(item.name.en)) consider(item.name.pt, record);
+  }
+  for (const item of EXPERIENCES) {
+    const spot = place(item.placeId);
+    consider(item.title, { id: item.id, name: item.title, area: item.location, ...(spot ? { lat: spot.lat, lon: spot.lon } : {}) });
+  }
+  hits.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+  const accepted: { start: number; end: number; place: LastPlace }[] = [];
+  for (const hit of hits) {
+    if (accepted.some((prev) => hit.start < prev.end && hit.end > prev.start)) continue;
+    accepted.push(hit);
+  }
+  const seen = new Set<string>();
+  const out: LastPlace[] = [];
+  for (const hit of accepted) {
+    if (seen.has(hit.place.id)) continue;
+    seen.add(hit.place.id);
+    out.push(hit.place);
+    if (out.length === 8) break;
+  }
+  return out;
 }
 
 function beachLike(placeItem: LastPlace): boolean {

@@ -160,6 +160,12 @@ for (const item of CASES) {
     assertGuestReply(result.reply, { min: 40 });
     assert.ok(result.reply.split(/[.!?]/).filter((part) => part.trim()).length >= 2, result.reply);
     assert.doesNotMatch(result.reply, /^That is /);
+    if (/\bmaio\b/i.test(item.q) && /\b(?:tell|about|like|dizer|como é|parle|comment)\b/i.test(item.q)) {
+      assert.doesNotMatch(result.reply, /lists \d+|lista \d+|liste \d+|\b\d+\s+(?:beaches|praias|plages|places|experiences|expériences|sítios)\b/i);
+      const sentences = result.reply.split(/[.!?]+/).filter((part) => part.trim());
+      assert.ok(sentences.length >= 3 && sentences.length <= 4, result.reply);
+      assert.match(result.reply, /Vila do Maio|Porto Inglês/);
+    }
   });
 }
 

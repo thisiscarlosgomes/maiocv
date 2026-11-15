@@ -5,12 +5,19 @@ import { venueType } from "./plan-rules.ts";
 /** Full-day plan (Carlos, Oct 27; research-full-day.md §3). Relaxed by default.
  *  Full day: 08:30 breakfast · 09:30 morning beach/walk · 12:30 lunch · 14:30 rest · 16:00 activity/second beach
  *  · ~18:15 sunset · 19:30 dinner · 21:00 drinks (optional). 6–8 stops.
+ *  Slow pace: 08:30 breakfast · 10:30 one beach · lunch · open afternoon · sunset · dinner.
+ *  At most 4 anchored stops (a place or a requested tour) plus meals. No second activity, no bar, no default quad.
  *  Arrival: transfer → meal → easy beach → sunset → dinner (3–5 stops, no tour).
  *  Departure: breakfast → short beach → lunch if leaving late → head to the airport/port (2–4 stops, no tour).
  *  Real places only; unfillable slots become generic rows. At most one repeat per day, with the reason in the note. */
 
 export const FULL_DAY_SLOTS: Slot[] = ["breakfast", "morning", "lunch", "rest", "activity", "sunset", "dinner"];
 export const FULL_DAY_RANGE = { min: 6, max: 8 } as const;
+/** Slow days keep meals and at most a few real stops, with a long open afternoon. */
+export const SLOW_SLOTS: Slot[] = ["breakfast", "morning", "lunch", "sunset", "dinner"];
+export const SLOW_FULL_RANGE = { min: 4, max: 7 } as const;
+export const SLOW_ANCHORED_MAX = 4;
+export const anchoredCount = (items: PlanItem[]) => items.filter((item) => item.kind === "place" || item.kind === "experience").length;
 export const ARRIVAL_RANGE = { min: 3, max: 5 } as const;
 export const DEPARTURE_RANGE = { min: 2, max: 4 } as const;
 export const DEFAULT_SUNSET = "18:15";
@@ -59,10 +66,16 @@ export class Picker {
   walks() { return PLACES.filter((p) => WALK_CATEGORIES.has(p.category) && this.reach(p)); }
   sunsets() { return this.beaches().filter(isWestCoast); }
 
-  /** Nearest unused candidate to `from` (avoids backtracking); else the nearest used one if the day still has its repeat. */
-  pick<T extends { id: string }>(list: T[], pt: (x: T) => Pt, from: Pt, day: DayState, note: "venue" | "sunset" | "meal", freshOnly = false): { id: string; note?: string } | null {
+  /** Nearest unused candidate to `from` (avoids backtracking); else the nearest used one if the day still has its repeat.
+   *  `preferFar` (a later day with a car) skips town beaches when a farther fresh one exists, so the same shore is not repeated. */
+  pick<T extends { id: string }>(list: T[], pt: (x: T) => Pt, from: Pt, day: DayState, note: "venue" | "sunset" | "meal", freshOnly = false, preferFar = false): { id: string; note?: string } | null {
     const near = (a: T, b: T) => distanceKm(from, pt(a)) - distanceKm(from, pt(b));
-    const fresh = list.filter((x) => !this.used.has(x.id) && !day.ids.has(x.id)).sort(near)[0];
+    let pool = list.filter((x) => !this.used.has(x.id) && !day.ids.has(x.id));
+    if (preferFar) {
+      const far = pool.filter((x) => distanceKm(pt(x), TOWN) > WALKABLE_KM);
+      if (far.length) pool = far;
+    }
+    const fresh = [...pool].sort(near)[0];
     if (fresh) { this.used.add(fresh.id); day.ids.add(fresh.id); return { id: fresh.id }; }
     if (freshOnly || day.repeats >= 1) return null;
     const again = list.filter((x) => !day.ids.has(x.id)).sort(near)[0];
@@ -99,11 +112,11 @@ export function buildDay(args: {
     if (r) add(slot, { kind: "food", refId: r.id, start: toTime(start), durationMin: dur, ...(r.note ? { note: r.note } : {}) });
     else free(slot, fallback, start, dur);
   };
-  const outing = (slot: Slot, start: number, dur: number, opts: { sheltered?: boolean; sunset?: boolean; beachOnly?: boolean } = {}) => {
+  const outing = (slot: Slot, start: number, dur: number, opts: { sheltered?: boolean; sunset?: boolean; beachOnly?: boolean; preferFar?: boolean } = {}) => {
     const lists = opts.sunset ? [picker.sunsets(), picker.walks().filter(isWestCoast)]
       : [picker.beaches(opts.sheltered), ...(opts.beachOnly ? [] : [picker.walks()])];
     for (const list of lists) {
-      const p = picker.pick(list, (x) => x, from, day, opts.sunset ? "sunset" : "venue");
+      const p = picker.pick(list, (x) => x, from, day, opts.sunset ? "sunset" : "venue", false, !!opts.preferFar);
       if (p) return add(slot, { kind: "place", refId: p.id, start: toTime(start), durationMin: dur, ...(p.note ? { note: p.note } : {}) });
     }
     return free(slot, "free-time", start, dur);
@@ -141,6 +154,30 @@ export function buildDay(args: {
     if (leave >= toMin("14:00")) meal("lunch", toMin(T.lunch), 75, "lunch-free");
     free("departure", args.leave!.mode === "flight" ? "depart-airport" : "depart-port", leave, lead, args.leave!.note);
     return items;
+  }
+
+  // Slow pace: one morning place, meals, sunset, and a long gap. A tour only when the guest asked, never stacked on a second activity.
+  if (slow) {
+    const breakfastAt = toMin(T.breakfast);
+    const cafe = picker.pick(picker.cafes(), foodPt, from, day, "meal", true);
+    if (cafe) add("breakfast", { kind: "food", refId: cafe.id, start: toTime(breakfastAt), durationMin: 60, ...(cafe.note ? { note: cafe.note } : {}) });
+    else free("breakfast", "breakfast-stay", breakfastAt, 60);
+    const morningAt = breakfastAt + 120;
+    const spread = pools.hasCar && i > 0;
+    outing("morning", morningAt, 120, { sheltered: rough, preferFar: spread });
+    const lunch = Math.max(toMin("13:00"), morningAt + 120 + 45);
+    meal("lunch", lunch, 90, "lunch-free");
+    let clock = lunch + 90;
+    const tour = args.tour ?? null;
+    if (tour) {
+      const start = Math.max(clock + 30, toMin("15:00"));
+      add("activity", { kind: "experience", refId: tour.id, start: toTime(start), durationMin: tour.example.durationMin });
+      clock = start + tour.example.durationMin;
+    }
+    const s = Math.max(sunsetStart, clock + 90);
+    outing("sunset", s, 45, { sunset: true, preferFar: spread });
+    meal("dinner", Math.max(toMin(T.dinner), s + 45 + 60), 90, "dinner-free");
+    return items.sort((a, b) => toMin(a.start) - toMin(b.start));
   }
 
   // Full day. The trip's single tour goes at 16:00 when its slots allow, else in the morning instead of the beach.
@@ -204,19 +241,25 @@ const FILL: Record<string, { refId: string; at: string; dur: number }> = {
 
 /** Repair after generation: every full day gets all seven core slots (generic rows fill gaps), extras beyond 8 are dropped
  *  (drinks first), arrival/departure days are trimmed to their ranges. Never adds a venue. */
-export function repairDay(day: PlanDay, i: number): PlanDay {
+export function repairDay(day: PlanDay, i: number, pace?: "slow" | "normal"): PlanDay {
   const kind = dayKind(day);
+  const slow = pace === "slow";
   let items: PlanItem[] = day.items.map((it) => ({ ...it, slot: inferSlot(it) }));
+  if (slow) items = items.filter((item) => item.slot !== "drinks" && !(item.slot === "rest" && item.kind === "free"));
   if (kind === "full") {
     const has = new Set(items.map((x) => x.slot));
     const first = Math.min(...items.filter((x) => x.kind !== "transport").map((x) => toMin(x.start)));
-    for (const slot of FULL_DAY_SLOTS) if (!has.has(slot) && !(slot === "rest" && restCovered(items))) {
+    const slots = slow ? SLOW_SLOTS : FULL_DAY_SLOTS;
+    for (const slot of slots) if (!has.has(slot) && !(slot === "rest" && restCovered(items))) {
       const f = FILL[slot];
       // Breakfast goes before an early tour rather than on top of it.
-      const at = slot === "breakfast" ? toTime(Math.max(toMin("06:00"), Math.min(toMin(f.at), first - f.dur))) : f.at;
+      const at = slot === "breakfast" ? toTime(Math.max(toMin("06:00"), Math.min(toMin(f.at), (Number.isFinite(first) ? first : toMin(f.at)) - f.dur))) : f.at;
       items.push({ id: `d${i}-${slot}-fill`, kind: "free", refId: f.refId, start: at, durationMin: f.dur, slot });
     }
-    while (stopCountItems(items) > FULL_DAY_RANGE.max) items = dropOne(items, ["drinks"]);
+    if (slow) {
+      while (anchoredCount(items) > SLOW_ANCHORED_MAX) items = dropOne(items, ["activity", "morning"]);
+      while (stopCountItems(items) > SLOW_FULL_RANGE.max) items = dropOne(items, ["drinks", "rest", "activity"]);
+    } else while (stopCountItems(items) > FULL_DAY_RANGE.max) items = dropOne(items, ["drinks"]);
   } else {
     const max = kind === "arrival" ? ARRIVAL_RANGE.max : DEPARTURE_RANGE.max;
     items = items.filter((x) => x.kind !== "experience");

@@ -1,5 +1,5 @@
 import type { PlanItem, TripPlan } from "./trip.ts";
-import { experience, food, place } from "./trip.ts";
+import { PLACES, experience, food, place } from "./trip.ts";
 import type { TaskLocale } from "./awareness/task.ts";
 
 const intl: Record<TaskLocale, string> = { en: "en-GB", pt: "pt-PT", fr: "fr-FR" };
@@ -126,6 +126,38 @@ export function formatItinerary(plan: TripPlan): string {
 const MENU = /options i can|finish the full day-by-day|which of these|i can do now/i;
 const UNFINISHED = /itinerary (?:is|i) (?:unfinished|started)|i started the itinerary|finish the full/i;
 
+const EN_LABELS: { en: string; pt: string; fr: string }[] = [
+  { en: "Free time · shade & rest", pt: "Tempo livre · sombra e descanso", fr: "Temps libre · ombre et repos" },
+  { en: "Breakfast at your stay", pt: "Pequeno-almoço no alojamento", fr: "Petit-déjeuner à l'hébergement" },
+  { en: "Lunch near your stay", pt: "Almoço perto do alojamento", fr: "Déjeuner près de l'hébergement" },
+  { en: "Dinner near your stay", pt: "Jantar perto do alojamento", fr: "Dîner près de l'hébergement" },
+  { en: "Transfer and check-in", pt: "Transfer e check-in", fr: "Transfert et check-in" },
+  { en: "Transfer & check-in", pt: "Transfer e check-in", fr: "Transfert et check-in" },
+  { en: "Head to the airport", pt: "Ir para o aeroporto", fr: "Direction l'aéroport" },
+  { en: "Head to the port", pt: "Ir para o porto", fr: "Direction le port" },
+  { en: "Free time", pt: "Tempo livre", fr: "Temps libre" },
+];
+
+function replaceTerm(text: string, from: string, to: string): string {
+  if (!from || from === to) return text;
+  return text.replace(new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), to);
+}
+
+/** UI phrases and, in Portuguese, the place names the data already has. */
+export function localizeGuestLabels(text: string, locale: TaskLocale): string {
+  if (locale === "en") return text;
+  let next = text;
+  for (const row of EN_LABELS) next = replaceTerm(next, row.en, locale === "pt" ? row.pt : row.fr);
+  if (locale === "pt") {
+    const names = PLACES
+      .map((item) => ({ en: item.name.en.trim(), pt: item.name.pt.trim() }))
+      .filter((item) => item.en && item.en !== item.pt)
+      .sort((a, b) => b.en.length - a.en.length);
+    for (const item of names) next = replaceTerm(next, item.en, item.pt);
+  }
+  return next;
+}
+
 /**
  * Last step before a reply reaches the chat. Keeps short answers, rebuilds a dumped itinerary,
  * and never lets an id, a source label, or a trip ISO date through.
@@ -133,13 +165,12 @@ const UNFINISHED = /itinerary (?:is|i) (?:unfinished|started)|i started the itin
 export function publicPlanReply(reply: string, locale: TaskLocale, plan: TripPlan | null): string {
   const cleaned = humanizePlanDates(stripPlanLeaks(reply), locale).replace(/\n{3,}/g, "\n\n").trim();
   if (plan && (looksLikeItineraryDump(reply) || looksLikeItineraryDump(cleaned) || (UNFINISHED.test(cleaned) && plan.days.length > 0 && cleaned.length > 180))) {
-    return formatItinerary(plan);
+    return localizeGuestLabels(formatItinerary(plan), locale);
   }
   if (MENU.test(cleaned) || (plan && UNFINISHED.test(cleaned))) {
     const first = cleaned.split(/(?<=[.!?])\s+/)[0]?.trim() ?? cleaned;
-    if (plan && first.length < 40) return `${first} ${intro(plan)}`.trim();
-    return first;
+    const short = plan && first.length < 40 ? `${first} ${intro(plan)}`.trim() : first;
+    return localizeGuestLabels(short, locale);
   }
-  const expanded = expandRunOn(cleaned);
-  return expanded.trim();
+  return localizeGuestLabels(expandRunOn(cleaned).trim(), locale);
 }

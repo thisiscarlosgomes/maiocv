@@ -46,6 +46,8 @@ export const TripPlanSchema = z.object({
   title: z.string().max(80),
   party: z.object({ adults: z.number().int().min(1).max(12), kids: z.number().int().min(0).max(12), youngestAge: z.number().int().min(0).max(17).optional() }),
   hasCar: z.boolean(),
+  /** Slow keeps the day to a few anchored stops plus meals. Absent on older share links. */
+  pace: z.enum(["slow", "normal"]).optional(),
   days: z.array(PlanDaySchema).min(1).max(7),
   unmet: z.array(z.string().max(80)).max(5),
 });

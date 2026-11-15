@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { toMin } from "../lib/full-day.ts";
-import { formatItinerary, humanPlanDate, publicPlanReply, stripPlanLeaks } from "../lib/plan-reply.ts";
+import { formatItinerary, humanPlanDate, localizeGuestLabels, publicPlanReply, stripPlanLeaks } from "../lib/plan-reply.ts";
 import type { TripPlan } from "../lib/trip.ts";
 
 const DUMP = "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Enzo (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18";
@@ -52,6 +52,19 @@ test("formatItinerary reads as intro, days, then notes", () => {
   const dayAt = text.indexOf("## Day 1");
   assert.ok(dayAt > 0 && notesAt > dayAt);
   assert.match(text.split("\n")[0], /3-day plan/);
+});
+
+test("Portuguese and French replies use local labels and Portuguese place names", () => {
+  const pt = formatItinerary(plan("pt"));
+  assert.doesNotMatch(pt, /\bFree time\b|Breakfast at your stay|Head to the airport|Bitche Rotcha Beach|Morro Beach/);
+  assert.match(pt, /Praia |Pequeno-almoço|Tempo livre/);
+  const swapped = localizeGuestLabels("De manhã há Free time em Morro Beach.", "pt");
+  assert.match(swapped, /Tempo livre/);
+  assert.match(swapped, /Praia do Morro/);
+  assert.doesNotMatch(swapped, /Free time|Morro Beach/);
+  const fr = publicPlanReply("Ensuite, Free time.", "fr", null);
+  assert.match(fr, /Temps libre/);
+  assert.doesNotMatch(fr, /Free time/);
 });
 
 test("slow pace does not pack breakfast against the next stop or repeat a restaurant across days", () => {

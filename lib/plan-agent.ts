@@ -1,9 +1,9 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
-import { applyClassification, classify, extractConstraints, normalizeUtterance, type Intent } from "./awareness/classify.ts";
-import { answerIslandQuestion } from "./island-answer.ts";
-import { humanPlanDate, publicPlanReply } from "./plan-reply.ts";
-import { clipToolBody, foodNear, prepareContext, type ChatTurn } from "./awareness/context.ts";
+import { applyClassification, classify, experienceIdsMentioned, extractConstraints, normalizeUtterance, type Intent } from "./awareness/classify.ts";
+import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
+import { humanPlanDate, itemLabel, publicPlanReply } from "./plan-reply.ts";
+import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { emptyTask, followUpChips, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
 import { forecastSourceName, loadDailyForecast, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
@@ -11,7 +11,7 @@ import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule, loadSailings, type Sailing } from "./essentials.ts";
 import { venueType } from "./plan-rules.ts";
 import { EXPERIENCES, FOOD, experience, food, place, parseTripPlan, type TripPlan } from "./trip.ts";
-import { TripRequestSchema, buildPlan, seaStatus, type TripRequest } from "./trip-planner.ts";
+import { TripRequestSchema, buildPlan, isAdrenalineExperience, seaStatus, type TripRequest } from "./trip-planner.ts";
 
 export type ToolEvent = { name: string; ok: boolean; arguments?: unknown; dropped?: string[] };
 export type PlanAgentResult = {
@@ -55,6 +55,7 @@ export function planInstructions(today: string, task: Task, recall: string, rebu
     "If a ferry or flight time is not in the tool result, say it is not published. Do not use 14:00 or any other guessed clock. No current rows is not the same as no service, and it is not live status.",
     "get_transport returns published timetables only. Never say a flight is in the air, on time, or delayed.",
     "Include at most ONE tour or experience in the whole trip. Restaurants are for daytime meals. Bars only at 19:00 or later.",
+    "A slow pace is a few anchored stops plus meals, with long gaps. Do not add a quad, jet ski, or other adrenaline activity unless the guest asked for it.",
     "Use only experience ids from search_experiences. If the guest asks for diving, nightlife, or a dolphin cruise, put it in unmet and say we don't list it yet.",
     "Listings have no diet flags and no prices. Say so. Guests arrange food and payment with the place.",
     rebuilding
@@ -84,13 +85,19 @@ function placesFromPlan(plan: TripPlan): Task["lastPlaces"] {
   const seen = new Set<string>();
   const places: Task["lastPlaces"] = [];
   for (const day of plan.days) for (const item of day.items) {
-    const record = item.kind === "place" ? place(item.refId) : item.kind === "food" ? place(food(item.refId)?.placeId ?? "") : item.kind === "experience" ? place(experience(item.refId)?.placeId ?? "") : undefined;
-    const name = item.kind === "food" ? food(item.refId)?.title : item.kind === "experience" ? experience(item.refId)?.title : record ? (record.name.en) : "";
-    if (!record || !name || seen.has(record.id)) continue;
-    seen.add(record.id);
-    places.push({ id: record.id, name, area: item.kind === "food" ? food(item.refId)?.location : record.location, lat: record.lat, lon: record.lon });
+    if (item.kind !== "place" && item.kind !== "food" && item.kind !== "experience") continue;
+    const record = item.kind === "place" ? place(item.refId) : item.kind === "food" ? place(food(item.refId)?.placeId ?? "") : place(experience(item.refId)?.placeId ?? "");
+    const name = item.kind === "food" ? food(item.refId)?.title : item.kind === "experience" ? experience(item.refId)?.title : record ? (plan.locale === "pt" ? record.name.pt : record.name.en) : "";
+    if (!name || seen.has(item.refId) || (item.kind === "place" && !record)) continue;
+    seen.add(item.refId);
+    places.push({
+      id: item.refId,
+      name,
+      area: item.kind === "food" ? food(item.refId)?.location : record?.location,
+      ...(record ? { lat: record.lat, lon: record.lon } : {}),
+    });
   }
-  return places.slice(-8);
+  return places.slice(0, 8);
 }
 
 function overlayRequest(request: Record<string, unknown>, task: Task): Record<string, unknown> {
@@ -143,8 +150,8 @@ function pendingFrom(task: Task, reply: string, intent: Intent): Task {
   return { ...task, pendingQuestion: question ? question.slice(0, 200) : null };
 }
 
-function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[]): PlanAgentResult {
-  const next = refreshTask(pendingFrom(task, reply, intent));
+function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false): PlanAgentResult {
+  let next = refreshTask(pendingFrom(task, reply, intent));
   let text = reply.trim();
   const unpublished = plan?.days.some((day) => day.items.some((item) => item.kind === "transport" && !item.start));
   if (unpublished && !/publish/i.test(text) && !/\b(?:day|dia|jour)\s+\d/i.test(text)) {
@@ -154,8 +161,46 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
     text = `${text} ${extra}`.trim();
   }
   text = publicPlanReply(text, next.locale, plan);
+  if (!preservePlaces) {
+    const found = presentedPlaces(text, next.locale);
+    // A list, a recommendation or a side answer replaces the previous list. One incidental name does not.
+    if (found.length >= 2) next = { ...next, lastPlaces: found };
+  }
   const chips = (chipsOverride ?? followUpChips(next)).slice(0, 2);
   return { reply: text, plan, toolEvents, task: next, chips, intent };
+}
+
+function includeFromConstraints(task: Task, utterance: string): string[] {
+  const remembered = (task.constraints.interests ?? []).filter((id) => experience(id));
+  return [...new Set([...remembered, ...experienceIdsMentioned(utterance)])];
+}
+
+/** The signed task, not the previous day's stops and not a model patch. */
+function requestFromTask(task: Task, today: string): Record<string, unknown> {
+  const c = task.constraints;
+  const interests = (c.interests ?? []).filter((item): item is "beach" | "sea" | "nature" | "culture" | "food" | "adventure" | "walking" => (
+    item === "beach" || item === "sea" || item === "nature" || item === "culture" || item === "food" || item === "adventure" || item === "walking"
+  ));
+  return {
+    startDate: c.dates?.start ?? today,
+    days: c.dates?.days ?? 3,
+    locale: task.locale,
+    adults: c.party?.adults ?? 2,
+    kids: c.party?.kids ?? 0,
+    ...(c.party?.youngestAge !== undefined ? { youngestAge: c.party.youngestAge } : {}),
+    hasCar: c.car ?? false,
+    boatTrips: c.boatTrips ?? 0,
+    drinks: !c.quietEvenings,
+    ...(c.pace ? { pace: c.pace } : {}),
+    ...(c.diet ? { diet: c.diet } : {}),
+    ...(c.budget ? { budget: c.budget } : {}),
+    ...(interests.length ? { interests } : {}),
+    ...(c.arrival ? { arrival: { mode: c.arrival.mode, dayIndex: 0, ...(c.arrival.time ? { time: c.arrival.time } : {}) } } : {}),
+    ...(c.departure ? { departure: { mode: c.departure.mode, ...(c.departure.time ? { time: c.departure.time } : {}) } } : {}),
+    include: [],
+    exclude: [],
+    unmet: [],
+  };
 }
 
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
@@ -186,7 +231,28 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const windowed = prepareContext(task, history);
   const spoken = normalizeUtterance(lastUser);
 
-  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[]) => result(next, reply, plan, toolEvents, classification.intent, chips);
+  const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false) => result(next, reply, plan, toolEvents, classification.intent, chips, preservePlaces);
+
+  const askedExperiences = () => new Set(includeFromConstraints(task, lastUser));
+  const composeRequest = (modelInput: Record<string, unknown> | null): Record<string, unknown> => {
+    const correction = classification.intent === "correction";
+    const merged = correction || !modelInput ? requestFromTask(task, today) : overlayRequest(modelInput, task);
+    const asked = askedExperiences();
+    let include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
+    const slow = task.constraints.pace === "slow" || merged.pace === "slow";
+    const exclude = new Set(Array.isArray(merged.exclude) ? merged.exclude.filter((id): id is string => typeof id === "string") : []);
+    if (correction) include = [...asked];
+    else if (slow) include = include.filter((id) => {
+      const exp = experience(id);
+      return !exp || !isAdrenalineExperience(exp) || asked.has(id);
+    });
+    if (slow || correction) for (const id of asked) if (!include.includes(id)) include.push(id);
+    // A correction rebuilds every day. An unrequested quad from the previous draft is not a constraint.
+    if (correction || slow) {
+      for (const exp of EXPERIENCES) if (isAdrenalineExperience(exp) && !asked.has(exp.id)) exclude.add(exp.id);
+    }
+    return { ...merged, include, exclude: [...exclude] };
+  };
 
   if (classification.smallTalk) {
     return finish(smallTalkReply(task.locale, spoken, current), current, [], task, []);
@@ -260,10 +326,12 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   if ((classification.reference.kind === "ordinal" || classification.reference.kind === "that-one") && classification.reference.place && !classification.planShaping) {
     const hit = classification.reference.place;
-    return finish(say(task.locale, `That is ${hit.name}.`, `É ${hit.name}.`, `C'est ${hit.name}.`), current);
+    return finish(say(task.locale, `That is ${hit.name}.`, `É ${hit.name}.`, `C'est ${hit.name}.`), current, [], task, undefined, true);
   }
 
   if (classification.intent === "side_question" && !classification.planShaping) {
+    const listed = answerPlaceList(lastUser, task.locale);
+    if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, []);
     const grounded = answerIslandQuestion(lastUser, task.locale);
     if (grounded) return finish(grounded, current, [], task, []);
   }
@@ -337,7 +405,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       description: "Build a day-by-day plan from the task constraints. Old stops are not facts. Returns a summary; the cards show the plan.",
       inputSchema: TripRequestSchema,
       execute: async (request) => {
-        const merged = overlayRequest(request as Record<string, unknown>, task);
+        const merged = composeRequest(request as Record<string, unknown>);
         const include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
         const dropped = include.filter((id) => !experience(id));
         const clean: Record<string, unknown> = { ...merged, include: include.filter((id) => experience(id)) };
@@ -362,16 +430,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   } as Parameters<typeof generateText>[0]);
 
   if (offerPlan && !builtRequest) {
-    const fallback = overlayRequest({
-      startDate: task.constraints.dates?.start ?? today,
-      days: task.constraints.dates?.days ?? 3,
-      locale: task.locale,
-      adults: task.constraints.party?.adults ?? 2,
-      kids: task.constraints.party?.kids ?? 0,
-      hasCar: task.constraints.car ?? false,
-      boatTrips: task.constraints.boatTrips ?? 0,
-      drinks: !task.constraints.quietEvenings,
-    }, task);
+    const fallback = composeRequest(null);
     try {
       const built = buildPlan({ request: fallback as z.input<typeof TripRequestSchema>, forecast: await forecast(String(fallback.startDate), Number(fallback.days)), sailings: await getSailings(), forecastSource: forecastSourceName });
       builtRequest = TripRequestSchema.parse(fallback);
@@ -413,15 +472,10 @@ function summarize(plan: TripPlan) {
     days: plan.days.map((day) => ({
       date: humanPlanDate(day.date, plan.locale),
       sea: day.sea?.status ?? "unknown",
-      items: day.items.map((item) => `${item.start ?? "unpublished"} ${label(item.kind, item.refId)}`),
+      items: day.items.map((item) => {
+        const unpublished = plan.locale === "pt" ? "hora por publicar" : plan.locale === "fr" ? "heure non publiée" : "unpublished";
+        return `${item.start ?? unpublished} ${itemLabel(item, plan.locale)}`;
+      }),
     })),
   };
-}
-
-function label(kind: string, id: string) {
-  if (kind === "experience") return experience(id)?.title ?? "Experience";
-  if (kind === "food") return food(id)?.title ?? "Meal";
-  if (kind === "place") return place(id)?.name.en ?? "Place";
-  if (kind === "transport") return id === "ferry" ? "Ferry" : "Flight";
-  return "Free time";
 }
