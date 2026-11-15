@@ -45,6 +45,8 @@ Set `MAIO_TASK_SECRET` to a long random string in every deployed environment (`N
 
 `/api/maio-chat` proxies to `https://portal.maio.cv/api/chat`. Recent conversation remains in component memory. Follow-up buttons send the selected prompt with conversation context; answers can be saved as branded PDFs. Voice questions are transcribed by `/api/transcribe` through Vercel AI Gateway. API errors are displayed without invented fallback answers.
 
+Flagged planner and Ask Maio turns are stored in MongoDB collection `chat_flags` (same `ANALYTICS_MONGODB_URI` / `ANALYTICS_MONGODB_DB`, 30-day TTL). Only failed checks, thumbs-down, and failed judge grades are written. Nothing is stored for a clean turn. The record has no IP, user agent, cookie, or user id. `FLAGS_ADMIN_KEY` (Bearer, at least 16 characters) guards `GET /api/flags` and `PATCH /api/flags/:id`. `MAIO_JUDGE=1` turns the grader on (`0` turns it off; production defaults to on). `MAIO_JUDGE_RATE` defaults to `1`. `MAIO_JUDGE_DAILY_CAP` defaults to `2000`. `MAIO_JUDGE_MODEL` defaults to `openai/gpt-5-nano`. The grader runs after the reply via Next.js `after()` and stores a row only when it returns `ok: false`.
+
 The `/sources` page reads the live registry at `https://api.maio.cv/api/v1/sources`. Initiative destinations are in `lib/content.ts`: VisitMaio, Portal de Dados, the Open Data API, and Maio in ChatGPT.
 
 Framer Motion animations honor reduced-motion preferences. Above-the-fold photography is responsive through Next image optimization; PDF and optional OpenUI components load on demand.

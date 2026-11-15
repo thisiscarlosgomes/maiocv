@@ -1369,6 +1369,19 @@ body:has(.chat-screen) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .chat-composer .chat-voice-active { animation: none; } }
 .chat-composer .chat-clear:hover:not(:disabled) { background: var(--maio-hover); }
 .chat-composer .chat-clear:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.chat-flag-row { display: flex; align-items: center; gap: 8px; max-width: 100%; margin-top: 4px; }
+.chat-flag { display: inline-grid; place-items: center; width: 44px; height: 44px; margin-left: -12px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--maio-muted); cursor: pointer; }
+.chat-flag svg { display: block; }
+.chat-flag:hover, .chat-flag[aria-pressed="true"] { background: var(--maio-surface-data); color: var(--ink); }
+.chat-flag:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.chat-flag-form { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
+.chat-flag-note { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--maio-border-data); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 13px; padding: 0 12px; }
+.chat-flag-note:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.chat-flag-send { border: 0; background: transparent; color: var(--maio-muted); font: inherit; font-size: 13px; cursor: pointer; padding: 8px 2px; }
+.chat-flag-send:hover:not(:disabled) { color: var(--ink); }
+.chat-flag-send:focus-visible { outline: 2px solid var(--maio-focus); outline-offset: 2px; }
+.chat-flag-send:disabled { opacity: .55; cursor: default; }
+.chat-flag-thanks { margin: 4px 0 0; font-size: 12px; color: var(--maio-muted); }
 .chat-answer-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
 .chat-pdf-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--maio-border-data); border-radius: 999px; background: transparent; color: var(--maio-text-data); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .chat-pdf-button:hover:not(:disabled) { background: var(--maio-surface-data); }

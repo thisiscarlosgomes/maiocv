@@ -1,6 +1,7 @@
 "use client";
 
 import { trackUsage } from "../../lib/analytics-client";
+import { summarizePlan } from "../../lib/chat-flags";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Locale } from "../../lib/locale";
@@ -17,7 +18,7 @@ import { loadingStatus, turnWork } from "../../lib/plan-status";
 
 // The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
 const TASK_KEY = "maio.plan.task";
-type Msg = { role: "user" | "assistant"; content: string; trip?: boolean };
+type Msg = { role: "user" | "assistant"; content: string; trip?: boolean; flag?: { planBefore: ReturnType<typeof summarizePlan>; planAfter: ReturnType<typeof summarizePlan>; chips: string[] } };
 type Screen = "chat" | "trip";
 
 const cover = (plan: TripPlan, locale: Locale, s: PlanStrings) => {
@@ -128,15 +129,18 @@ export function Planner({ locale }: { locale: Locale }) {
       const data = await response.json();
       if (!response.ok) throw new Error();
       if (typeof data.task === "string") writeTask(data.task);
-      if (Array.isArray(data.chips)) setChips(data.chips.filter((chip: unknown): chip is string => typeof chip === "string"));
+      const nextChips = Array.isArray(data.chips) ? data.chips.filter((chip: unknown): chip is string => typeof chip === "string") : chips;
+      if (Array.isArray(data.chips)) setChips(nextChips);
       const next = data.plan ? parseTripPlan(data.plan) : null;
       const changed = !!next && JSON.stringify(next) !== JSON.stringify(plan);
-      if (data.intent === "new_objective" && !next) setPlan(null);
+      const cleared = data.intent === "new_objective" && !next;
+      if (cleared) setPlan(null);
       else if (changed && next) { if (!plan) trackUsage("plan_generated"); setPlan(next); }
       const reply = String(data.reply || "");
       const previous = [...messages].reverse().find((message) => message.role === "assistant")?.content ?? null;
       if (keepAssistantReply(previous, reply, changed)) {
-        setMessages([...conversation, { role: "assistant", content: reply, trip: changed }]);
+        const planAfter = cleared ? null : changed && next ? next : plan;
+        setMessages([...conversation, { role: "assistant", content: reply, trip: changed, flag: { planBefore: summarizePlan(plan), planAfter: summarizePlan(planAfter), chips: nextChips } }]);
       }
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
@@ -203,6 +207,7 @@ export function Planner({ locale }: { locale: Locale }) {
         role: m.role,
         content: m.content,
         lead: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : undefined,
+        flag: m.flag,
       }))}
       draft={draft}
       busy={busy}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChatMarkdown } from "../chat-markdown";
 import type { ChatAdapter } from "./adapter";
@@ -10,12 +10,29 @@ import type { ChatAdapter } from "./adapter";
  * The adapter decides where a send goes; the shell only presents it.
  */
 export function ChatShell({
-  locale, welcome, logLabel, placeholder, thinking, sendLabel, sendingLabel, inputId, note,
+  id, locale, welcome, logLabel, placeholder, thinking, sendLabel, sendingLabel, inputId, note,
   suggestions, suggestionsWhen = "empty", messages, draft, busy, error, onDraft, onSend,
   onClear, clearLabel, clearVariant = "icon", composerLeading, composerExtras, aboveComposer,
   belowComposer, stage, composer = true, className, children, onFollowUp, inputLocked = false,
 }: ChatAdapter) {
   const reduced = useReducedMotion();
+  const [flagFor, setFlagFor] = useState<number | null>(null);
+  const [flagNote, setFlagNote] = useState("");
+  const [flagSent, setFlagSent] = useState<Record<number, true>>({});
+  const [flagSaving, setFlagSaving] = useState(false);
+  const flagCopy = locale === "pt"
+    ? { down: "Sinalizar esta resposta", note: "O que correu mal? (opcional)", send: "Enviar", thanks: "Registado" }
+    : locale === "fr"
+      ? { down: "Signaler cette réponse", note: "Qu'est-ce qui n'allait pas ? (facultatif)", send: "Envoyer", thanks: "Noté" }
+      : { down: "Flag this reply", note: "What went wrong? (optional)", send: "Send", thanks: "Noted" };
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      setFlagFor(null);
+      setFlagNote("");
+      setFlagSent({});
+    }
+  }, [messages.length]);
   const pane = useRef<HTMLDivElement>(null);
   const question = useRef<HTMLElement | null>(null);
   const tail = useRef<HTMLDivElement>(null);
@@ -114,6 +131,40 @@ export function ChatShell({
     pinQuestion();
   }, [messages, busy, error, stage]);
 
+  async function report(index: number) {
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || flagSaving || flagSent[index]) return;
+    const earlier = messages.slice(0, index);
+    let userAt = -1;
+    for (let i = earlier.length - 1; i >= 0; i -= 1) if (earlier[i].role === "user") { userAt = i; break; }
+    const userMessage = userAt >= 0 ? earlier[userAt].content : "";
+    if (!userMessage.trim()) return;
+    const previousTurns = earlier.slice(Math.max(0, userAt - 4), Math.max(0, userAt)).map((item) => ({ role: item.role, content: item.content }));
+    setFlagSaving(true);
+    try {
+      const response = await fetch("/api/flags", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          surface: id,
+          locale,
+          userMessage,
+          previousTurns,
+          botReply: message.content,
+          planBefore: message.flag?.planBefore ?? null,
+          planAfter: message.flag?.planAfter ?? null,
+          chips: message.flag?.chips ?? [],
+          note: flagNote.trim(),
+        }),
+      });
+      if (!response.ok) return;
+      setFlagSent((current) => ({ ...current, [index]: true }));
+      setFlagFor(null);
+      setFlagNote("");
+    } catch { /* the reply stays either way */ }
+    finally { setFlagSaving(false); }
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!busy && !inputLocked && draft.trim()) onSend(draft);
@@ -157,6 +208,27 @@ export function ChatShell({
                       disabled={busy || inputLocked} />
                   : <p>{message.content}</p>)}
                 {message.extra}
+                {message.role === "assistant" && (flagSent[index] ? (
+                  <p className="chat-flag-thanks" data-testid="flag-thanks">{flagCopy.thanks}</p>
+                ) : (
+                  <div className="chat-flag-row">
+                    <button type="button" className="chat-flag" data-testid="thumbs-down" aria-pressed={flagFor === index}
+                      aria-label={flagCopy.down} onClick={() => { setFlagFor(flagFor === index ? null : index); setFlagNote(""); }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M17 14V2M7 14l4.2 7.2a2 2 0 0 0 1.8 1.1 1.8 1.8 0 0 0 1.7-2.3L13.5 14H20a2 2 0 0 0 2-2.3l-1.2-7A2 2 0 0 0 18.8 3H7" />
+                        <path d="M7 14H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h3" />
+                      </svg>
+                    </button>
+                    {flagFor === index && (
+                      <form className="chat-flag-form" data-testid="flag-note-form" onSubmit={(event) => { event.preventDefault(); void report(index); }}>
+                        <label className="sr-only" htmlFor={`flag-note-${index}`}>{flagCopy.note}</label>
+                        <input id={`flag-note-${index}`} className="chat-flag-note" data-testid="flag-note" value={flagNote} maxLength={300}
+                          placeholder={flagCopy.note} onChange={(event) => setFlagNote(event.target.value)} />
+                        <button type="submit" className="chat-flag-send" data-testid="flag-send" disabled={flagSaving}>{flagCopy.send}</button>
+                      </form>
+                    )}
+                  </div>
+                ))}
               </motion.article>
             ))}
           </div>
