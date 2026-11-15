@@ -272,13 +272,10 @@ function isGenericFallback(reply: string): boolean {
 function looksLikePlanSummary(reply: string): boolean {
   const text = fold(reply);
   if (/\b(?:here is the \d+-day plan|aqui esta o plano|voici le plan)\b/.test(text)) return true;
-  const dayStop = /\b(?:day|dia|jour)\s+\d+\b/.test(text);
-  const clocks = reply.match(/\b\d{1,2}:\d{2}\b/g)?.length ?? 0;
-  const stops = /\b(?:beach|praia|plage|lunch|almoco|dejeuner|dinner|jantar|breakfast|pequeno|petit-dejeuner)\b/.test(text);
-  // A timetable of clock times is not a plan. A day heading or a stop list is.
-  if (dayStop && (clocks >= 1 || stops)) return true;
-  if ((looksLikeItineraryDump(reply) || looksLikeSchedule(reply)) && (dayStop || /\b(?:overview|pace\s*:|length\s*:)\b/.test(text))) return true;
-  return false;
+  const dayMentions = text.match(/\b(?:day|dia|jour)\s+\d+\b/g) ?? [];
+  // One sentence about a single day is an answer, not a re-emitted itinerary.
+  if (new Set(dayMentions).size >= 2) return true;
+  return (looksLikeItineraryDump(reply) || looksLikeSchedule(reply)) && dayMentions.length >= 1;
 }
 
 function earlierUser(turns: FlagTurn[] | undefined): string {

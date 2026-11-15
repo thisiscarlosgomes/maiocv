@@ -2,6 +2,7 @@ import { upcomingDate } from "./awareness/classify.ts";
 import type { TaskLocale } from "./awareness/task.ts";
 import type { Sailing } from "./essentials.ts";
 import { humanPlanDate } from "./plan-reply.ts";
+import { loosen, spokenDates, type TransportMention } from "./plan-router.ts";
 import { addDays, type TripPlan } from "./trip.ts";
 
 const PORTAL = "https://portal.maio.cv";
@@ -98,6 +99,12 @@ function dayNumber(date: string): number {
   return Date.parse(`${date}T12:00:00Z`);
 }
 
+/** The next published row after a named day. A past row is only used when nothing later exists. */
+function nextPublished<T extends { date: string; departure: string }>(rows: T[], date: string): T | null {
+  const later = byClock(rows.filter((row) => row.date > date));
+  return later[0] ?? nearest(rows, date);
+}
+
 function nearest<T extends { date: string }>(rows: T[], date: string): T | null {
   const target = dayNumber(date);
   if (!Number.isFinite(target)) return null;
@@ -131,9 +138,13 @@ const WEEKDAYS: { name: string; day: number }[] = [
 ];
 
 function mentionedDate(text: string, today: string): string | null {
-  const n = text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const n = loosen(text);
+  if (/\b(?:today|hoje|aujourd'hui|aujourdhui)\b/.test(n)) return today;
+  if (/\b(?:tomorrow|amanha|demain)\b/.test(n)) return addDays(today, 1);
   const iso = n.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
   if (iso) return iso[1];
+  const spelled = spokenDates(text, today);
+  if (spelled.start) return spelled.start;
   const hit = WEEKDAYS.find((weekday) => n.includes(weekday.name));
   return hit ? upcomingDate(today, hit.day) : null;
 }
@@ -165,6 +176,39 @@ function travelDate(iso: string, locale: TaskLocale): string {
   return locale === "fr" ? label.replace(/\./g, "").replace(/\s+/g, " ").trim() : label;
 }
 
+function directedSailings(text: string, table: Timetable): Sailing[] {
+  const folded = text.normalize("NFD").replace(/\p{M}/gu, "");
+  const pool = table.sailings.filter((row) => /\bpraia|santiago\b/i.test(text) || /praia|santiago/i.test(text) ? fromIsland(row) : toIsland(row) || fromIsland(row));
+  if (/\b(?:to praia|para a praia|para praia|vers praia|to santiago|para santiago)\b/i.test(folded)) return table.sailings.filter(fromIsland);
+  if (/\b(?:to maio|para o maio|vers maio)\b/i.test(folded)) return table.sailings.filter(toIsland);
+  return pool;
+}
+
+function flightPool(text: string, table: Timetable): FlightLeg[] {
+  const folded = text.normalize("NFD").replace(/\p{M}/gu, "");
+  const fromMaio = /\b(?:from maio|do maio|de maio|depuis maio|depuis)\b/i.test(folded) || !/\b(?:to maio|para o maio|vers maio)\b/i.test(folded);
+  return byClock(table.flights.filter((leg) => fromMaio ? leg.from === "MMO" : leg.to === "MMO"));
+}
+
+/** The sailing or flight the reply names, so a later "around that" uses the same row. */
+export function citedTransport(text: string, table: Timetable, today: string, time?: string): TransportMention[] {
+  if (!table.ok) return [];
+  const when = mentionedDate(text, today);
+  if (wantsFlight(text)) {
+    const pool = flightPool(text, table);
+    const onDay = when ? pool.filter((leg) => leg.date === when) : byClock(pool.filter((leg) => stillAhead(leg.date, leg.departure, today, time)));
+    const day = onDay[0]?.date;
+    const shown = (day ? onDay.filter((leg) => leg.date === day) : [])[0] ?? (when ? nextPublished(pool, when) : nearest(pool, today));
+    return shown ? [{ kind: "flt", date: shown.date, time: shown.departure, from: shown.from, to: shown.to }] : [];
+  }
+  const directed = directedSailings(text, table);
+  const upcoming = byClock(directed.filter((row) => when ? row.date === when : stillAhead(row.date, row.departure, today, time)));
+  const hit = upcoming[0] ?? (when ? nextPublished(directed, when) : nearest(directed, today));
+  if (!hit) return [];
+  const kind: TransportMention["kind"] = toIsland(hit) ? "in" : "out";
+  return [{ kind, date: hit.date, time: hit.departure, from: hit.from, to: hit.to }];
+}
+
 /** Short answer for a ferry or flight question. Times come only from the payload. */
 export function answerTravelQuestion(text: string, locale: TaskLocale, table: Timetable, today: string, context: TravelContext = {}): string {
   if (!table.ok) return downReply(locale);
@@ -172,9 +216,7 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
   const flight = wantsFlight(text);
   const published = say(locale, "Published timetable, not live status.", "Horário publicado, não é estado ao vivo.", "Horaire publié, pas un statut en direct.");
   if (flight) {
-    const folded = text.normalize("NFD").replace(/\p{M}/gu, "");
-    const fromMaio = /\b(?:from maio|do maio|de maio|depuis maio|depuis)\b/i.test(folded) || !/\b(?:to maio|para o maio|vers maio)\b/i.test(folded);
-    const pool = byClock(table.flights.filter((leg) => fromMaio ? leg.from === "MMO" : leg.to === "MMO"));
+    const pool = flightPool(text, table);
     const onDay = when
       ? pool.filter((leg) => leg.date === when)
       : byClock(pool.filter((leg) => stillAhead(leg.date, leg.departure, today, context.time)));
@@ -197,22 +239,17 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
         : say(locale, `Next flights from Maio: ${day} at ${rows} to Praia.`, `Próximos voos do Maio: ${day} às ${rows} para a Praia.`, `Prochains vols depuis Maio : ${day} à ${rows} vers Praia.`);
       return `${lead}${extra} ${published}`;
     }
-    const near = nearest(pool, when ?? today);
+    const near = when ? nextPublished(pool, when) : nearest(pool, today);
     if (!near) return say(locale,
       `No flight from Maio is in the published timetable. ${published}`,
       `Não há voo do Maio no horário publicado. ${published}`,
       `Aucun vol depuis Maio dans l'horaire publié. ${published}`);
     return say(locale,
-      `No flight from Maio is published${when ? ` on ${humanPlanDate(when, locale)}` : ""}. The nearest is ${humanPlanDate(near.date, locale)} at ${near.departure}. ${published}`,
-      `Não há voo do Maio publicado${when ? ` em ${humanPlanDate(when, locale)}` : ""}. O mais próximo é ${humanPlanDate(near.date, locale)} às ${near.departure}. ${published}`,
-      `Aucun vol depuis Maio n'est publié${when ? ` le ${humanPlanDate(when, locale)}` : ""}. Le plus proche est le ${humanPlanDate(near.date, locale)} à ${near.departure}. ${published}`);
+      `No flight from Maio is published${when ? ` on ${travelDate(when, locale)}` : ""}. The nearest is ${travelDate(near.date, locale)} at ${near.departure}. ${published}`,
+      `Não há voo do Maio publicado${when ? ` em ${travelDate(when, locale)}` : ""}. O mais próximo é ${travelDate(near.date, locale)} às ${near.departure}. ${published}`,
+      `Aucun vol depuis Maio n'est publié${when ? ` le ${travelDate(when, locale)}` : ""}. Le plus proche est le ${travelDate(near.date, locale)} à ${near.departure}. ${published}`);
   }
-  const pool = table.sailings.filter((row) => /\bpraia|santiago\b/i.test(text) || /praia|santiago/i.test(text) ? fromIsland(row) : toIsland(row) || fromIsland(row));
-  const directed = /\b(?:to praia|para a praia|para praia|vers praia|to santiago|para santiago)\b/i.test(text.normalize("NFD").replace(/\p{M}/gu, ""))
-    ? table.sailings.filter(fromIsland)
-    : /\b(?:to maio|para o maio|vers maio)\b/i.test(text.normalize("NFD").replace(/\p{M}/gu, ""))
-      ? table.sailings.filter(toIsland)
-      : pool;
+  const directed = directedSailings(text, table);
   const upcoming = byClock(directed.filter((row) => when ? row.date === when : stillAhead(row.date, row.departure, today, context.time)));
   const hit = upcoming[0] ?? null;
   if (hit) {
@@ -221,15 +258,15 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
       `Próximo barco: ${travelDate(hit.date, locale)} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
       `Prochain ferry : ${travelDate(hit.date, locale)} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
   }
-  const near = nearest(directed, when ?? today);
+  const near = when ? nextPublished(directed, when) : nearest(directed, today);
   if (!near) return say(locale,
     `No ferry is in the published timetable. That is not the same as no service. ${published}`,
     `Não há barco no horário publicado. Isso não é o mesmo que não haver serviço. ${published}`,
     `Aucun ferry dans l'horaire publié. Ce n'est pas la même chose qu'une absence de service. ${published}`);
   return say(locale,
-    `No ferry is published${when ? ` on ${humanPlanDate(when, locale)}` : ""}. The nearest is ${humanPlanDate(near.date, locale)} at ${near.departure}, ${near.from} to ${near.to}. ${published}`,
-    `Não há barco publicado${when ? ` em ${humanPlanDate(when, locale)}` : ""}. O mais próximo é ${humanPlanDate(near.date, locale)} às ${near.departure}, ${near.from} para ${near.to}. ${published}`,
-    `Aucun ferry n'est publié${when ? ` le ${humanPlanDate(when, locale)}` : ""}. Le plus proche est le ${humanPlanDate(near.date, locale)} à ${near.departure}, ${near.from} vers ${near.to}. ${published}`);
+    `No ferry is published${when ? ` on ${travelDate(when, locale)}` : ""}. The nearest is ${travelDate(near.date, locale)} at ${near.departure}, ${near.from} to ${near.to}. ${published}`,
+    `Não há barco publicado${when ? ` em ${travelDate(when, locale)}` : ""}. O mais próximo é ${travelDate(near.date, locale)} às ${near.departure}, ${near.from} para ${near.to}. ${published}`,
+    `Aucun ferry n'est publié${when ? ` le ${travelDate(when, locale)}` : ""}. Le plus proche est le ${travelDate(near.date, locale)} à ${near.departure}, ${near.from} vers ${near.to}. ${published}`);
 }
 
 type Arrival = { mode?: string; dayIndex?: number; time?: string };
