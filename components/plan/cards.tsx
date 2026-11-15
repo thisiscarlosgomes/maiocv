@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayParts, dayPins, dayTitle, dayHasVehicle, hopBetween, partOfDay, timeSpan } from "../../lib/trip-view";
+import { cardView, contactLinks, dayParts, dayTitle, dayHasVehicle, hopBetween, partOfDay, timeSpan } from "../../lib/trip-view";
 
 /** A photo that falls back to the plain placeholder tile if it fails to load, so a bad URL never shows a broken-image icon. */
 export function SafeImg({ src, className, lazy }: { src: string | null; className?: string; lazy?: boolean }) {
@@ -95,36 +95,6 @@ export function Dialog({ label, onClose, children, className = "" }: { label: st
   );
 }
 
-export function TripMap({ day, locale, s, caption = true }: { day: PlanDay; locale: Locale; s: PlanStrings; caption?: boolean }) {
-  const pins = dayPins(day, locale, s);
-  const xs = pins.map((p) => p.x), ys = pins.map((p) => p.y);
-  const span = Math.max(120, ...(pins.length ? [Math.max(...xs) - Math.min(...xs) + 60, Math.max(...ys) - Math.min(...ys) + 60] : [MAP_W]));
-  const cx = pins.length ? (Math.max(...xs) + Math.min(...xs)) / 2 : MAP_W / 2, cy = pins.length ? (Math.max(...ys) + Math.min(...ys)) / 2 : MAP_H / 2;
-  const view = `${cx - span * 0.9} ${cy - span / 2} ${span * 1.8} ${span}`;
-  const scale = span / 300;
-  const first = pins[0];
-  return (
-    <figure className="plan-map">
-      <svg viewBox={view} role="img" aria-label={`${s.map}: ${pins.map((p) => p.title).join(", ")}`}>
-        <rect x="-1000" y="-1000" width="3000" height="3000" className="plan-map-sea" />
-        <path d={ISLAND_PATH} className="plan-map-island" style={{ strokeWidth: 1.5 * scale }} />
-        {pins.length > 1 && <polyline points={pins.map((p) => `${p.x},${p.y}`).join(" ")} className="plan-map-route" style={{ strokeWidth: 1.5 * scale, strokeDasharray: `${4 * scale} ${4 * scale}` }} />}
-        {pins.map((p) => (
-          <g key={p.n} transform={`translate(${p.x} ${p.y})`}>
-            <g transform={`scale(${scale})`}><circle r="11" className="plan-map-pin" /><text y="4" textAnchor="middle">{p.n}</text></g>
-          </g>
-        ))}
-      </svg>
-      {caption && (
-        <figcaption>
-          <span>{s.map}</span>
-          <a className="plan-link" href={first ? `https://www.openstreetmap.org/#map=12/15.22/-23.17` : "https://www.openstreetmap.org/#map=11/15.22/-23.17"} target="_blank" rel="noopener noreferrer">{s.openMap}</a>
-        </figcaption>
-      )}
-    </figure>
-  );
-}
-
 /** Detail: hero, type · day, title, description, facts, the quiet operator contact (rule in lib/trip-view). No price, no booking. */
 export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: PlanItem; day: PlanDay; locale: Locale; s: PlanStrings; onClose: () => void; onAsk?: (text: string) => void }) {
   const v = cardView(item, locale, s);
@@ -159,20 +129,6 @@ export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: Pl
           {v.link && <a className="plan-btn" href={v.link} target="_blank" rel="noopener noreferrer">{s.openInMap}</a>}
           {onAsk && <button type="button" className="plan-btn" onClick={() => onAsk(s.askPrefill(v.title))}>{s.askAbout}</button>}
         </div>
-      </div>
-    </Dialog>
-  );
-}
-
-/** "View day on map": the day's pins in the same dialog shell. */
-export function DayMap({ day, locale, s, onClose }: { day: PlanDay; locale: Locale; s: PlanStrings; onClose: () => void }) {
-  return (
-    <Dialog label={`${s.map} · ${dayTitle(day.date, locale)}`} onClose={onClose} className="plan-sheet-map">
-      <button type="button" className="plan-sheet-close" onClick={onClose} aria-label={s.close} autoFocus>×</button>
-      <div className="plan-sheet-body">
-        <p className="plan-eyebrow">{s.map}</p>
-        <h2>{dayTitle(day.date, locale)}</h2>
-        <TripMap day={day} locale={locale} s={s} />
       </div>
     </Dialog>
   );

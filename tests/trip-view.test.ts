@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { samplePlan } from "../lib/trip-sample.ts";
 import { planStrings } from "../lib/trip-strings.ts";
-import { ISLAND_PATH, MAP_H, MAP_W, cardView, contactLinks, dayLabel, dayPins, daySummary, imageUrl, seaLine } from "../lib/trip-view.ts";
+import { cardView, contactLinks, dayLabel, daySummary, imageUrl, seaLine } from "../lib/trip-view.ts";
 import { EXPERIENCES, experience } from "../lib/trip.ts";
 
 const plan = samplePlan("en");
@@ -64,13 +64,6 @@ test("sea line and day labels are localized", () => {
   assert.equal(seaLine(plan.days[1].sea, s), "Rough sea · 2.4 m waves · 37 km/h wind");
   assert.match(seaLine(samplePlan("pt").days[1].sea, planStrings.pt), /^Mar agitado/);
   assert.equal(dayLabel("2026-10-29", "en"), "Thu 29");
-});
-
-test("map pins land inside the map frame", () => {
-  assert.ok(ISLAND_PATH.startsWith("M") && ISLAND_PATH.endsWith("Z"));
-  for (const day of plan.days) for (const pin of dayPins(day, "en", s)) {
-    assert.ok(pin.x >= 0 && pin.x <= MAP_W && pin.y >= 0 && pin.y <= MAP_H, JSON.stringify(pin));
-  }
 });
 
 test("every stop image resolves to an absolute http(s) URL or null", () => {
