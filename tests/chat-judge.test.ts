@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { judgeCap, judgeEnabled, judgePrompt, judgeRate, memoryJudgeBudget, reviewWithJudge, scheduleTurnReview, type JudgeVerdict } from "../lib/chat-judge.ts";
+import { judgeCap, judgeEnabled, judgeErrorType, judgeHealthSnapshot, judgePrompt, judgeRate, memoryJudgeBudget, resetJudgeHealth, reviewWithJudge, scheduleTurnReview, type JudgeVerdict } from "../lib/chat-judge.ts";
+import { handleFlagHealth } from "../lib/chat-flags-http.ts";
 import { memoryFlagStore } from "../lib/chat-flags-store.ts";
 import { handleMaioChat } from "../lib/maio-chat-proxy.ts";
 import type { TurnForFlags } from "../lib/chat-flags.ts";
@@ -149,4 +150,45 @@ test("Ask Maio returns the reply before a slow judge finishes", async () => {
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(ran, true);
   assert.equal(quiet.rows.length, 0);
+});
+
+test("a judge error is logged as a type, without the turn, and counted on the health route", async () => {
+  resetJudgeHealth();
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (message?: unknown) => { warnings.push(String(message)); };
+  try {
+    await reviewWithJudge(clean(), {
+      env,
+      store: memoryFlagStore(),
+      budget: memoryJudgeBudget(),
+      judge: async () => { throw new Error("guest said 203.0.113.9 and a long prompt"); },
+    });
+  } finally {
+    console.warn = original;
+  }
+  assert.equal(judgeErrorType(new Error("AbortError")), "model_error");
+  assert.equal(judgeErrorType(Object.assign(new Error("The operation was aborted"), { name: "AbortError" })), "timeout");
+  assert.deepEqual(warnings, ["judge failed: model_error"]);
+  assert.equal(warnings.some((line) => line.includes("203.0")), false);
+  assert.equal(judgeHealthSnapshot().calls, 1);
+  assert.equal(judgeHealthSnapshot().failures, 1);
+  assert.equal(judgeHealthSnapshot().lastError, "model_error");
+  const previous = process.env.FLAGS_ADMIN_KEY;
+  process.env.FLAGS_ADMIN_KEY = "h".repeat(24);
+  try {
+    const denied = await handleFlagHealth(new Request("http://localhost/api/flags/health"));
+    assert.equal(denied.status, 401);
+    const allowed = await handleFlagHealth(new Request("http://localhost/api/flags/health", {
+      headers: { authorization: `Bearer ${"h".repeat(24)}` },
+    }));
+    assert.equal(allowed.status, 200);
+    const body = await allowed.json() as { judgeCallsToday: number; judgeFailuresToday: number; lastErrorType: string | null };
+    assert.equal(body.judgeCallsToday, 1);
+    assert.equal(body.judgeFailuresToday, 1);
+    assert.equal(body.lastErrorType, "model_error");
+  } finally {
+    process.env.FLAGS_ADMIN_KEY = previous;
+    resetJudgeHealth();
+  }
 });

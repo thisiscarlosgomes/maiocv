@@ -1,4 +1,5 @@
-import { generateText, tool, type LanguageModel } from "ai";
+import { gateway } from "@ai-sdk/gateway";
+import { generateText, tool } from "ai";
 import { z } from "zod";
 import type { TaskLocale } from "./awareness/task.ts";
 import { extractConstraints } from "./awareness/classify.ts";
@@ -104,6 +105,10 @@ function interpretDay(n: string, plan: TripPlan, today: string, field: boolean):
     const index = indexForWeekday(plan, row.day);
     if (index) return index;
   }
+  if (/\b(?:middle|meio|milieu)\s+(?:day|dia|jour)\b|\b(?:the |o |le )?dia do meio\b|\bjour du milieu\b/.test(n)) {
+    if (plan.days.length % 2 === 0) return null;
+    return Math.ceil(plan.days.length / 2);
+  }
   if (/\b(?:tomorrow|amanha|demain)\b/.test(n)) {
     const date = addDays(today, 1);
     const index = plan.days.findIndex((day) => day.date === date);
@@ -145,8 +150,8 @@ export function whichDayQuestion(plan: TripPlan, locale: TaskLocale): string {
   return say(locale, `Which day: ${list}?`, `Qual dia: ${list}?`, `Quel jour : ${list} ?`);
 }
 
-const RELAX = /\b(?:slow(?:er)?|relax\w*|easy|chill|lazy|lighter|calm(?:er|e)?|rest(?:ful)?|descans\w*|relaxado|calmo|leve|leger|tranquille|repos|lent(?:o|e)?)\b/;
-const BUSY = /\b(?:busier|more stuff|pack it|fuller|more to do|mais cheio|mais coisas|mais intenso|mais corrido|plus charge|plus de choses|plus intense|plus rempli)\b/;
+const RELAX = /\b(?:slow(?:er)?|relax\w*|eas(?:y|ier|iest)|chill|lazy|lighter|calm(?:er|e|a)?|quieter|rest(?:ful)?|descans\w*|relaxado|calmo|calma|leve|leger|tranquille|repos|lent(?:o|e)?|mais facil|plus facile)\b/;
+const BUSY = /\b(?:busier|more stuff|pack it|fuller|more to do|mais cheio|mais coisas|mais intenso|mais corrido|plus charge|plus de choses|plus intense|plus rempli|enche(?:r)?|remplis|remplir)\b/;
 const WHOLE_PACE = /\b(?:slow pace|relaxed pace|easy pace|packed pace|busy days|full days|ritmo calmo|ritmo lento|ritmo intenso|sem pressa|rythme lent|rythme calme|rythme soutenu|journee chargee)\b/;
 const SEA = /\b(?:water|waters|sea|ondas?|waves?|mar|mer|vague)\b/;
 
@@ -177,8 +182,10 @@ export function parseEditIntent(text: string, plan: TripPlan | null, today: stri
     const wholePace = WHOLE_PACE.test(n) && !day;
     const sea = SEA.test(n) && !day;
     // "on tuesday" / "the 17th" is a day of this trip when the guest is editing that day, not a new start.
-    if (!wholePace && !sea && BUSY.test(n)) return day ? { kind: "busier_day", day } : { kind: "busier_day" };
-    if (!wholePace && !sea && RELAX.test(n)) return day ? { kind: "relax_day", day } : { kind: "relax_day" };
+    const busy = BUSY.test(n) || (/\bpack\b/.test(n) && /\b(?:day|dia|jour|middle|meio|milieu)\b/.test(n));
+    const relax = RELAX.test(n) || (/\bquiet\b/.test(n) && /\b(?:day|dia|jour|afternoon|morning|evening|tarde|manha|matin|apres-midi|soir)\b/.test(n));
+    if (!wholePace && !sea && busy) return day ? { kind: "busier_day", day } : { kind: "busier_day" };
+    if (!wholePace && !sea && relax) return day ? { kind: "relax_day", day } : { kind: "relax_day" };
   }
   const anchor = plan?.days[0]?.date;
   const shift = plan ? parseDateShift(text, today, anchor) : null;
@@ -282,12 +289,17 @@ const editTool = tool({
   execute: async (input) => input,
 });
 
-/** Primary path: gpt-5-mini (or the configured gateway model) emits EditIntent. */
-export async function intentFromModel(model: LanguageModel, text: string, plan: TripPlan, today: string): Promise<EditIntent | null> {
+/** Intent classification stays on a small model and a short clock. Regex covers a miss or a timeout. */
+export const INTENT_MODEL = "openai/gpt-5-nano";
+export const INTENT_TIMEOUT_MS = 4_000;
+
+export async function intentFromModel(text: string, plan: TripPlan, today: string): Promise<EditIntent | null> {
   const days = plan.days.map((day, index) => `${index + 1}=${day.date}`).join(", ");
   const generated = await generateText({
-    model,
+    model: gateway(process.env.PLAN_INTENT_MODEL?.trim() || INTENT_MODEL),
     temperature: 0,
+    maxRetries: 0,
+    abortSignal: AbortSignal.timeout(INTENT_TIMEOUT_MS),
     toolChoice: { type: "tool", toolName: "edit_intent" },
     tools: { edit_intent: editTool },
     prompt: [

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
 import { applyDateShift, applyLength, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, isCarRentalQuestion, parseDateShift, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
-import { humanPlanDate, itemLabel, planBlurb, publicPlanReply } from "./plan-reply.ts";
+import { humanPlanDate, itemLabel, looksLikeItineraryDump, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
 import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
@@ -463,7 +463,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
-  if ((classification.reference.kind === "ordinal" || classification.reference.kind === "that-one") && classification.reference.place && !classification.planShaping) {
+  const dayEdit = current ? localEditIntent(lastUser, current, today) : null;
+  if ((classification.reference.kind === "ordinal" || classification.reference.kind === "that-one") && classification.reference.place && !classification.planShaping && !dayEdit) {
     const hit = classification.reference.place;
     return finish(say(task.locale, `That is ${hit.name}.`, `É ${hit.name}.`, `C'est ${hit.name}.`), current, [], task, undefined, true);
   }
@@ -530,7 +531,6 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
-  const dayEdit = current ? localEditIntent(lastUser, current, today) : null;
   const dateShift = dayEdit ? null : parseDateShift(lastUser, today, task.constraints.dates?.start ?? current?.days[0]?.date);
   if (dateShift === "ask" && (current || task.constraints.dates?.start)) {
     return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
@@ -707,16 +707,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (current && typeof task.constraints.car === "boolean" && !dateShift && !lengthEdit) {
-    let intent: EditIntent | null = null;
-    if (gatewayReady()) {
+    let intent: EditIntent | null = dayEdit;
+    if (!intent && gatewayReady() && /\b(?:day|dia|jour|pack|relax|easier|quiet|slow|calm|cheio|calmo|calme)\b/i.test(lastUser)) {
       try {
-        intent = await intentFromModel(deps.model, lastUser, current, today);
-      } catch {
-        intent = null;
-      }
-      if (intent && (intent.kind === "other" || intent.kind === "greeting" || intent.kind === "question")) intent = null;
+        const fromModel = await intentFromModel(lastUser, current, today);
+        if (fromModel && fromModel.kind !== "other" && fromModel.kind !== "greeting" && fromModel.kind !== "question") intent = fromModel;
+      } catch { /* timeout or gateway miss: the regex path already ran */ }
     }
-    if (!intent) intent = localEditIntent(lastUser, current, today);
     if (intent) {
       const outcome = await commitOpenEdit(intent);
       if (outcome) return finish(outcome.reply, outcome.plan, outcome.events, outcome.task, undefined, true, false, false, outcome.work);
@@ -843,7 +840,29 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   const safe = builtRequest && plan ? parseTripPlan(plan) : current;
   if (builtRequest && safe) task = syncTask(task, builtRequest, safe);
-  return finish(generated.text, safe ?? current, toolEvents, task, undefined, false, false, Boolean(builtRequest && safe));
+  const built = Boolean(builtRequest && safe);
+  if (!built && isItineraryProse(generated.text)) {
+    if (wantsNewPlan(lastUser) && typeof task.constraints.car !== "boolean") {
+      const q = CAR_QUESTION[task.locale];
+      return finish(q, null, toolEvents, { ...task, pendingQuestion: q }, [...CAR_CHIPS[task.locale]], false, true);
+    }
+    if (wantsNewPlan(lastUser)) {
+      const rebuilt = await rebuildPlan(task);
+      if (rebuilt) return finish(rebuilt.plan.title, rebuilt.plan, [...toolEvents, ...rebuilt.events], rebuilt.task, undefined, true, false, true, "forecast");
+    }
+    return finish(say(task.locale, "The days stay on the card.", "Os dias ficam no cartão.", "Les jours restent sur la carte."), current, toolEvents, task, undefined, true);
+  }
+  return finish(generated.text, safe ?? current, toolEvents, task, undefined, false, false, built);
+}
+
+function wantsNewPlan(text: string): boolean {
+  const n = normalizeUtterance(text);
+  return /\b\d+\s*-?\s*(?:days?|dias?|jours?)\b/.test(n) || /\b(?:make me a plan|plan my|um plano|un plan|planeia|planifie|plano de)\b/.test(n);
+}
+
+function isItineraryProse(text: string): boolean {
+  if (looksLikeItineraryDump(text)) return true;
+  return text.length > 350 && /\b(?:day|dia|jour)\s+\d+\b/i.test(text);
 }
 
 function listedStopTarget(text: string, places: Task["lastPlaces"]): { day: number; place: Task["lastPlaces"][number] } | null {
