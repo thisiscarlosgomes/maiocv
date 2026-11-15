@@ -18,7 +18,11 @@ const T = { breakfast: "08:30", morning: "09:30", lunch: "12:30", rest: "14:30",
 const WALKABLE_KM = 3;
 const TOWN = place("cidade-porto-ingles")!;
 
-export const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+export const toMin = (t?: string) => {
+  if (!t) return -1;
+  const h = Number(t.slice(0, 2)), m = Number(t.slice(3));
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : -1;
+};
 export const toTime = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(Math.round(m) % 60).padStart(2, "0")}`;
 const round5 = (m: number) => Math.round(m / 5) * 5;
 
@@ -111,7 +115,8 @@ export function buildDay(args: {
 
   if (kind === "arrival") {
     if (args.arrival) items.push({ ...args.arrival, slot: "arrival" });
-    let clock = args.arrivalReadyMin ?? toMin("14:00");
+    if (args.arrivalReadyMin == null) return items;
+    let clock = args.arrivalReadyMin;
     free("transfer", "transfer", clock - 30, 30);
     if (clock <= toMin("14:00")) { const l = Math.max(clock, toMin(T.lunch)); meal("lunch", l, 75, "lunch-free"); clock = l + 90; }
     if (clock + 90 <= sunsetStart) outing("activity", Math.max(clock, toMin("15:30")), 90, { sheltered: rough, beachOnly: true });
@@ -171,7 +176,7 @@ export function buildDay(args: {
 /** Kind of a day as stored in a plan: an arrival transport row or a departure row marks the ends. */
 export function dayKind(day: PlanDay): DayKind {
   if (day.items.some((i) => i.slot === "departure" || (i.kind === "free" && i.refId.startsWith("depart-")))) return "departure";
-  if (day.items.some((i) => i.kind === "transport")) return "arrival";
+  if (day.items.some((i) => i.kind === "transport" && i.start)) return "arrival";
   return "full";
 }
 

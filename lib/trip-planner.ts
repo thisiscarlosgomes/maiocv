@@ -25,6 +25,8 @@ export const TripRequestSchema = z.object({
   arrival: z.object({ mode: z.enum(["ferry", "flight"]), dayIndex: z.number().int().min(0).max(6).default(0), time: time.optional() }).optional(),
   departure: z.object({ mode: z.enum(["ferry", "flight"]), time: time.optional().describe("Departure time of the ferry or flight, HH:MM") }).optional().describe("Set when the guest leaves Maio on the last day"),
   drinks: z.boolean().default(true).describe("false if the guest wants quiet evenings (no bar)"),
+  diet: z.string().max(60).optional().describe("Diet in the guest's words. Listings have no diet flags; never claim a menu."),
+  budget: z.string().max(60).optional().describe("Budget in the guest's words. No prices are stored; never invent an amount."),
   include: z.array(z.string()).max(5).default([]).describe("Experience ids from search_experiences the guest asked for"),
   exclude: z.array(z.string()).max(10).default([]),
   unmet: z.array(z.string().max(80)).max(5).default([]).describe("Things the guest asked for that are not in the data, in their words"),
@@ -66,23 +68,35 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   const exclude = new Set(req.exclude);
   const kids = req.kids > 0;
   const eligible = EXPERIENCES.filter((e) => !exclude.has(e.id) && !isExcludedExperience(e.id) && ageOk(e, req) && reachable(e, req.hasCar));
+  for (const id of req.include) {
+    const exp = experience(id);
+    if (exp && !ageOk(exp, req)) unmet.push(`${exp.title}: under minimum age ${exp.example.minAge}`);
+  }
   const dates = Array.from({ length: req.days }, (_, i) => addDays(req.startDate, i));
   const sea = dates.map((date) => forecast.find((f) => f.date === date));
   const status = sea.map(seaStatus);
 
   const kinds: DayKind[] = dates.map(() => "full");
-  // Arrival: the transport row, then the day starts after the transfer.
-  let arrival: PlanItem | null = null, arrivalIndex = -1, arrivalReady = toMin("14:00");
+  // Arrival: a published or guest-stated clock anchors the day. An unpublished time stays unpublished.
+  let arrival: PlanItem | null = null, arrivalIndex = -1, arrivalReady: number | undefined;
   if (req.arrival) {
     arrivalIndex = Math.min(req.arrival.dayIndex, req.days - 1);
     const sailing = req.arrival.mode === "ferry" ? sailings.find((s) => s.date === dates[arrivalIndex] && /maio/i.test(s.to)) : undefined;
-    const at = req.arrival.time ?? sailing?.departure ?? "14:00";
-    arrival = {
-      id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
-      note: sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}` : "Time not published yet. Confirm with the operator.",
-    };
-    arrivalReady = toMin(at) + (req.arrival.mode === "ferry" ? 150 : 60);
-    kinds[arrivalIndex] = "arrival";
+    const at = req.arrival.time ?? sailing?.departure;
+    if (at) {
+      const published = Boolean(sailing && (!req.arrival.time || req.arrival.time === sailing.departure));
+      arrival = {
+        id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
+        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}` : "Time you gave. It is not in the published timetable and it is not live status.",
+      };
+      arrivalReady = toMin(at) + (req.arrival.mode === "ferry" ? 150 : 60);
+      kinds[arrivalIndex] = "arrival";
+    } else {
+      arrival = {
+        id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, durationMin: 0,
+        note: "Time not published yet. Confirm with the operator. No published sailing is not the same as no service.",
+      };
+    }
   }
   // Departure: the last day, when the guest leaves on it (and it isn't also the arrival day).
   const leave = req.departure && req.days > 1 && kinds[req.days - 1] === "full"
@@ -112,9 +126,10 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   const days: PlanDay[] = dates.map((date, i) => {
     const items = buildDay({
       index: i, kind: kinds[i], rough: status[i] === "rough", sunset: sea[i]?.sunset ?? null, picker, pools,
-      arrival: i === arrivalIndex ? arrival : null, arrivalReadyMin: arrivalReady, leave,
+      arrival: i === arrivalIndex && kinds[i] === "arrival" ? arrival : null, arrivalReadyMin: i === arrivalIndex ? arrivalReady : undefined, leave,
       tour: tour?.day === i ? tour.exp : null, quietNight: earlyExit && i === req.days - 2,
     });
+    if (i === arrivalIndex && arrival && kinds[i] !== "arrival") items.unshift(arrival);
     const s = sea[i];
     return { date, sea: s ? { status: status[i], waveHeightM: s.waveHeightM, windKmh: s.windKmh, tempMaxC: s.tempMaxC, source: forecastSource } : null, items };
   });

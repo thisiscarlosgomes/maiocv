@@ -10,7 +10,7 @@ import { ARRIVAL_RANGE, DEPARTURE_RANGE, FULL_DAY_RANGE, FULL_DAY_SLOTS, dayKind
 
 export const EVENING_START = "19:00";
 export const BAR_SLOT = "21:00";
-const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+const toMin = (t?: string) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : -1);
 const toTime = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 export type VenueType = "bar" | "restaurant";

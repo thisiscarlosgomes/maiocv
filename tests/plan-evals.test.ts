@@ -68,7 +68,8 @@ test("arrive by ferry Friday: starts Friday, transport first, nothing before lan
   assert.equal(plan!.days[0].date, "2026-10-30");
   const [first, ...rest] = plan!.days[0].items;
   assert.equal(first.kind, "transport");
-  for (const item of rest) assert.ok(toMin(item.start) >= toMin(first.start) + 120, `${item.refId} ${item.start}`);
+  const landed = first.start ?? "";
+  for (const item of rest) assert.ok(toMin(item.start ?? "") >= toMin(landed) + 120, `${item.refId} ${item.start}`);
   if (!live) assert.match(first.note ?? "", /CV Interilhas Praia → Maio 08:30/);
 });
 

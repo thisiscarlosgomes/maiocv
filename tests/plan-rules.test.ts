@@ -52,10 +52,10 @@ test("rule 2: no bar before 19:00; lunch goes to a restaurant and the bar moves 
   const out = enforcePlanRules(fixture);
   assert.deepEqual(planRuleViolations(out), []);
   for (const d of [out.days[0], out.days[2]]) {
-    const lunch = d.items.find((i) => i.kind === "food" && i.start < "19:00")!;
+    const lunch = d.items.find((i) => i.kind === "food" && (i.start ?? "") < "19:00")!;
     assert.equal(venueType(FOOD.find((f) => f.id === lunch.refId)!), "restaurant");
     const bar = d.items.find((i) => i.refId === "food-004")!;
-    assert.ok(bar.start >= "19:00", `bar at ${bar.start}`);
+    assert.ok((bar.start ?? "") >= "19:00", `bar at ${bar.start}`);
   }
   for (const d of out.days) assert.equal(new Set(d.items.map((i) => i.id)).size, d.items.length);
   // input isn't mutated

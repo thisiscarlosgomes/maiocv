@@ -11,7 +11,8 @@ import { cardView, dateRange, dayParts, seaLine, timeSpan } from "../../lib/trip
 import { decodeTrip, encodeTrip } from "../../lib/trip-share";
 import { DayMap, DayStops, PlaceDetail, RoughAlert, SafeImg, SeaText } from "./cards";
 
-// v3.3: conversational start, compact rows, mono dates. One vertical trip. The plan is fixed once generated; the chat only answers questions.
+// The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
+const TASK_KEY = "maio.plan.task";
 type Msg = { role: "user" | "assistant"; content: string; trip?: boolean };
 type Screen = "chat" | "trip";
 
@@ -33,8 +34,19 @@ export function Planner({ locale }: { locale: Locale }) {
   const [shared, setShared] = useState(false);
   const [detail, setDetail] = useState<PlanItem | null>(null);
   const [mapDay, setMapDay] = useState<PlanDay | null>(null);
+  const hadPlan = useRef(false);
   const [copied, setCopied] = useState(false);
+  const [taskBlob, setTaskBlob] = useState<string | null>(null);
+  const [chips, setChips] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function writeTask(value: string | null) {
+    setTaskBlob(value);
+    try {
+      if (value) window.sessionStorage.setItem(TASK_KEY, value);
+      else window.sessionStorage.removeItem(TASK_KEY);
+    } catch { /* private mode: the tab simply has no task */ }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -48,10 +60,19 @@ export function Planner({ locale }: { locale: Locale }) {
     if (!isShared) setMessages([{ role: "user", content: s.chips[0] }, { role: "assistant", content: s.demoReply, trip: true }]);
     const open = params.get("stop");
     if (open) setDetail(start.days.flatMap((d) => d.items).find((i) => i.id === open) ?? null);
+    try { setTaskBlob(window.sessionStorage.getItem(TASK_KEY)); } catch { /* ignore */ }
   }, [locale, s]);
 
   // Keep the plan and the view in the address bar so a reload (or a screenshot) lands in the same place.
   useEffect(() => {
+    if (plan) hadPlan.current = true;
+    else if (hadPlan.current) {
+      hadPlan.current = false;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("trip");
+      url.searchParams.delete("screen");
+      window.history.replaceState(null, "", url);
+    }
     if (!plan) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("demo");
@@ -70,13 +91,16 @@ export function Planner({ locale }: { locale: Locale }) {
     if (screen === "trip") setScreen("chat");
     try {
       const response = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: conversation.slice(-12).map(({ role, content: c }) => ({ role, content: c })), plan }) });
+        body: JSON.stringify({ messages: conversation.slice(-25).map(({ role, content: c }) => ({ role, content: c })), plan, locale, ...(taskBlob ? { task: taskBlob } : {}) }) });
       const data = await response.json();
       if (!response.ok) throw new Error();
-      // Fixed plan: only the first plan is accepted. Anything the server sends later is ignored.
-      const next = !plan && data.plan ? parseTripPlan(data.plan) : null;
-      if (next) { setPlan(next); trackUsage("plan_generated"); }
-      setMessages([...conversation, { role: "assistant", content: String(data.reply || ""), trip: !!next }]);
+      if (typeof data.task === "string") writeTask(data.task);
+      if (Array.isArray(data.chips)) setChips(data.chips.filter((chip: unknown): chip is string => typeof chip === "string"));
+      const next = data.plan ? parseTripPlan(data.plan) : null;
+      const changed = !!next && JSON.stringify(next) !== JSON.stringify(plan);
+      if (data.intent === "new_objective" && !next) setPlan(null);
+      else if (changed && next) { if (!plan) trackUsage("plan_generated"); setPlan(next); }
+      setMessages([...conversation, { role: "assistant", content: String(data.reply || ""), trip: changed }]);
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
     } finally { setBusy(false); }
@@ -99,9 +123,23 @@ export function Planner({ locale }: { locale: Locale }) {
     document.title = title;
   }
   function submit(event: FormEvent) { event.preventDefault(); void send(draft); }
+  function startOver() {
+    writeTask(null);
+    setMessages([]);
+    setPlan(null);
+    setChips([]);
+    setError(null);
+    setDraft("");
+    setScreenState("chat");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("trip");
+    url.searchParams.delete("screen");
+    url.searchParams.delete("stop");
+    url.searchParams.delete("demo");
+    window.history.replaceState(null, "", url);
+  }
 
-  const asked = new Set(messages.filter((m) => m.role === "user").map((m) => m.content));
-  const suggestions = plan ? s.questions.filter((q) => !asked.has(q)).slice(0, 2) : s.startChips;
+  const suggestions = messages.length === 0 && !plan ? s.startChips : chips;
   const detailDay = detail && plan ? plan.days.find((d) => d.items.some((i) => i.id === detail.id)) : null;
 
   const composer = !shared && (
@@ -119,6 +157,7 @@ export function Planner({ locale }: { locale: Locale }) {
       {screen === "chat" && !shared && (
         <section className="plan-chat" aria-label="Concierge">
           <h1 className="sr-only">{s.title}</h1>
+          {(messages.length > 0 || plan) && <button type="button" className="plan-back" onClick={startOver}>{s.startOver}</button>}
           <div className="plan-messages" aria-live="polite">
             {!messages.length && <p className="plan-msg plan-msg-assistant plan-greet">{s.greeting}</p>}
             {messages.map((m, i) => (

@@ -30,7 +30,7 @@ export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: 
   const v = cardView(item, locale, s);
   if (!v) return null;
   if (item.kind === "transport") {
-    return <li className="plan-ferry" data-testid="card-transport"><time className="mono">{item.start}</time><span>{v.title}</span>{v.meta && <span className="plan-ferry-note">· {v.meta}</span>}</li>;
+    return <li className="plan-ferry" data-testid="card-transport"><time className="mono">{item.start ?? s.timeUnpublished}</time><span>{v.title}</span>{v.meta && <span className="plan-ferry-note">· {v.meta}</span>}</li>;
   }
   const body = (
     <>
@@ -130,7 +130,7 @@ export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: Pl
   const v = cardView(item, locale, s);
   if (!v) return null;
   const contact = contactLinks(v.operator);
-  const end = (() => { const m = Number(item.start.slice(0, 2)) * 60 + Number(item.start.slice(3)) + item.durationMin; return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; })();
+  const end = item.start ? (() => { const m = Number(item.start.slice(0, 2)) * 60 + Number(item.start.slice(3)) + item.durationMin; return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; })() : "";
   const type = v.meta.split(" · ")[0];
   const sea = day.sea;
   return (
@@ -142,7 +142,7 @@ export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: Pl
         <h2 id="plan-sheet-title">{v.title}</h2>
         {v.description && <p className="plan-sheet-desc">{v.description}</p>}
         <dl className="plan-facts">
-          <div><dt>{s.time}</dt><dd className="mono">{dayParts(day.date, locale).short} · {item.start} – {end}</dd></div>
+          <div><dt>{s.time}</dt><dd className="mono">{dayParts(day.date, locale).short} · {item.start ? `${item.start} – ${end}` : s.timeUnpublished}</dd></div>
           {v.location && <div><dt>{s.meet}</dt><dd>{v.location}</dd></div>}
           {v.operator && <div><dt>{s.operator}</dt><dd>{v.operator.name}</dd></div>}
           {v.seaDependent && <div><dt>{s.seaFact}</dt><dd>{s.seaFactLine[sea?.status ?? "unknown"]}{sea?.waveHeightM != null ? ` · ${sea.waveHeightM.toFixed(1)} ${s.waves}` : ""}</dd></div>}
