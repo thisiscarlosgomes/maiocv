@@ -22,6 +22,23 @@ async function planDates(page: Page) {
   return plan!.days.map((day) => day.date);
 }
 
+test("moving to the 18th keeps four days and sends a new card", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/en/plan");
+  await ask(page, "4 days, no car");
+  await expect(page.getByTestId("plan-trip-card")).toHaveCount(1);
+  const before = await planDates(page);
+  expect(before).toHaveLength(4);
+  await ask(page, "am actually going on the 18th");
+  await expect(page.getByTestId("plan-trip-card")).toHaveCount(2);
+  const after = await planDates(page);
+  expect(after).toHaveLength(4);
+  expect(after[0]?.endsWith("-18")).toBe(true);
+  expect(after[0]).not.toBe(before[0]);
+  await expect(page.getByTestId("assistant-reply").last()).toContainText(/Moved your 4 days/);
+  await expect(page.getByTestId("assistant-reply").last()).not.toContainText(/didn't change|All set/);
+});
+
 for (const viewport of viewports) {
   for (const [locale, open, extra, flight, relax] of [
     ["en", "3 days from wed 18, with a car", "add another day", "whens the next flight", "make day 2 more relaxed"],

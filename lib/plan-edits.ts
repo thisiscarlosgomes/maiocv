@@ -161,6 +161,22 @@ export function samePlanShape(a: TripPlan | null, b: TripPlan | null): boolean {
   return sig(a) === sig(b);
 }
 
+/** Start moved, length kept. Null when the span did not change, so the caller must not claim a move. */
+export function shiftDiffReply(before: TripPlan, after: TripPlan, locale: TaskLocale): string | null {
+  const sameSpan = before.days.length === after.days.length
+    && before.days[0]?.date === after.days[0]?.date
+    && before.days.at(-1)?.date === after.days.at(-1)?.date;
+  if (sameSpan) return null;
+  if (before.days.length !== after.days.length) return lengthDiffReply(before, after, locale);
+  const n = after.days.length;
+  const start = humanPlanDate(after.days[0].date, locale);
+  const end = humanPlanDate(after.days.at(-1)!.date, locale);
+  return say(locale,
+    `Moved your ${n} days to ${start} – ${end}.`,
+    `Mudei os ${n} dias para ${start} – ${end}.`,
+    `J'ai déplacé vos ${n} jours : ${start} – ${end}.`);
+}
+
 /** Sentence from the dates that actually changed. Null when the span is the same. */
 export function lengthDiffReply(before: TripPlan, after: TripPlan, locale: TaskLocale): string | null {
   const sameSpan = before.days.length === after.days.length

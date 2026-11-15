@@ -1,12 +1,12 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
-import { applyLength, claimsUnappliedEdit, encodeTransportFact, isCarRentalQuestion, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
+import { applyDateShift, applyLength, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, isCarRentalQuestion, parseDateShift, parseLengthEdit, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
 import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
-import { addBoatTrip, addListedStop, answerAboutPlan, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape } from "./plan-edits.ts";
+import { addBoatTrip, addListedStop, answerAboutPlan, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
 import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
@@ -267,7 +267,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const changed = Boolean(plan && !samePlanShape(plan, current));
     let text = reply;
     if (!changed && (claimsUnappliedEdit(text) || /Tap the card|Toque no cartão|Touchez la carte/i.test(text))) {
-      text = sayRouter(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan.");
+      text = hasDateIntent(lastUser)
+        ? sayRouter(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?")
+        : sayRouter(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan.");
     }
     return result(next, text, changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built && changed, work ?? turnWork(lastUser, seeded, today));
   };
@@ -471,6 +473,19 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
+  const dateShift = parseDateShift(lastUser, today, task.constraints.dates?.start ?? current?.days[0]?.date);
+  if (dateShift === "ask" && (current || task.constraints.dates?.start)) {
+    return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+  }
+  if (dateShift && dateShift !== "ask" && !parseLengthEdit(lastUser)) {
+    const baseStart = task.constraints.dates?.start ?? current?.days[0]?.date;
+    const baseDays = task.constraints.dates?.days ?? current?.days.length;
+    if (baseStart && baseDays) {
+      const span = applyDateShift(baseStart, baseDays, dateShift);
+      if (span) task = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { dates: { start: span.start, days: span.days } }) });
+    }
+  }
+
   const lengthEdit = parseLengthEdit(lastUser);
   if (lengthEdit) {
     const baseStart = task.constraints.dates?.start ?? current?.days[0]?.date;
@@ -481,7 +496,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     }
   }
 
-  const planning = (classification.planShaping || Boolean(lengthEdit && task.constraints.dates?.start))
+  const planning = (classification.planShaping || Boolean((lengthEdit || (dateShift && dateShift !== "ask")) && task.constraints.dates?.start))
     && classification.intent !== "side_question"
     && !classification.smallTalk
     && !classification.cancelOnly
@@ -525,9 +540,19 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     }
   }
 
+  if (dateShift && dateShift !== "ask" && !lengthEdit && current && typeof task.constraints.car === "boolean") {
+    const rebuilt = await rebuildPlan(task);
+    if (!rebuilt || samePlanShape(rebuilt.plan, current)) {
+      return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+    }
+    const reply = shiftDiffReply(current, rebuilt.plan, task.locale);
+    if (!reply) return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+    return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
+  }
+
   if (lengthEdit && current && typeof task.constraints.car === "boolean") {
     const rebuilt = await rebuildPlan(task);
-    if (!rebuilt) return finish(say(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan."), current);
+    if (!rebuilt) return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
     const reply = lengthDiffReply(current, rebuilt.plan, task.locale) ?? lengthUnchangedReply(current, task.locale);
     return finish(reply, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, true, false, false, "forecast");
   }
