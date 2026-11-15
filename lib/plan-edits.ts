@@ -1,7 +1,7 @@
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { resolveOverlaps } from "./full-day.ts";
 import { applyLength, planQuestionKind, type LengthEdit } from "./plan-router.ts";
-import { humanPlanDate, itemLabel } from "./plan-reply.ts";
+import { closeSentence, humanPlanDate, itemLabel } from "./plan-reply.ts";
 import { EXPERIENCES, FOOD, PLACES, distanceKm, food, isExcludedExperience, localizedPlaceName, place, type PlanItem, type TripPlan } from "./trip.ts";
 
 /** Meals and anchored places. Free rows and the arrival header are not stops. */
@@ -256,10 +256,10 @@ export function shiftDiffReply(before: TripPlan, after: TripPlan, locale: TaskLo
   const n = after.days.length;
   const start = humanPlanDate(after.days[0].date, locale);
   const end = humanPlanDate(after.days.at(-1)!.date, locale);
-  return say(locale,
-    `Moved your ${n} days to ${start} – ${end}.`,
-    `Mudei os ${n} dias para ${start} – ${end}.`,
-    `J'ai déplacé vos ${n} jours : ${start} – ${end}.`);
+  return closeSentence(say(locale,
+    `Moved your ${n} days to ${start} – ${end}`,
+    `Mudei os ${n} dias para ${start} – ${end}`,
+    `J'ai déplacé vos ${n} jours : ${start} – ${end}`));
 }
 
 /** Sentence from the dates that actually changed. Null when the span is the same. */
@@ -271,20 +271,20 @@ export function lengthDiffReply(before: TripPlan, after: TripPlan, locale: TaskL
   const n = after.days.length;
   const start = humanPlanDate(after.days[0].date, locale);
   const end = humanPlanDate(after.days.at(-1)!.date, locale);
-  return say(locale,
-    `Your trip now runs ${n} ${n === 1 ? "day" : "days"}, ${start} to ${end}.`,
-    `A viagem passa a ter ${n} ${n === 1 ? "dia" : "dias"}, de ${start} a ${end}.`,
-    `Le voyage fait maintenant ${n} ${n === 1 ? "jour" : "jours"}, du ${start} au ${end}.`);
+  return closeSentence(say(locale,
+    `Your trip now runs ${n} ${n === 1 ? "day" : "days"}, ${start} to ${end}`,
+    `A viagem passa a ter ${n} ${n === 1 ? "dia" : "dias"}, de ${start} a ${end}`,
+    `Le voyage fait maintenant ${n} ${n === 1 ? "jour" : "jours"}, du ${start} au ${end}`));
 }
 
 export function lengthUnchangedReply(plan: TripPlan, locale: TaskLocale): string {
   const n = plan.days.length;
   const start = humanPlanDate(plan.days[0].date, locale);
   const end = humanPlanDate(plan.days.at(-1)!.date, locale);
-  return say(locale,
-    `The trip is already ${n} ${n === 1 ? "day" : "days"}, ${start} to ${end}.`,
-    `A viagem já tem ${n} ${n === 1 ? "dia" : "dias"}, de ${start} a ${end}.`,
-    `Le voyage a déjà ${n} ${n === 1 ? "jour" : "jours"}, du ${start} au ${end}.`);
+  return closeSentence(say(locale,
+    `The trip is already ${n} ${n === 1 ? "day" : "days"}, ${start} to ${end}`,
+    `A viagem já tem ${n} ${n === 1 ? "dia" : "dias"}, de ${start} a ${end}`,
+    `Le voyage a déjà ${n} ${n === 1 ? "jour" : "jours"}, du ${start} au ${end}`));
 }
 
 export function nextLength(plan: TripPlan, edit: LengthEdit): { start: string; days: number } {

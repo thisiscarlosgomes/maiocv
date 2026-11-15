@@ -488,12 +488,13 @@ const COUPLES = [
 for (const item of COUPLES) {
   test(`party stays a couple: ${item.phrase}`, async () => {
     const started = Date.now();
-    const { plan, reply } = await ask(item.phrase, item.locale);
+    const { plan, before, reply } = await ask(item.phrase, item.locale);
     assert.ok(Date.now() - started < 3_000, reply);
+    assert.equal(plan, before, reply);
     assert.equal(plan?.party.adults, 2, reply);
     assert.equal(plan?.party.kids, 0, reply);
     assert.equal(plan?.party.youngestAge, undefined);
-    assert.match(reply, /nothing on the plan changes|nada muda no plano|rien ne change/i);
+    assert.match(reply, /already for|já é para|déjà pour/i);
     assert.doesNotMatch(reply, UNCHANGED);
   });
 }

@@ -113,6 +113,17 @@ test("a plan summary on a non-plan turn is flagged in English, Portuguese, and F
   const timetable = "Flights from Maio on Sun 15 Nov: 16:55 (7B-171), 12:45 (7B-171), 15:30 (7B-171) to Praia. Published timetable, not live status.";
   const clocks = inspectTurn(turn({ botReply: timetable, planTurn: false, userMessage: "whens the next flight", cardShown: false }));
   assert.equal(clocks.includes("plan_reemitted"), false, timetable);
+  const aboutOneDay = [
+    ["what's on day 2", "Day 2 (Thu 19 Nov): Enzo Caffe Pizza, Morro Beach, Nha Terra, Baxona Beach."],
+    ["Where is lunch on day 2?", "Lunch on day 2 is Nha Terra at 13:15."],
+    ["When do I leave?", "You leave on Fri 20 Nov at 20:00."],
+    ["o que há no dia 2", "Dia 2 (qui 19 nov): Enzo Caffe Pizza, Praia do Morro."],
+    ["qu'est-ce qu'il y a le jour 2", "Jour 2 (jeu. 19 nov) : Enzo Caffe Pizza, plage de Morro."],
+  ] as const;
+  for (const [userMessage, botReply] of aboutOneDay) {
+    const reasons = inspectTurn(turn({ botReply, planTurn: false, userMessage, cardShown: false }));
+    assert.equal(reasons.includes("plan_reemitted"), false, botReply);
+  }
 });
 
 test("empty replies, fallbacks, model errors, and timeouts are flagged in English, Portuguese, and French", () => {

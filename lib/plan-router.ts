@@ -419,10 +419,11 @@ export function beachSwapDay(text: string): number | null {
 const BARE_REPLACE = /^(?:replace|swap|change|troca|trocar|substitui|remplace|remplacer|muda|mudar)$/;
 const SHORT_YES = /^(?:yes|yeah|yep|yup|sure|sim|oui|si|claro)$/;
 
-function pendingKind(pending: string | null): "start" | "changes" | null {
+function pendingKind(pending: string | null): "start" | "end" | "changes" | null {
   if (!pending) return null;
   const n = loosen(pending);
   if (/which day should the trip start|para que dia mudo|quel jour pour le debut/.test(n)) return "start";
+  if (/which day are you leaving|em que dia sai|quel jour partez/.test(n)) return "end";
   if (/want changes|quer mudanc|changer quelque chose|voulez changer/.test(n)) return "changes";
   return null;
 }
@@ -430,7 +431,8 @@ function pendingKind(pending: string | null): "start" | "changes" | null {
 export type FollowUp =
   | { kind: "ask-replace" }
   | { kind: "ask-change" }
-  | { kind: "start-day"; day: number };
+  | { kind: "start-day"; day: number }
+  | { kind: "end-day"; day: number };
 
 /**
  * A short reply to the question we just asked.
@@ -442,11 +444,11 @@ export function resolveFollowUp(text: string, pending: string | null, hasPlan: b
   if (!n || n.length > 48) return null;
   const asked = pendingKind(pending);
   if (asked === "changes" && SHORT_YES.test(n)) return { kind: "ask-change" };
-  if (asked === "start") {
+  if (asked === "start" || asked === "end") {
     const day = n.match(/^(?:the |dia |le |o )?(\d{1,2})(?:st|nd|rd|th)?$/);
     if (day) {
       const value = Number(day[1]);
-      if (value >= 1 && value <= 31) return { kind: "start-day", day: value };
+      if (value >= 1 && value <= 31) return { kind: asked === "end" ? "end-day" : "start-day", day: value };
     }
   }
   if (hasPlan && BARE_REPLACE.test(n)) return { kind: "ask-replace" };

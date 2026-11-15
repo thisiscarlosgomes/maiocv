@@ -13,8 +13,14 @@ export function humanPlanDate(iso: string, locale: TaskLocale): string {
   const day = new Intl.DateTimeFormat(intl[locale], { day: "numeric", timeZone: "UTC" }).format(date);
   const month = new Intl.DateTimeFormat(intl[locale], { month: "short", timeZone: "UTC" }).format(date).replace(/\.$/, "");
   if (locale === "pt") return `${weekday.toLowerCase().slice(0, 3)} ${day} ${month.toLowerCase()}`;
-  if (locale === "fr") return `${weekday.toLowerCase()}. ${day} ${month.toLowerCase()}.`;
+  // Weekday keeps its abbreviation mark ("mer."). The date itself does not end with a period, so a sentence can close it.
+  if (locale === "fr") return `${weekday.toLowerCase()}. ${day} ${month.toLowerCase()}`;
   return `${weekday} ${day} ${month}`;
+}
+
+/** One closing period, even when the last token is already an abbreviation. */
+export function closeSentence(text: string): string {
+  return `${text.replace(/[.!\s]+$/g, "").trim()}.`;
 }
 
 const SLOT: Record<TaskLocale, Record<string, string>> = {

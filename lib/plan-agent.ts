@@ -1,15 +1,15 @@
 import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage } from "ai";
 import { z } from "zod";
 import { applyClassification, classify, experienceIdsMentioned, extractConstraints, isBusinessLookup, isFourByFourQuestion, isTravelLookup, normalizeUtterance, type Intent } from "./awareness/classify.ts";
-import { applyDateShift, applyLength, beachSwapDay, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, inclusiveDays, isCarRentalQuestion, isTravelChoice, looksLikePlanEdit, parseDateShift, parseLengthEdit, refersToFerry, refersToFlight, resolveDayOfMonth, resolveFollowUp, say as sayRouter, shortWeekday, spokenDates, upcomingWeekday, type TransportMention } from "./plan-router.ts";
+import { applyDateShift, applyLength, beachSwapDay, claimsUnappliedEdit, encodeTransportFact, hasDateIntent, inclusiveDays, isCarRentalQuestion, isTravelChoice, looksLikePlanEdit, parseDateShift, parseLengthEdit, refersToFerry, refersToFlight, resolveDayOfMonth, resolveFollowUp, say as sayRouter } from "./plan-router.ts";
 import { answerIslandQuestion, answerPlaceList, fourByFourReply, isSunsetClockQuestion, sideQuestionFallback, sunsetTimeReply } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, looksLikeItineraryDump, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
 import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, dropBoatTrip, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply, swapDayBeach } from "./plan-edits.ts";
-import { gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
+import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
-import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
+import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
 import { forecastSourceName, loadDailyForecast, loadSunsets, maioClock, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
@@ -462,8 +462,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const specificFerry = /\b(is there a ferry|ha barco|y a-t-il un ferry|ferry timetable|horario do barco|horaire du ferry)\b/.test(spoken);
   if (classification.intent === "side_question" && isTravelLookup(lastUser) && !specificFerry) {
     const table = await loadTimetable(deps.fetchImpl, now);
-    noteTransport(table.retrievedAt, table.ok ? transportFact(table, today, lastUser) : "unavailable");
     const clock = maioClock(now);
+    noteTransport(table.retrievedAt, table.ok ? encodeTransportFact(citedTransport(lastUser, table, today, clock.time)) : "unavailable");
     return finish(answerTravelQuestion(lastUser, task.locale, table, today, {
       time: clock.time,
       planEnd: current?.days.at(-1)?.date ?? null,
@@ -736,21 +736,26 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       const constraints = mergeConstraints(task.constraints, { party });
       if (party.kids === 0 && constraints.party) delete constraints.party.youngestAge;
       const nextTask = refreshTask({ ...task, constraints });
+      const baby = /\b(?:baby|bebe)\b/.test(spoken);
+      const wanted = {
+        adults: party.adults ?? open.party.adults,
+        kids: party.kids ?? open.party.kids,
+        youngestAge: party.kids === 0 ? undefined : party.youngestAge ?? open.party.youngestAge,
+      };
+      const sameParty = wanted.adults === open.party.adults && wanted.kids === open.party.kids && wanted.youngestAge === open.party.youngestAge;
+      if (sameParty) {
+        return { reply: alreadyPartyReply(locale, open.party, baby), plan: open, events: [], task: nextTask, work: "moment" };
+      }
       const prior = { adults: open.party.adults, kids: open.party.kids, ...(open.party.youngestAge !== undefined ? { youngestAge: open.party.youngestAge } : {}) };
       const baselineTask = refreshTask({ ...nextTask, constraints: { ...nextTask.constraints, party: prior } });
       const [baseline, rebuilt] = await Promise.all([rebuildPlan(baselineTask), rebuildPlan(nextTask)]);
       if (!rebuilt) return { reply: say(locale, "I couldn't update the party.", "Não consegui atualizar o grupo.", "Je n'ai pas pu mettre le groupe à jour."), plan: open, events: [], task: nextTask, work: "moment" };
-      const baby = /\b(?:baby|bebe)\b/.test(spoken);
-      const stopsChanged = Boolean(baseline && itinerarySig(baseline.plan) !== itinerarySig(rebuilt.plan));
-      const sameParty = rebuilt.plan.party.adults === open.party.adults
-        && rebuilt.plan.party.kids === open.party.kids
-        && rebuilt.plan.party.youngestAge === open.party.youngestAge;
-      const reply = stopsChanged
-        ? partyEditReply(locale, rebuilt.plan.party, true, baby)
-        : sameParty
-          ? say(locale, "Nothing on the plan changes.", "Nada muda no plano.", "Rien ne change sur le plan.")
-          : partyEditReply(locale, rebuilt.plan.party, false, baby);
-      return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
+      const stopsMustChange = Boolean(baseline && itinerarySig(baseline.plan) !== itinerarySig(rebuilt.plan));
+      if (!stopsMustChange) {
+        const kept = { ...open, party: rebuilt.plan.party };
+        return { reply: partyEditReply(locale, kept.party, false, baby), plan: kept, events: [], task: nextTask, work: "moment" };
+      }
+      return { reply: partyEditReply(locale, rebuilt.plan.party, true, baby), plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
     }
     if (intent.kind === "add_activity" && /boat|barco|bateau/i.test(`${intent.activity ?? ""} ${lastUser}`)) {
       const edited = addBoatTrip(open, locale);
@@ -841,11 +846,17 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (follow?.kind === "ask-change") {
     return finish(say(task.locale, "What should I change?", "O que devo mudar?", "Que voulez-vous changer ?"), current);
   }
-  if (follow?.kind === "start-day" && current) {
+  if ((follow?.kind === "start-day" || follow?.kind === "end-day") && current) {
     const anchor = current.days[0]?.date;
     const placed = anchor ? resolveDayOfMonth(today, follow.day, anchor) : null;
-    const span = anchor && placed ? applyDateShift(anchor, current.days.length, { start: placed }) : null;
-    if (!span) return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+    const shift = follow.kind === "end-day" ? { end: placed ?? "" } : { start: placed ?? "" };
+    const unfit = follow.kind === "end-day" && anchor && placed && (!inclusiveDays(anchor, placed) || (inclusiveDays(anchor, placed) ?? 0) > 7);
+    const span = !unfit && anchor && placed ? applyDateShift(anchor, current.days.length, shift) : null;
+    if (!span) {
+      return finish(follow.kind === "end-day"
+        ? say(task.locale, "That leaving day doesn't fit this trip. Which day are you leaving?", "Esse dia de saída não cabe nesta viagem. Em que dia sai?", "Ce jour de départ ne tient pas dans ce voyage. Quel jour partez-vous ?")
+        : say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
+    }
     const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { dates: { start: span.start, days: span.days } }) });
     const rebuilt = await rebuildPlan(nextTask);
     if (!rebuilt || samePlanShape(rebuilt.plan, current)) return finish(lengthUnchangedReply(current, task.locale), current);
@@ -1138,24 +1149,6 @@ function listedStopTarget(text: string, places: Task["lastPlaces"]): { day: numb
   const index = /\b(?:second|segund|deuxieme|2e|2nd)\b/.test(text) ? 1 : /\b(?:third|terceir|troisieme|3e|3rd)\b/.test(text) ? 2 : 0;
   const place = places[index];
   return place ? { day, place } : null;
-}
-
-function transportFact(table: { sailings: { date: string; departure: string; from: string; to: string }[]; flights: { date: string; departure: string; from: string; to: string }[] }, today: string, text: string): string {
-  const n = normalizeUtterance(text);
-  const wantFlight = /\b(?:flights?|voos?|vols?|avion)\b/.test(n);
-  const focus = spokenDates(text, today).start ?? (shortWeekday(text) !== undefined ? upcomingWeekday(today, shortWeekday(text)!) : null);
-  const byDate = <T extends { date: string; departure: string }>(rows: T[]) => [...rows].filter((row) => focus ? row.date === focus : row.date >= today).sort((a, b) => a.date.localeCompare(b.date) || a.departure.localeCompare(b.departure));
-  const mentions: TransportMention[] = [];
-  if (wantFlight) {
-    const leg = byDate(table.flights.filter((item) => item.from === "MMO"))[0];
-    if (leg) mentions.push({ kind: "flt", date: leg.date, time: leg.departure, from: leg.from, to: leg.to });
-  } else {
-    const inbound = byDate(table.sailings.filter((row) => /maio/i.test(row.to) && !/maio/i.test(row.from)))[0];
-    const outbound = byDate(table.sailings.filter((row) => /maio/i.test(row.from) && /santiago|praia/i.test(row.to)))[0];
-    if (inbound) mentions.push({ kind: "in", date: inbound.date, time: inbound.departure, from: inbound.from, to: inbound.to });
-    if (outbound) mentions.push({ kind: "out", date: outbound.date, time: outbound.departure, from: outbound.from, to: outbound.to });
-  }
-  return mentions.length ? encodeTransportFact(mentions) : "none";
 }
 
 function smallTalkReply(locale: TaskLocale, spoken: string, plan: TripPlan | null): string {

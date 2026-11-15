@@ -250,6 +250,11 @@ export function shiftFromIntent(intent: EditIntent): DateShift | "ask" | null {
   return "ask";
 }
 
+export function alreadyPartyReply(locale: TaskLocale, party: { adults: number; kids: number; youngestAge?: number }, baby = false): string {
+  const label = partyLabel(locale, party, baby);
+  return say(locale, `The plan is already for ${label}.`, `O plano já é para ${label}.`, `Le plan est déjà pour ${label}.`);
+}
+
 export function partyEditReply(locale: TaskLocale, party: { adults: number; kids: number; youngestAge?: number }, stopsChanged: boolean, baby = false): string {
   const label = partyLabel(locale, party, baby);
   if (!stopsChanged) return say(locale, `Noted: ${label}. The days stay as they are.`, `Anotado: ${label}. Os dias ficam como estão.`, `Noté : ${label}. Les jours restent comme ils sont.`);

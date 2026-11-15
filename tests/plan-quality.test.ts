@@ -5,7 +5,9 @@ import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { classify, resolveCarStance } from "../lib/awareness/classify.ts";
 import { emptyTask, refreshTask, type Task } from "../lib/awareness/task.ts";
+import { lengthDiffReply } from "../lib/plan-edits.ts";
 import { runPlanAgent } from "../lib/plan-agent.ts";
+import { humanPlanDate } from "../lib/plan-reply.ts";
 import { parseDateShift } from "../lib/plan-router.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { place, type TripPlan } from "../lib/trip.ts";
@@ -320,6 +322,158 @@ test("sunset answers with the calculated Cape Verde time", async () => {
   );
   assert.match(fr.reply, /18:41/);
   assert.match(fr.reply, /calculé/i);
+});
+
+test("restating the same party keeps the edited plan", async () => {
+  const phrases = [
+    ["en", "we're just a couple, no kids", /already for two adults/i],
+    ["pt", "somos um casal, sem crianças", /já é para dois adultos/i],
+    ["fr", "nous sommes un couple, sans enfants", /déjà pour deux adultes/i],
+  ] as const;
+  for (const [locale, phrase, pattern] of phrases) {
+    const { plan, task } = planned(locale, "2026-11-18", 3);
+    const relaxed = await runPlanAgent(
+      [{ role: "user", content: locale === "pt" ? "deixa o dia 2 mais calmo" : locale === "fr" ? "rends le jour 2 plus calme" : "Make day 2 more relaxed" }],
+      plan,
+      { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+      task,
+    );
+    const day2 = JSON.stringify(relaxed.plan?.days[1].items);
+    assert.notEqual(day2, JSON.stringify(plan.days[1].items));
+    const again = await runPlanAgent(
+      [{ role: "user", content: phrase }],
+      relaxed.plan,
+      { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+      relaxed.task,
+    );
+    assert.equal(again.plan, relaxed.plan, again.reply);
+    assert.match(again.reply, pattern);
+    assert.equal(JSON.stringify(again.plan?.days[1].items), day2);
+  }
+});
+
+test("plan around the ferry just named keeps that date", async () => {
+  const boatsOnly = {
+    retrievedAt: "2026-11-15T21:00:00.000Z",
+    schedules: [
+      { date: "2026-11-15", from: "Santiago", to: "Maio", departure: "08:00" },
+      { date: "2026-11-18", from: "Santiago", to: "Maio", departure: "07:00" },
+    ],
+  };
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("schedules/boats")) return Response.json(boatsOnly);
+    if (url.includes("schedules/flights")) return Response.json({ routes: {} });
+    return worldFetch()(input);
+  }) as typeof fetch;
+  const listed = await runPlanAgent(
+    [{ role: "user", content: "next ferry" }],
+    null,
+    { model: bomb(), fetchImpl, now: EVENING },
+  );
+  assert.match(listed.reply, /18/);
+  assert.match(listed.reply, /07:00/);
+  assert.doesNotMatch(listed.reply, /08:00/);
+  const held = await runPlanAgent(
+    [{ role: "user", content: "plan around that ferry" }],
+    null,
+    { model: bomb(), fetchImpl, now: EVENING },
+    listed.task,
+  );
+  assert.equal(held.plan, null);
+  assert.equal(held.task.constraints.dates?.start, "2026-11-18");
+  const built = await runPlanAgent(
+    [{ role: "user", content: "yes, renting a car" }],
+    null,
+    { model: bomb(), fetchImpl, now: EVENING },
+    held.task,
+  );
+  assert.equal(built.plan?.days[0]?.date, "2026-11-18", built.reply);
+  assert.notEqual(built.plan?.days[0]?.date, "2026-11-15");
+  for (const phrase of ["a partir dessa data", "à partir de cette date", "from that date"]) {
+    const pointed = await runPlanAgent(
+      [{ role: "user", content: phrase }],
+      null,
+      { model: bomb(), fetchImpl, now: EVENING },
+      listed.task,
+    );
+    assert.equal(pointed.task.constraints.dates?.start, "2026-11-18", phrase);
+  }
+});
+
+test("a bare date after the leaving question is the end date", async () => {
+  const { plan, task } = planned("en", "2026-11-16", 3);
+  const asked = await runPlanAgent(
+    [{ role: "user", content: "actually am leaving on the 10th" }],
+    plan,
+    { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+    task,
+  );
+  assert.match(asked.reply, /leaving/i);
+  assert.equal(asked.plan, plan);
+  const moved = await runPlanAgent(
+    [{ role: "user", content: "the 20th" }],
+    plan,
+    { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+    asked.task,
+  );
+  assert.equal(moved.plan?.days[0]?.date, "2026-11-16", moved.reply);
+  assert.equal(moved.plan?.days.at(-1)?.date, "2026-11-20", moved.reply);
+  assert.equal(moved.plan?.days.length, 5);
+  assert.doesNotMatch(moved.reply, /Which day should the trip start/);
+});
+
+test("a named day is answered before the next sailing", async () => {
+  const boatsOnly = {
+    retrievedAt: "2026-11-15T12:00:00.000Z",
+    schedules: [
+      { date: "2026-11-15", from: "Santiago", to: "Maio", departure: "08:00" },
+      { date: "2026-11-18", from: "Santiago", to: "Maio", departure: "07:00" },
+    ],
+  };
+  const flightsOnly = {
+    routes: { mmo_rai: [{ date: "2026-11-18", from: "MMO", to: "RAI", departure: "14:35", flight: "7B-171" }] },
+  };
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("schedules/boats")) return Response.json(boatsOnly);
+    if (url.includes("schedules/flights")) return Response.json(flightsOnly);
+    return worldFetch()(input);
+  }) as typeof fetch;
+  const asks = [
+    ["en", "any ferry tmrw", /16/, /18/, /07:00/],
+    ["pt", "algum barco amanhã", /16/, /18/, /07:00/],
+    ["fr", "un ferry demain", /16/, /18/, /07:00/],
+    ["en", "any flight tomorrow", /16/, /18/, /14:35/],
+  ] as const;
+  for (const [locale, phrase, askedDay, nextDay, clock] of asks) {
+    const result = await runPlanAgent(
+      [{ role: "user", content: phrase }],
+      null,
+      { model: bomb(), fetchImpl, now: TODAY },
+      emptyTask(locale),
+    );
+    assert.match(result.reply, askedDay, result.reply);
+    assert.match(result.reply, nextDay, result.reply);
+    assert.match(result.reply, clock, result.reply);
+    assert.match(result.reply, /no |não há|aucun/i, result.reply);
+  }
+});
+
+test("a French date at the end of a sentence does not gain a second period", () => {
+  assert.equal(humanPlanDate("2026-11-22", "fr").endsWith("."), false);
+  const before = buildPlan({
+    request: { startDate: "2026-11-18", days: 3, locale: "fr", adults: 2, hasCar: true, pace: "slow" },
+    forecast, sailings: [],
+  });
+  const after = buildPlan({
+    request: { startDate: "2026-11-18", days: 5, locale: "fr", adults: 2, hasCar: true, pace: "slow" },
+    forecast, sailings: [],
+  });
+  const reply = lengthDiffReply(before, after, "fr");
+  assert.ok(reply);
+  assert.doesNotMatch(reply!, /\.\./);
+  assert.match(reply!, /nov\.$/);
 });
 
 test("a 4x4 question does not add a car-rental sentence unless they ask where", async () => {
