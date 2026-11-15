@@ -4,22 +4,29 @@ import { z } from "zod";
 import { maioClock } from "../../../lib/agora";
 import { runPlanAgent } from "../../../lib/plan-agent";
 import { planEnabled } from "../../../lib/plan-flag";
+import { isProductionEnv, readTask, signTask, taskSecret } from "../../../lib/awareness/sign";
 import { parseTripPlan } from "../../../lib/trip";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const BodySchema = z.object({
-  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(20),
+  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(30),
   plan: z.unknown().optional(),
+  /** Server-signed task blob. The browser stores it; it is not a source of numbers. */
+  task: z.string().max(16_000).nullish(),
+  locale: z.enum(["pt", "en", "fr"]).optional(),
 });
 
 export async function POST(request: Request) {
   if (!planEnabled()) return Response.json({ error: "Not found" }, { status: 404 });
   const body = BodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Invalid request" }, { status: 400 });
+  if (isProductionEnv() && !taskSecret()) return Response.json({ error: "Planner unavailable" }, { status: 500 });
   const messages = body.data.messages as ModelMessage[];
   const current = body.data.plan ? parseTripPlan(body.data.plan) : null;
+  const locale = body.data.locale ?? current?.locale ?? "en";
+  const task = body.data.task ? readTask(body.data.task, process.env, locale) : null;
   try {
     let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
     // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.
@@ -27,8 +34,9 @@ export async function POST(request: Request) {
       const { mockModel, mockScript } = await import("../../../lib/plan-mock");
       model = mockModel(mockScript(messages, current, maioClock(new Date()).date));
     }
-    const result = await runPlanAgent(messages, current, { model, fetchImpl: fetch });
-    return Response.json(result);
+    const result = await runPlanAgent(messages, current, { model, fetchImpl: fetch }, task);
+    const signed = signTask(result.task);
+    return Response.json({ reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent });
   } catch {
     return Response.json({ error: "Planner unavailable" }, { status: 502 });
   }

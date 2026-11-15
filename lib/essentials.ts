@@ -182,6 +182,32 @@ async function loadPayments(fetchImpl: typeof fetch, retrievedAt: string): Promi
   }
 }
 
+/** Published sailings for every date in the payload, plus the envelope the portal already returns. */
+export async function loadBoatSchedule(fetchImpl: typeof fetch, now = new Date()): Promise<Envelope<Sailing[]>> {
+  const retrievedAt = now.toISOString();
+  try {
+    const payload = asRecord(await (await fetchImpl(`${portal}/api/schedules/boats`)).json());
+    const sailings = await loadSailings(async () => new Response(JSON.stringify(payload)));
+    const caveats = Array.isArray(payload.caveats) ? payload.caveats.filter((item): item is string => typeof item === "string") : [];
+    return {
+      kind: "published-schedule",
+      status: sailings.length ? "available" : "no-current-records",
+      source: boatsSource,
+      sourceUpdatedAt: null,
+      retrievedAt: typeof payload.retrievedAt === "string" ? payload.retrievedAt : retrievedAt,
+      caveats,
+      data: sailings,
+    };
+  } catch {
+    return unavailable("published-schedule", boatsSource, retrievedAt);
+  }
+}
+
+/** Published FlightMapper envelope. Status is the timetable, never a live position. */
+export async function loadFlightSchedule(fetchImpl: typeof fetch, now = new Date()) {
+  return loadFlight(fetchImpl, now.toISOString());
+}
+
 /** Every published sailing in the portal payload, any date (the source usually covers one day). */
 export async function loadSailings(fetchImpl: typeof fetch): Promise<Sailing[]> {
   try {

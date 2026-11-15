@@ -52,7 +52,8 @@ export function rowTag(item: PlanItem, s: PlanStrings): string {
 }
 
 /** Morning (<12), Afternoon (<17:30), Evening (<21), Night. */
-export function partOfDay(start: string, s: PlanStrings): string {
+export function partOfDay(start: string | undefined, s: PlanStrings): string {
+  if (!start) return "";
   const m = Number(start.slice(0, 2)) * 60 + Number(start.slice(3));
   return m < 720 ? s.parts.morning : m < 1050 ? s.parts.afternoon : m < 1260 ? s.parts.evening : s.parts.night;
 }
@@ -190,6 +191,7 @@ export function dayParts(date: string, locale: Locale): { short: string; weekday
 
 /** "10:00 – 12:30" for timed visits, just "13:00" for meals and arrivals. */
 export function timeSpan(item: PlanItem): string {
+  if (!item.start) return "";
   if (item.kind === "food" || item.kind === "transport" || !item.durationMin) return item.start;
   if (item.kind === "free" && !["rest", "free-time"].includes(item.refId)) return item.start;
   const m = Number(item.start.slice(0, 2)) * 60 + Number(item.start.slice(3)) + item.durationMin;

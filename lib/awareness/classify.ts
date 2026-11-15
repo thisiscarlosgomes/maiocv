@@ -74,7 +74,7 @@ export function detectLocale(text: string): TaskLocale | undefined {
   if (/\b(?:answer in french|en francais|em frances|reponds en francais)\b/.test(n)) return "fr";
   if (/\b(?:em portugues|in portuguese|responde em portugues)\b/.test(n)) return "pt";
   if (/\b(?:nous|jours?|voiture|enfant|plage|sans|sommes)\b/.test(n) && /\b(?:nous|jours?|voiture|enfant|sommes)\b/.test(n)) return "fr";
-  if (/\b(?:dias?|somos|carro|praia|amanha|sexta|crianca|bebe|sem carro|voces|vos)\b/.test(n)) return "pt";
+  if (/\b(?:dias?|somos|sem carro|amanha|crianca|bebe|voces?)\b/.test(n)) return "pt";
   return undefined;
 }
 
@@ -171,7 +171,7 @@ export function extractConstraints(text: string, today: string): TaskConstraints
 
 function extractParty(text: string): TaskConstraints["party"] | undefined {
   const party: NonNullable<TaskConstraints["party"]> = {};
-  const total = wordNumber(text.match(/\b(?:nous sommes|somos|we are|family of|familia de|famille de)\s+(\d+|two|three|four|five|six|dois|duas|tres|quatro|deux|trois|quatre)\b/)?.[1]);
+  const total = wordNumber(text.match(/\b(?:nous sommes|somos|we are|family of|familia de|famille de)\s+(\d+|two|three|four|five|six|dois|duas|tres|quatro|deux|trois|quatre)\b(?!\s+(?:adults?|adultos?|adultes?))/)?.[1]);
   const adults = wordNumber(text.match(/\b(\d+|two|three|four|dois|duas|tres|deux|trois|quatre)\s+(?:adults?|adultos?|adultes?)\b/)?.[1]);
   const ofUs = /\b(?:two of us|somos dois|deux personnes)\b/.test(text) ? 2 : undefined;
   const oneChild = /\b(?:dont un enfant|com uma crianca|com um filho|with one child|with a child|with one kid)\b/.test(text);
@@ -215,6 +215,13 @@ function isQuestion(text: string): boolean {
   return /^(?:is|are|what|whats|what's|where|when|how|can|do|does|why|which|qual|quais|onde|quando|como|posso|o que|est-ce|quel|quelle|ou |quand |comment |puis-je)\b/.test(text);
 }
 
+function isTimetableQuestion(text: string): boolean {
+  return /\?/.test(text)
+    && /\b(?:ferry|flight|voo|barco|bateau|horario|horaire|timetable|schedule)\b/.test(text)
+    && /\b(?:is there|there a|ha |y a-t-il|status|horario|horaire|timetable|schedule|published)\b/.test(text)
+    && !/\b(?:stay|days|dias|jours|plan)\b/.test(text);
+}
+
 function isFactualAside(text: string): boolean {
   return /\b(?:hospital|hospit|emergency|emergencia|urgence)\b/.test(text)
     || /\b(?:in the air|flight status|estado do voo|le vol est|praia flight)\b/.test(text)
@@ -225,7 +232,7 @@ function isFactualAside(text: string): boolean {
 }
 
 function explicitCorrection(text: string): boolean {
-  return /\b(?:not friday|nao sexta|pas vendredi|i meant|na verdade|en fait|rented a car|alugamos(?: um)? carro|instead)\b/.test(text);
+  return /\b(?:not friday|nao sexta|pas vendredi|i meant|actually|na verdade|en fait|rented a car|alugamos(?: um)? carro|instead)\b/.test(text);
 }
 
 function newObjectiveCue(text: string): boolean {
@@ -242,12 +249,16 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
   const reference = resolveReference(text, task.lastPlaces);
   const research = isResearchQuestion(text);
   const patch = extractConstraints(text, ctx.today);
-  const planShaping = hasPlanSignal(patch);
+  const referenceOnly = Boolean(reference.kind) && !patch.dates && !patch.party && patch.car === undefined && !patch.quietEvenings && !patch.arrival && patch.boatTrips === undefined;
+  const planShaping = hasPlanSignal(patch) && !referenceOnly;
   const dietOnly = Boolean(patch.diet || patch.budget) && !planShaping;
   const base = { locale, patch, reference, cancelOnly: false, planShaping, research, scope: detectScope(text, research) };
 
   if (CANCEL_EXACT.test(n)) {
     return { ...base, intent: "cancel_pending", cancelOnly: true, planShaping: false, objective: task.objective ?? undefined };
+  }
+  if (isTimetableQuestion(text) || /\bin the air\b|\bflight status\b|\bestado do voo\b/.test(n)) {
+    return { ...base, intent: "side_question", planShaping: false, patch: {}, research: false };
   }
   if (newObjectiveCue(n) || (research && task.objective)) {
     return { ...base, intent: "new_objective", planShaping: !research && planShaping, objective: clipObjective(text) };

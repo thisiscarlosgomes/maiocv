@@ -26,7 +26,8 @@ export const PlanItemSchema = z.object({
   kind: ItemKindSchema,
   /** experience, food or place id from lib/trip-data.json; for transport the sailing/flight label */
   refId: z.string().min(1).max(80),
-  start: time,
+  /** Absent when a ferry or flight time is not published. Never a guessed clock. */
+  start: time.optional(),
   durationMin: z.number().int().min(0).max(720),
   note: z.string().max(200).optional(),
   slot: SlotSchema.optional(),
@@ -35,7 +36,8 @@ export const PlanItemSchema = z.object({
 export const PlanDaySchema = z.object({
   date: isoDate,
   sea: SeaDaySchema.nullable(),
-  items: z.array(PlanItemSchema).max(8),
+  /** Eight guest stops, plus an optional arrival header when the clock is unpublished. */
+  items: z.array(PlanItemSchema).max(9),
 });
 
 export const TripPlanSchema = z.object({
