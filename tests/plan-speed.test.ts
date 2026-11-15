@@ -106,6 +106,77 @@ test("yes, renting a car after plan around that ferry does not call the model", 
   assert.equal(built.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "07:00");
 });
 
+test("plan around that ferry names the sailing and asks for a car only when it is unknown", async () => {
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    return quietFetch()(input);
+  }) as typeof fetch;
+  const listed = await runPlanAgent(
+    [{ role: "user", content: "Is there a ferry on Wednesday?" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+  );
+  const around = await runPlanAgent(
+    [{ role: "user", content: "plan around that ferry" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+    listed.task,
+  );
+  assert.equal(around.plan, null);
+  assert.match(around.reply, /07:00/);
+  assert.match(around.reply, /car/i);
+  assert.equal(around.task.constraints.arrival?.time, "07:00");
+  assert.equal(around.task.constraints.dates?.start, "2026-11-18");
+});
+
+test("hospital, police, pharmacy and contact stay listings answers with no open plan", async () => {
+  let task = (await runPlanAgent(
+    [{ role: "user", content: "Do I need a 4x4?" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  )).task;
+  task = (await runPlanAgent(
+    [{ role: "user", content: "Do I need a 4x4?" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    task,
+  )).task;
+  assert.equal(task.objective, null);
+  const hospital = await runPlanAgent(
+    [{ role: "user", content: "hospital number" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    task,
+  );
+  assert.equal(hospital.intent, "side_question");
+  assert.equal(hospital.plan, null);
+  assert.match(hospital.reply, /\+238 255 11 30/);
+  assert.doesNotMatch(hospital.reply, /can't reach the model/);
+  const police = await runPlanAgent(
+    [{ role: "user", content: "police number" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.match(police.reply, /\b132\b/);
+  assert.equal(police.intent, "side_question");
+  const pharmacy = await runPlanAgent(
+    [{ role: "user", content: "where is a pharmacy" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.match(pharmacy.reply, /pharmacy|farmácia|pharmacie/i);
+  assert.equal(pharmacy.plan, null);
+  const contact = await runPlanAgent(
+    [{ role: "user", content: "who do I contact" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  assert.match(contact.reply, /255 11 30/);
+  assert.equal(contact.intent, "side_question");
+});
+
 test("a 4x4 question is answered from the listings", async () => {
   const started = Date.now();
   const result = await runPlanAgent(
