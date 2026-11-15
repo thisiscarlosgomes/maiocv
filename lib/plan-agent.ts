@@ -6,7 +6,8 @@ import { answerIslandQuestion, answerPlaceList } from "./island-answer.ts";
 import { humanPlanDate, itemLabel, planBlurb, publicPlanReply } from "./plan-reply.ts";
 import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn } from "./awareness/context.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, followUpChips, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
-import { addBoatTrip, addListedStop, answerAboutPlan, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
+import { addBoatTrip, addListedStop, answerAboutPlan, busyDay, itinerarySig, lengthDiffReply, lengthUnchangedReply, noTripReply, pdfReply, relaxDay, samePlanShape, shiftDiffReply } from "./plan-edits.ts";
+import { gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
@@ -267,9 +268,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const changed = Boolean(plan && !samePlanShape(plan, current));
     let text = reply;
     if (!changed && (claimsUnappliedEdit(text) || /Tap the card|Toque no cartão|Touchez la carte/i.test(text))) {
-      text = hasDateIntent(lastUser)
-        ? sayRouter(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?")
-        : sayRouter(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan.");
+      const edit = current ? parseEditIntent(lastUser, current, today) : null;
+      const editing = edit && edit.kind !== "other" && edit.kind !== "greeting" && edit.kind !== "question";
+      if (editing && current) {
+        const day = edit.kind === "relax_day" || edit.kind === "busier_day" ? resolveDayRef(edit.day, current, today, lastUser) : null;
+        text = day === "ambiguous"
+          ? whichDayQuestion(current, task.locale)
+          : sayRouter(task.locale, "The trip already matches that.", "A viagem já está assim.", "Le voyage est déjà comme ça.");
+      } else {
+        text = hasDateIntent(lastUser)
+          ? sayRouter(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?")
+          : sayRouter(task.locale, "I didn't change the plan.", "Não alterei o plano.", "Je n'ai pas modifié le plan.");
+      }
     }
     return result(next, text, changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, built && changed, work ?? turnWork(lastUser, seeded, today));
   };
@@ -473,7 +483,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current);
   }
 
-  const dateShift = parseDateShift(lastUser, today, task.constraints.dates?.start ?? current?.days[0]?.date);
+  const dayEdit = current ? localEditIntent(lastUser, current, today) : null;
+  const dateShift = dayEdit ? null : parseDateShift(lastUser, today, task.constraints.dates?.start ?? current?.days[0]?.date);
   if (dateShift === "ask" && (current || task.constraints.dates?.start)) {
     return finish(say(task.locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?"), current);
   }
@@ -537,6 +548,131 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       };
     } catch {
       return null;
+    }
+  }
+
+  async function commitOpenEdit(intent: EditIntent): Promise<{ reply: string; plan: TripPlan; events: ToolEvent[]; task: Task; work: TurnWork } | null> {
+    if (!current) return null;
+    const open = current;
+    const locale = task.locale;
+    const askStart = () => say(locale, "Which day should the trip start?", "Para que dia mudo a viagem?", "Quel jour pour le début du voyage ?");
+    if (intent.kind === "relax_day" || intent.kind === "busier_day") {
+      const day = resolveDayRef(intent.day, open, today, lastUser);
+      if (day === "ambiguous") return { reply: whichDayQuestion(open, locale), plan: open, events: [], task, work: "moment" };
+      const edited = intent.kind === "relax_day" ? relaxDay(open, day, locale) : busyDay(open, day, locale);
+      if (!edited) return { reply: whichDayQuestion(open, locale), plan: open, events: [], task, work: "moment" };
+      const tag = intent.kind === "relax_day" ? `relax-day-${day}` : `busy-day-${day}`;
+      const next = refreshTask({ ...task, completed: [...task.completed, tag] });
+      return { reply: edited.reply, plan: edited.plan, events: [], task: next, work: "moment" };
+    }
+    if (intent.kind === "set_party") {
+      const party = {
+        ...(intent.adults !== undefined ? { adults: intent.adults } : {}),
+        ...(intent.kids !== undefined ? { kids: intent.kids } : {}),
+        ...(intent.youngestAge !== undefined ? { youngestAge: intent.youngestAge } : {}),
+      };
+      const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { party }) });
+      const prior = { adults: open.party.adults, kids: open.party.kids, ...(open.party.youngestAge !== undefined ? { youngestAge: open.party.youngestAge } : {}) };
+      const baselineTask = refreshTask({ ...nextTask, constraints: { ...nextTask.constraints, party: prior } });
+      const [baseline, rebuilt] = await Promise.all([rebuildPlan(baselineTask), rebuildPlan(nextTask)]);
+      if (!rebuilt) return { reply: say(locale, "I couldn't update the party.", "Não consegui atualizar o grupo.", "Je n'ai pas pu mettre le groupe à jour."), plan: open, events: [], task: nextTask, work: "moment" };
+      const baby = /\b(?:baby|bebe)\b/.test(spoken);
+      const stopsChanged = Boolean(baseline && itinerarySig(baseline.plan) !== itinerarySig(rebuilt.plan));
+      const reply = partyEditReply(locale, rebuilt.plan.party, stopsChanged, baby);
+      return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
+    }
+    if (intent.kind === "add_activity" && /boat|barco|bateau/i.test(`${intent.activity ?? ""} ${lastUser}`)) {
+      const edited = addBoatTrip(open, locale);
+      const next = refreshTask({
+        ...task,
+        constraints: edited.added ? mergeConstraints(task.constraints, { boatTrips: 1, interests: ["boat"] }) : task.constraints,
+        completed: [...task.completed, edited.added ? "boat" : "boat-skipped"],
+      });
+      return { reply: edited.reply, plan: edited.plan, events: [], task: next, work: "moment" };
+    }
+    if (intent.kind === "set_dates" || intent.kind === "shift_dates" || intent.kind === "add_day" || intent.kind === "remove_day") {
+      let span: { start: string; days: number } | null = null;
+      if (intent.kind === "add_day") span = applyLength(open.days[0].date, open.days.length, { kind: "add", n: intent.days ?? 1, where: intent.where ?? "end" });
+      else if (intent.kind === "remove_day") span = applyLength(open.days[0].date, open.days.length, { kind: "drop-last" });
+      else {
+        const shift = shiftFromIntent(intent);
+        if (!shift || shift === "ask") return { reply: askStart(), plan: open, events: [], task, work: "moment" };
+        span = applyDateShift(open.days[0].date, open.days.length, shift);
+      }
+      if (!span) return { reply: askStart(), plan: open, events: [], task, work: "moment" };
+      const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { dates: { start: span.start, days: span.days } }) });
+      const rebuilt = await rebuildPlan(nextTask);
+      if (!rebuilt) return { reply: askStart(), plan: open, events: [], task, work: "moment" };
+      const reply = (intent.kind === "add_day" || intent.kind === "remove_day"
+        ? lengthDiffReply(open, rebuilt.plan, locale)
+        : shiftDiffReply(open, rebuilt.plan, locale)) ?? lengthUnchangedReply(open, locale);
+      return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
+    }
+    if (intent.kind === "set_car" && typeof intent.car === "boolean") {
+      const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { car: intent.car }) });
+      const rebuilt = await rebuildPlan(nextTask);
+      if (!rebuilt) return null;
+      const reply = rebuilt.plan.hasCar === open.hasCar
+        ? say(locale, open.hasCar ? "The trip already has a car." : "The trip is already without a car.", open.hasCar ? "A viagem já tem carro." : "A viagem já é sem carro.", open.hasCar ? "Le voyage a déjà une voiture." : "Le voyage est déjà sans voiture.")
+        : say(locale, rebuilt.plan.hasCar ? "Updated: with a car." : "Updated: no car.", rebuilt.plan.hasCar ? "Atualizado: de carro." : "Atualizado: sem carro.", rebuilt.plan.hasCar ? "Mis à jour : avec une voiture." : "Mis à jour : sans voiture.");
+      return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
+    }
+    if (intent.kind === "set_pace" && intent.pace) {
+      const nextTask = refreshTask({ ...task, constraints: mergeConstraints(task.constraints, { pace: intent.pace }) });
+      const rebuilt = await rebuildPlan(nextTask);
+      if (!rebuilt) return null;
+      const reply = say(locale,
+        intent.pace === "packed" ? "The days are fuller now." : "The days are slower now.",
+        intent.pace === "packed" ? "Os dias ficaram mais cheios." : "Os dias ficaram mais calmos.",
+        intent.pace === "packed" ? "Les jours sont plus chargés." : "Les jours sont plus calmes.");
+      return { reply, plan: rebuilt.plan, events: rebuilt.events, task: rebuilt.task, work: "forecast" };
+    }
+    if ((intent.kind === "remove_stop" || intent.kind === "swap_stop") && intent.stop) {
+      const day = resolveDayRef(intent.day, open, today, lastUser);
+      if (day === "ambiguous") return { reply: whichDayQuestion(open, locale), plan: open, events: [], task, work: "moment" };
+      const index = day - 1;
+      const host = open.days[index];
+      if (!host) return { reply: whichDayQuestion(open, locale), plan: open, events: [], task, work: "moment" };
+      const named = (item: typeof host.items[number], name: string) => normalizeUtterance(itemLabel(item, locale)).includes(normalizeUtterance(name));
+      if (intent.kind === "remove_stop") {
+        const items = host.items.filter((item) => !named(item, intent.stop!));
+        if (items.length === host.items.length) {
+          return { reply: say(locale, "That stop isn't on that day.", "Essa paragem não está nesse dia.", "Cet arrêt n'est pas ce jour-là."), plan: open, events: [], task, work: "moment" };
+        }
+        const when = humanPlanDate(host.date, locale);
+        const plan = { ...open, days: open.days.map((item, i) => i === index ? { ...host, items } : item) };
+        return { reply: say(locale, `Removed ${intent.stop} from ${when}.`, `Tirei ${intent.stop} de ${when}.`, `J'ai retiré ${intent.stop} du ${when}.`), plan, events: [], task, work: "moment" };
+      }
+      const items = host.items.map((item) => ({ ...item }));
+      const a = items.findIndex((item) => named(item, intent.stop!));
+      const b = intent.swapWith ? items.findIndex((item) => named(item, intent.swapWith!)) : -1;
+      if (a < 0 || b < 0 || a === b) {
+        return { reply: say(locale, "I couldn't find both stops on that day.", "Não encontrei as duas paragens nesse dia.", "Je n'ai pas trouvé les deux arrêts ce jour-là."), plan: open, events: [], task, work: "moment" };
+      }
+      const startA = items[a].start;
+      const slotA = items[a].slot;
+      items[a] = { ...items[a], start: items[b].start, slot: items[b].slot };
+      items[b] = { ...items[b], start: startA, slot: slotA };
+      const plan = { ...open, days: open.days.map((item, i) => i === index ? { ...host, items } : item) };
+      return { reply: say(locale, `Swapped ${intent.stop} and ${intent.swapWith}.`, `Troquei ${intent.stop} e ${intent.swapWith}.`, `J'ai échangé ${intent.stop} et ${intent.swapWith}.`), plan, events: [], task, work: "moment" };
+    }
+    return null;
+  }
+
+  if (current && typeof task.constraints.car === "boolean" && !dateShift && !lengthEdit) {
+    let intent: EditIntent | null = null;
+    if (gatewayReady()) {
+      try {
+        intent = await intentFromModel(deps.model, lastUser, current, today);
+      } catch {
+        intent = null;
+      }
+      if (intent && (intent.kind === "other" || intent.kind === "greeting" || intent.kind === "question")) intent = null;
+    }
+    if (!intent) intent = localEditIntent(lastUser, current, today);
+    if (intent) {
+      const outcome = await commitOpenEdit(intent);
+      if (outcome) return finish(outcome.reply, outcome.plan, outcome.events, outcome.task, undefined, true, false, false, outcome.work);
     }
   }
 

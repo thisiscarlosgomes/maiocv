@@ -327,6 +327,77 @@ export function resolveDayOfMonth(today: string, day: number, anchor?: string): 
   return null;
 }
 
+const ARRIVE_CUE = /\b(?:arriv\w*|chego|chegamos|arrivee|j'arrive|j arrive|land(?:ing|s)?|start(?:ing)?|a partir)\b/;
+const LEAVE_CUE = /\b(?:leav\w*|depart\w*|saio|saimos|partimos|partons|partir|until|till|ate|jusqu\w*|end(?:ing)?|fim)\b/;
+
+function monthMentioned(text: string): number | undefined {
+  const names = Object.keys(MONTHS).sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    if (new RegExp(`\\b${name}\\b`).test(text)) return MONTHS[name];
+  }
+  return undefined;
+}
+
+function firstDayNumber(rest: string): number | undefined {
+  for (const match of rest.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\b/g)) {
+    const after = rest.slice((match.index ?? 0) + match[0].length);
+    if (/^[:h]\d/.test(after)) continue;
+    if (/^\s*[- ]?(?:year|anos|ans|days|dias|jours)\b/.test(after)) continue;
+    const value = Number(match[1]);
+    if (value >= 1 && value <= 31) return value;
+  }
+  return undefined;
+}
+
+function placeStayDay(today: string, day: number, month: number | undefined, anchor?: string): string | null {
+  return month ? monthDay(today, month, day) : resolveDayOfMonth(today, day, anchor);
+}
+
+/**
+ * Both ends of a stay: "arriving 18, leaving 20 Nov", "from 18 to 20",
+ * "chego 18 e saio 20", "arrivée le 18, départ le 20".
+ * A month named on only one side applies to both. The open trip's month fills the rest.
+ */
+export function pairedStay(text: string, today: string, anchor?: string): { start: string; end: string; days: number } | null {
+  const n = loosen(text);
+  let startDay: number | undefined;
+  let endDay: number | undefined;
+  const arrive = ARRIVE_CUE.exec(n);
+  const leave = LEAVE_CUE.exec(n);
+  if (arrive && leave && arrive.index !== leave.index) {
+    const first = arrive.index < leave.index ? arrive : leave;
+    const second = first === arrive ? leave : arrive;
+    const early = firstDayNumber(n.slice(first.index + first[0].length, second.index));
+    const late = firstDayNumber(n.slice(second.index + second[0].length));
+    if (first === arrive) {
+      startDay = early;
+      endDay = late;
+    } else {
+      endDay = early;
+      startDay = late;
+    }
+  }
+  if (!startDay || !endDay) {
+    const range = n.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:-|–|—|to|ate|au)\s*(?:the\s+|o\s+|dia\s+|le\s+)?(\d{1,2})(?:st|nd|rd|th)?\b/);
+    if (range) {
+      const tail = n.slice((range.index ?? 0) + range[0].length, (range.index ?? 0) + range[0].length + 8);
+      const small = Number(range[1]) <= 14 && Number(range[2]) <= 14;
+      if (!(small && /\b(?:days|dias|jours)\b/.test(tail) && !monthMentioned(n))) {
+        startDay = Number(range[1]);
+        endDay = Number(range[2]);
+      }
+    }
+  }
+  if (!startDay || !endDay || startDay > 31 || endDay > 31 || endDay < startDay) return null;
+  const month = monthMentioned(n);
+  const start = placeStayDay(today, startDay, month, anchor);
+  const end = placeStayDay(today, endDay, month, anchor);
+  if (!start || !end || end < start) return null;
+  const days = inclusiveDays(start, end);
+  if (!days) return null;
+  return { start, end, days };
+}
+
 export type DateShift = { start?: string; end?: string; days?: number; shiftDays?: number };
 
 /**
@@ -347,9 +418,13 @@ export function parseDateShift(text: string, today: string, anchor?: string): Da
     const count = wordNumber(pushed[1]);
     if (count) return { shiftDays: /\bearlier|mais cedo|plus tot|back\b/.test(n) ? -count : count };
   }
+  const stay = pairedStay(n, today, anchor);
+  if (stay) return stay;
   const spelled = spokenDates(text, today);
   const stated = wordNumber(n.match(/\b(\d+|two|three|four|five|six|seven|dois|tres|quatro|dois|deux|trois|quatre)\s*(?:days|dias|jours)\b/)?.[1]);
-  if (spelled.start && spelled.end && spelled.days) return { start: spelled.start, days: spelled.days };
+  // "leaving 20 Nov" names the end. The month glued to that day is not a new start.
+  if (spelled.start && spelled.end && spelled.start === spelled.end && LEAVE_CUE.test(n) && !ARRIVE_CUE.test(n)) return { end: spelled.end };
+  if (spelled.start && spelled.end && spelled.days) return { start: spelled.start, end: spelled.end, days: spelled.days };
   if (spelled.start && stated) return { start: spelled.start, days: stated };
   if (spelled.start) return { start: spelled.start };
   if (spelled.end) return { end: spelled.end };
