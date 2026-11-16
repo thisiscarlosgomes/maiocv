@@ -114,15 +114,22 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   let arrival: PlanItem | null = null, arrivalIndex = -1, arrivalReady: number | undefined;
   if (req.arrival) {
     arrivalIndex = Math.min(req.arrival.dayIndex, req.days - 1);
-    const sailing = req.arrival.mode === "ferry" ? sailings.find((s) => s.date === dates[arrivalIndex] && /maio/i.test(s.to)) : undefined;
-    const at = req.arrival.time ?? sailing?.departure;
+    const inbound = sailings.filter((s) => s.date === dates[arrivalIndex] && /maio/i.test(s.to) && !/maio/i.test(s.from));
+    const cited = req.arrival.time
+      ? inbound.find((s) => s.arrival === req.arrival!.time || s.departure === req.arrival!.time)
+      : undefined;
+    const sailing = req.arrival.mode === "ferry" ? (cited ?? (req.arrival.time ? undefined : inbound[0])) : undefined;
+    const at = sailing?.arrival && (!req.arrival.time || req.arrival.time === sailing.departure || req.arrival.time === sailing.arrival)
+      ? sailing.arrival
+      : (req.arrival.time ?? sailing?.departure);
     if (at) {
-      const published = Boolean(sailing && (!req.arrival.time || req.arrival.time === sailing.departure));
+      const published = Boolean(sailing && (!req.arrival.time || req.arrival.time === sailing.departure || req.arrival.time === sailing.arrival));
+      const landed = Boolean(sailing?.arrival && at === sailing.arrival);
       arrival = {
         id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
-        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}` : NOTES[req.locale].given,
+        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}${landed ? ` → ${sailing.arrival}` : ""}` : NOTES[req.locale].given,
       };
-      arrivalReady = toMin(at) + (req.arrival.mode === "ferry" ? 150 : 60);
+      arrivalReady = toMin(at) + (landed ? 30 : req.arrival.mode === "ferry" ? 150 : 60);
       kinds[arrivalIndex] = "arrival";
     } else {
       arrival = {

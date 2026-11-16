@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { runPlanAgent } from "../lib/plan-agent.ts";
+import { runPlanAgent, TURN_MODEL_MS } from "../lib/plan-agent.ts";
 import { LIVE_BOATS, LIVE_FLIGHTS } from "./plan/live-window.ts";
 
 const TODAY = new Date("2026-11-15T12:00:00Z");
@@ -209,6 +209,99 @@ test("an open 18-20 plan already on the Wednesday ferry names that sailing witho
   assert.doesNotMatch(around.reply, /didn't change the plan/);
   assert.deepEqual(around.plan?.days.map((day) => day.date), ["2026-11-18", "2026-11-19", "2026-11-20"]);
   assert.equal(around.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "07:00");
+});
+
+test("a setup that already names a rental car does not ask again", async () => {
+  const phrases = [
+    "slow pace, with a rental car, from 16 to 18 November",
+    "slow pace, with a car, from 16 to 18 November",
+    "ritmo calmo, com carro alugado, de 16 a 18 de novembro",
+    "rythme lent, avec une voiture de location, du 16 au 18 novembre",
+  ];
+  for (const phrase of phrases) {
+    const started = Date.now();
+    const result = await runPlanAgent(
+      [{ role: "user", content: phrase }],
+      null,
+      { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+    );
+    assert.ok(Date.now() - started < 1_000, phrase);
+    assert.equal(result.plan?.hasCar, true, result.reply);
+    assert.doesNotMatch(result.reply, /Will you have a car|Vão ter carro|Vous aurez une voiture/i);
+  }
+});
+
+test("plan around a ferry uses that sailing's arrival, not a 07:00 departure", async () => {
+  const boats = {
+    retrievedAt: "2026-11-15T12:00:00.000Z",
+    schedules: [
+      { date: "2026-11-18", from: "Santiago", to: "Maio", departure: "07:00", arrival: "10:30" },
+      { date: "2026-11-18", from: "Maio", to: "Santiago", departure: "15:00", arrival: "18:00" },
+    ],
+  };
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("schedules/boats")) return Response.json(boats);
+    if (url.includes("schedules/flights")) return Response.json({ retrievedAt: boats.retrievedAt, routes: {}, upcoming: {} });
+    return quietFetch()(input);
+  }) as typeof fetch;
+  const asked = await runPlanAgent(
+    [{ role: "user", content: "Is there a ferry on Wednesday?" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+  );
+  assert.match(asked.reply, /10:30/);
+  const started = Date.now();
+  const around = await runPlanAgent(
+    [{ role: "user", content: "plan around that ferry, with a car" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+    asked.task,
+  );
+  assert.ok(Date.now() - started < 1_000, around.reply);
+  const arrival = around.plan?.days[0]?.items.find((item) => item.kind === "transport");
+  assert.equal(arrival?.start, "10:30", around.reply);
+  assert.notEqual(arrival?.start, "07:00");
+});
+
+test("oui on an open plan and a hospital lookup stay under the model budget", async () => {
+  const hang = new MockLanguageModelV4({
+    doGenerate: () => new Promise(() => {}),
+  }) as unknown as LanguageModel;
+  const built = await runPlanAgent(
+    [{ role: "user", content: "3 days, slow pace, with a car, from 16 to 18 November" }],
+    null,
+    { model: bomb(), fetchImpl: quietFetch(), now: TODAY },
+  );
+  const ouiStarted = Date.now();
+  const oui = await runPlanAgent(
+    [{ role: "user", content: "bonjour" }, { role: "assistant", content: "Bonjour !" }, { role: "user", content: "oui" }],
+    built.plan,
+    { model: hang, fetchImpl: quietFetch(), now: TODAY },
+    { ...built.task, locale: "fr" },
+  );
+  const ouiMs = Date.now() - ouiStarted;
+  assert.ok(ouiMs < 1_000, `${ouiMs}ms ${oui.reply}`);
+  assert.match(oui.reply, /voyage|jours/i);
+  const hospitalStarted = Date.now();
+  const hospital = await runPlanAgent(
+    [{ role: "user", content: "what's the hospital number?" }],
+    null,
+    { model: hang, fetchImpl: quietFetch(), now: TODAY },
+  );
+  const hospitalMs = Date.now() - hospitalStarted;
+  assert.ok(hospitalMs < 1_000, `${hospitalMs}ms`);
+  assert.match(hospital.reply, /\+238 255 11 30/);
+  const slowStarted = Date.now();
+  const slow = await runPlanAgent(
+    [{ role: "user", content: "Is the water warm in December?" }],
+    null,
+    { model: hang, fetchImpl: quietFetch(), now: TODAY },
+  );
+  const slowMs = Date.now() - slowStarted;
+  assert.ok(slowMs < 5_000, `${slowMs}ms`);
+  assert.ok(slowMs >= TURN_MODEL_MS - 500);
+  assert.match(slow.reply, /listings|model/i);
 });
 
 test("a 4x4 question is answered from the listings", async () => {

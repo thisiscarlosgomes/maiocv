@@ -23,7 +23,7 @@ const paymentsSource = {
 
 const portal = "https://portal.maio.cv";
 
-export type Sailing = { from: string; to: string; departure: string; date: string };
+export type Sailing = { from: string; to: string; departure: string; date: string; arrival?: string };
 export type PaymentCount = { year: string; value: number };
 
 export type EssentialsBody = {
@@ -216,7 +216,8 @@ export async function loadSailings(fetchImpl: typeof fetch): Promise<Sailing[]> 
     return rows.flatMap((row) => {
       const item = asRecord(row);
       if (typeof item.date !== "string" || typeof item.departure !== "string" || typeof item.from !== "string" || typeof item.to !== "string") return [];
-      return [{ from: item.from, to: item.to, departure: item.departure, date: item.date }];
+      const arrival = typeof item.arrival === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(item.arrival) ? item.arrival : undefined;
+      return [{ from: item.from, to: item.to, departure: item.departure, date: item.date, ...(arrival ? { arrival } : {}) }];
     });
   } catch {
     return [];

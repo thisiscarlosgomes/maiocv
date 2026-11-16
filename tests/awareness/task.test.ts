@@ -144,6 +144,22 @@ test("chips stay within two and do not ask when you leave once dates are set", (
   assert.ok(chips.every((chip) => !/add a boat|passeio de barco|sortie en bateau/i.test(chip)));
 });
 
+test("a rental car in the setup is a yes in English, Portuguese, and French", () => {
+  const phrases = [
+    "slow pace, with a rental car, from 16 to 18 November",
+    "slow pace, with a car, from 16 to 18 November",
+    "ritmo calmo, com carro alugado, de 16 a 18 de novembro",
+    "rythme lent, avec une voiture de location, du 16 au 18 novembre",
+  ];
+  for (const phrase of phrases) {
+    const result = classify(phrase, emptyTask(), { today: "2026-11-15" });
+    assert.equal(result.patch.car, true, phrase);
+    assert.equal(result.carStance, "yes", phrase);
+  }
+  const declined = classify("slow pace, no rental car, from 16 to 18 November", emptyTask(), { today: "2026-11-15" });
+  assert.equal(declined.patch.car, false);
+});
+
 test("a pending ferry-or-flight question offers those choices, not a finished intent", () => {
   const task = taskWith({
     pendingQuestion: "Ferry or flight?",
