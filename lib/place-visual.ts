@@ -1,7 +1,7 @@
 import type { Locale } from "./locale";
 import { t, type MessageKey } from "./i18n.ts";
 
-export type PlaceCard = { name: string; detail: string; url: string; image?: string };
+export type PlaceCard = { name: string; detail: string; url: string; image?: string; category?: string };
 
 export const PLACE_COLLECTIONS: Record<string, { title: MessageKey; kind: MessageKey }> = {
   beaches: { title: "openui.places.beaches", kind: "openui.places.beach" },
@@ -97,6 +97,7 @@ export function placeVisualProgram(payload: unknown, answer: string, collection:
   const count = typeof data.numberMatched === "number" && Number.isInteger(data.numberMatched) && data.numberMatched > 0
     ? t(collection === "beaches" ? "openui.places.beachesMapped" : "openui.places.placesMapped", { n: data.numberMatched }, locale)
     : t("openui.places.mapped", undefined, locale);
-  const items = cards.map(({ name, detail, url, image }) => ({ name, detail, url, image }));
+  const category = collection === "beaches" ? "beach" : "sight";
+  const items = cards.map(({ name, detail, url, image }) => ({ name, detail, url, image, category }));
   return `root = PlaceCollection(${[title, count, t("openui.places.source", undefined, locale), JSON.stringify(items)].map(value => JSON.stringify(value)).join(", ")})`;
 }
