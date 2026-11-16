@@ -379,6 +379,9 @@ export async function readStays(fetchImpl: typeof fetch): Promise<StayResult> {
 export type ExperienceListing = {
   name: string;
   kind: string | null;
+  category: string | null;
+  description: string;
+  tags: string;
   operator: string | null;
   phone: string | null;
   email: string | null;
@@ -397,24 +400,39 @@ export type ExperienceResult = {
 
 const GENERIC_KINDS = new Set(["other", "activity", "tourism"]);
 
+function descriptionText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  const row = asRecord(value);
+  return [textOf(row.en), textOf(row.pt), textOf(row.fr)].filter(Boolean).join(" ");
+}
+
+function tagsText(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => textOf(item)).filter(Boolean).join(" ");
+  return textOf(value);
+}
+
 function experienceFrom(feature: unknown): ExperienceListing | null {
   if (!published(feature)) return null;
   const attrs = attrsOf(feature);
   const name = featureName(feature);
   if (!name) return null;
-  const category = textOf(attrs.category);
+  const category = textOf(attrs.category) || null;
   const experience = textOf(attrs.experience);
   const kind = category && !GENERIC_KINDS.has(category) ? category : experience && !GENERIC_KINDS.has(experience) ? experience : null;
-  const description = textOf(attrs.description);
+  const description = descriptionText(attrs.description);
+  const tags = tagsText(attrs.tags);
   return {
     name,
     kind,
+    category,
+    description,
+    tags,
     operator: textOf(attrs.operator) || null,
     phone: listedPhone(attrs.phone),
     email: textOf(attrs.email) || null,
     website: textOf(attrs.website) || textOf(attrs.booking_url) || textOf(attrs.source_url) || null,
     price: listedPrice(attrs),
-    text: norm(`${name} ${kind ?? ""} ${textOf(attrs.operator)} ${description}`),
+    text: norm(`${name} ${category ?? ""} ${kind ?? ""} ${tags} ${textOf(attrs.operator)} ${description}`),
   };
 }
 
@@ -437,11 +455,48 @@ export async function readExperiences(fetchImpl: typeof fetch): Promise<Experien
   }
 }
 
-const BOAT_WORDS = ["boat", "barco", "bateau", "catamaran", "catamara", "lancha", "yacht"];
+/** Longer phrases first so "sea trip" is not reduced to a stray "sea". */
+const BOAT_TERMS = [
+  "sea trip", "passeio de barco", "sortie en bateau",
+  "deep-sea", "deep sea", "alto-mar", "alto mar",
+  "catamaran", "catamara", "charter",
+  "barco", "bateau", "boat", "lancha", "yacht",
+];
 
-/** A boat trip is an experience that says so. The Santiago–Maio ferry is never one. */
+export type BoatField = "name" | "category" | "description" | "tags";
+export type BoatMatch = {
+  experience: ExperienceListing;
+  matched: { field: BoatField; terms: string[] }[];
+};
+
+function boatTermsIn(text: string): string[] {
+  const hay = norm(text);
+  if (!hay) return [];
+  return BOAT_TERMS.filter((term) => hay.includes(norm(term)));
+}
+
+/**
+ * A boat-based experience is one whose own name, category, description, or tags
+ * mention a boat or a charter. The Santiago–Maio ferry is never added here.
+ */
+export function boatTripMatches(experiences: ExperienceListing[]): BoatMatch[] {
+  return experiences.flatMap((experience) => {
+    const fields: [BoatField, string][] = [
+      ["name", experience.name],
+      ["category", `${experience.category ?? ""} ${experience.kind ?? ""}`],
+      ["description", experience.description],
+      ["tags", experience.tags],
+    ];
+    const matched = fields.flatMap(([field, text]) => {
+      const terms = boatTermsIn(text);
+      return terms.length ? [{ field, terms }] : [];
+    });
+    return matched.length ? [{ experience, matched }] : [];
+  });
+}
+
 export function boatTripExperiences(experiences: ExperienceListing[]): ExperienceListing[] {
-  return experiences.filter((item) => BOAT_WORDS.some((word) => item.text.includes(word)));
+  return boatTripMatches(experiences).map((match) => match.experience);
 }
 
 export type BusinessResult = {
@@ -786,8 +841,18 @@ async function answerActivities(question: string, locale: AskLocale, fetchImpl: 
 
 async function answerBoatTrip(locale: AskLocale, fetchImpl: typeof fetch): Promise<GroundedAnswer> {
   const result = await readExperiences(fetchImpl);
-  const picked = result.available ? boatTripExperiences(result.experiences) : [];
-  const facts = JSON.stringify({ source: result.source, available: result.available, shown: picked.map(({ text, ...item }) => item) });
+  const picked = result.available ? boatTripMatches(result.experiences) : [];
+  const facts = JSON.stringify({
+    source: result.source,
+    available: result.available,
+    shown: picked.map(({ experience, matched }) => ({
+      name: experience.name,
+      phone: experience.phone,
+      email: experience.email,
+      price: experience.price,
+      matched,
+    })),
+  });
   const citations = result.available ? [cite("Maio experience directory", EXPERIENCES_URL, "directory")] : [];
   const toolEvents = [event("get_maio_experiences", { kind: "boat trip" }, result.available)];
   if (!result.available) return { message: unavailable(locale, say(locale, "The experience directory", "O diretório de experiências", "L'annuaire des expériences")), toolEvents, citations, facts };
@@ -802,12 +867,16 @@ async function answerBoatTrip(locale: AskLocale, fetchImpl: typeof fetch): Promi
       facts,
     };
   }
-  const lines = picked.slice(0, 8).map((item) => experienceLine(item));
+  const lines = picked.slice(0, 8).map((match) => experienceLine(match.experience));
+  const caveat = say(locale,
+    "Prices and contacts come from the experience directory and are indicative. Confirm with the operator. This is not the Santiago–Maio ferry.",
+    "Preços e contactos vêm do diretório de experiências e são indicativos. Confirme com o operador. Não é o ferry Santiago–Maio.",
+    "Les prix et les contacts viennent de l'annuaire et sont indicatifs. Confirmez auprès de l'opérateur. Ce n'est pas le ferry Santiago–Maio.");
   return {
     message: say(locale,
-      `Boat trips from the experience directory: ${lines.join("; ")}. ${EXPERIENCE_CAVEAT}`,
-      `Passeios de barco do diretório de experiências: ${lines.join("; ")}. Preços e horários são indicativos. Confirme com o operador.`,
-      `Sorties en bateau de l'annuaire : ${lines.join("; ")}. Les prix et les horaires sont indicatifs. Confirmez auprès de l'opérateur.`),
+      `Boat-based options from the directory: ${lines.join("; ")}. ${caveat}`,
+      `Opções de barco no diretório: ${lines.join("; ")}. ${caveat}`,
+      `Options en bateau dans l'annuaire : ${lines.join("; ")}. ${caveat}`),
     toolEvents,
     citations,
     facts,
@@ -862,6 +931,42 @@ async function answerWeather(locale: AskLocale, fetchImpl: typeof fetch, now: Da
     `Maio agora: ${bits.join(", ")}. É uma leitura geral da ilha, não uma previsão de um pico de surf. Fonte: Open-Meteo.`,
     `Maio en ce moment : ${bits.join(", ")}. C'est une lecture générale de l'île, pas une prévision pour un spot. Source : Open-Meteo.`);
   return { message, toolEvents, citations, facts };
+}
+
+/** Names and phone digits from accommodation, experience, and business tool results. */
+export function directoryContacts(blobs: string[]): string {
+  const names: string[] = [];
+  const phones: string[] = [];
+  const seenNames = new Set<string>();
+  const seenPhones = new Set<string>();
+  const walk = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    const row = value as Record<string, unknown>;
+    if (typeof row.name === "string") {
+      const name = row.name.trim();
+      if (name && !seenNames.has(name) && names.length < 24) {
+        seenNames.add(name);
+        names.push(name);
+      }
+    }
+    if (typeof row.phone === "string") {
+      const digits = row.phone.replace(/\D/g, "");
+      if (digits.length >= 7 && !seenPhones.has(digits) && phones.length < 40) {
+        seenPhones.add(digits);
+        phones.push(digits);
+      }
+    }
+    for (const child of Object.values(row)) walk(child);
+  };
+  for (const blob of blobs) {
+    try { walk(JSON.parse(blob)); } catch { /* a non-JSON fact has no directory rows */ }
+  }
+  if (!names.length && !phones.length) return "";
+  return `contacts: ${names.join(", ")}; phones: ${phones.join(" ")}`;
 }
 
 /** Digits that look like a phone, so a date or a clock does not count. */

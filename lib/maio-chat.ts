@@ -8,6 +8,7 @@ import {
   askInstructions,
   chatFetch,
   classifyAsk,
+  directoryContacts,
   readBoatSchedule,
   readBusinesses,
   readExperiences,
@@ -241,6 +242,8 @@ export async function handleMaioChat(request: Request, deps: ChatDeps = {}): Pro
     model: CHAT_MODEL,
   };
   const turn = askTurn(body, status, JSON.stringify(payload), timedOut);
+  const contacts = directoryContacts(factParts);
+  if (turn && contacts) turn.toolFacts = `${turn.toolFacts}\n${contacts}`.slice(0, 8000);
   if (turn) scheduleTurnReview(turn, deps);
   if (status !== 200) return noStore({ error: "Maio could not be reached." }, status);
   return noStore(payload, 200);

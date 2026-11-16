@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { clearBusinessCache, MAIO_API } from "../lib/maio-catalog.ts";
 import { formatCapeVerdePhone } from "../lib/phone.ts";
-import { answerGrounded, clearMaioChatCache, contactDigits, readBoatSchedule, readExperiences, readStays } from "../lib/maio-chat-tools.ts";
+import { answerGrounded, boatTripMatches, clearMaioChatCache, contactDigits, readBoatSchedule, readExperiences, readStays } from "../lib/maio-chat-tools.ts";
 
 const live = process.env.MAIO_CHAT_LIVE === "0" ? test.skip : test;
 
@@ -39,10 +39,12 @@ live("live Maio API: stays, activities, boat trips, the next ferry, a hotel phon
   assert.equal(trips.toolEvents.some((item) => item.name === "get_boat_schedules"), false);
   assert.equal(/\b\d{2}:\d{2}\b/.test(trips.message), false, trips.message);
   assert.equal(/07:00|17:00|10:00/.test(trips.message), false);
-  if (/does not list a boat trip/i.test(trips.message)) {
+  const boatMatches = boatTripMatches(experiences.experiences);
+  if (!boatMatches.length) {
+    assert.match(trips.message, /does not list a boat trip/i);
     assert.equal(contactDigits(trips.message).length, 0);
   } else {
-    assert.ok(experiences.experiences.some((item) => trips.message.includes(item.name)));
+    for (const match of boatMatches) assert.ok(trips.message.includes(match.experience.name), match.experience.name);
   }
 
   const boats = await readBoatSchedule(fetch, now);
