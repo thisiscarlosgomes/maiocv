@@ -238,16 +238,21 @@ export function Planner({ locale }: { locale: Locale }) {
       error={error ?? undefined}
       onDraft={setDraft}
       onSend={(text) => { void send(text); }}
-      onClear={!shared && (messages.length > 0 || plan) ? startOver : undefined}
       clearLabel={s.startOver}
-      clearVariant="text"
       composer={!shared}
+      aboveComposer={!shared && (messages.length > 0 || plan) ? (
+        <div className="plan-actions" data-testid="plan-actions">
+          {screen === "trip" && plan && (
+            <button type="button" className="plan-primary" onClick={() => setScreen("chat")}>{s.backToChat}</button>
+          )}
+          <button type="button" className="plan-btn" onClick={startOver}>{s.startOver}</button>
+        </div>
+      ) : undefined}
       className={`plan-main plan-screen-${screen}${shared ? " is-shared" : ""}`}
       stage={screen === "trip" && plan ? (
         <section className="plan-trip" aria-label={s.yourTrip}>
-          {!shared && <button type="button" className="plan-back" onClick={() => setScreen("chat")}>← {s.backToChat}</button>}
           {shared && <p className="plan-eyebrow">{s.sharedPlan}</p>}
-          <div className="plan-trip-head">
+          <div className="plan-trip-head" data-testid="plan-trip-head">
             <div>
               <h1>{plan.title}</h1>
               <p className="plan-sub mono">{meta(plan, locale, s)}</p>

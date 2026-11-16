@@ -1699,7 +1699,12 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-back { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
 .plan-trip { display: flex; flex-direction: column; min-width: 0; }
 .plan-cover { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-card); margin-top: 8px; }
-.plan-trip-head { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
+/* Title and Share / Export PDF stay at the top of the scrolling plan. */
+.plan-trip-head { position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 12px 0; background: var(--background); border-bottom: 1px solid var(--line); }
+.plan-trip-head .plan-sub { margin-top: 6px; }
+/* Back to chat (primary) and Start over (secondary), centred just above the input on every screen. */
+.plan-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; padding-bottom: 10px; }
+.plan-actions .plan-primary, .plan-actions .plan-btn { min-height: 40px; font-size: 14px; }
 .plan-trip-head h1 { margin: 0; font-size: 28px; line-height: 1.05; font-weight: 500; letter-spacing: var(--tracking-display); }
 .plan-trip-tools { display: flex; gap: 8px; }
 .plan-day { margin-top: 36px; }
