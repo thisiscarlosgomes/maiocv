@@ -311,6 +311,36 @@ function policeReply(locale: TaskLocale): string {
     `Police : ${police.number}. Vérifié le ${verified}.`);
 }
 
+/**
+ * Departure and landing for the ferry this plan is built around.
+ * "Around" only when the timetable published no arrival and the clock is the route crossing.
+ */
+async function ferryStartLine(locale: TaskLocale, task: Task, already: boolean, fetchImpl: typeof fetch, now: Date): Promise<string | null> {
+  const arrival = task.constraints.arrival;
+  const date = task.constraints.dates?.start;
+  if (arrival?.mode !== "ferry" || !arrival.time || !date) return null;
+  const table = await loadTimetable(fetchImpl, now);
+  if (!table.ok) return null;
+  const hit = table.sailings.find((row) => row.date === date && /maio/i.test(row.to) && !/maio/i.test(row.from) && landingClock(row).time === arrival.time);
+  if (!hit) return null;
+  const land = landingClock(hit);
+  if (land.time === hit.departure) return null;
+  const when = humanPlanDate(date, locale);
+  const how = land.estimated ? "around" : "at";
+  const howPt = land.estimated ? "por volta das" : "às";
+  const howFr = land.estimated ? "vers" : "à";
+  return say(locale,
+    already
+      ? `The plan already starts ${when} with the ${hit.departure} ferry from ${hit.from}, arriving ${how} ${land.time}.`
+      : `Plan starts ${when} with the ${hit.departure} ferry from ${hit.from}, arriving ${how} ${land.time}.`,
+    already
+      ? `O plano já começa ${when} com o ferry das ${hit.departure} de ${hit.from}, a chegar ${howPt} ${land.time}.`
+      : `O plano começa ${when} com o ferry das ${hit.departure} de ${hit.from}, a chegar ${howPt} ${land.time}.`,
+    already
+      ? `Le plan commence déjà ${when} avec le ferry de ${hit.departure} de ${hit.from}, arrivant ${howFr} ${land.time}.`
+      : `Le plan commence ${when} avec le ferry de ${hit.departure} de ${hit.from}, arrivant ${howFr} ${land.time}.`);
+}
+
 /** Name the sailing or flight this turn is planning around. Null when the guest did not point at one. */
 function travelLead(locale: TaskLocale, task: Task, text: string): string | null {
   if (!refersToFerry(text) && !refersToFlight(text)) return null;
@@ -718,7 +748,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (planning && typeof task.constraints.car !== "boolean") {
     const q = CAR_QUESTION[task.locale];
     const again = isCarPending(seeded.pendingQuestion) || isCarPending(task.pendingQuestion);
-    const lead = travelLead(task.locale, task, lastUser);
+    const named = await ferryStartLine(task.locale, task, false, deps.fetchImpl, now);
+    const lead = named ?? travelLead(task.locale, task, lastUser);
     const reply = again
       ? say(task.locale, "Noted.", "Anotado.", "Noté.")
       : lead ? `${lead} ${q}` : q;
@@ -1056,7 +1087,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       const arrival = current.days[0]?.items.find((item) => item.kind === "transport");
       const sameArrival = !citedTime || arrival?.start === citedTime;
       if (sameStart && sameArrival) {
-        const reply = say(task.locale,
+        const named = await ferryStartLine(task.locale, task, true, deps.fetchImpl, now);
+        const reply = named ?? say(task.locale,
           `${lead} The plan already starts with that arrival.`,
           `${lead} O plano já começa com essa chegada.`,
           `${lead} Le plan commence déjà par cette arrivée.`);
@@ -1066,7 +1098,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       const rebuilt = await rebuildPlan(task);
       if (rebuilt) {
         const same = samePlanShape(rebuilt.plan, current);
-        const reply = say(task.locale,
+        const named = await ferryStartLine(task.locale, task, same, deps.fetchImpl, now);
+        const reply = named ?? say(task.locale,
           same ? `${lead} The plan already starts with that arrival.` : `${lead} The plan now starts with that arrival.`,
           same ? `${lead} O plano já começa com essa chegada.` : `${lead} O plano passa a começar com essa chegada.`,
           same ? `${lead} Le plan commence déjà par cette arrivée.` : `${lead} Le plan commence maintenant par cette arrivée.`);
@@ -1083,7 +1116,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (freshPlan) {
     const rebuilt = await rebuildPlan(task);
     if (rebuilt) {
-      const lead = travelLead(task.locale, task, lastUser);
+      const named = await ferryStartLine(task.locale, task, false, deps.fetchImpl, now);
+      const lead = named ?? travelLead(task.locale, task, lastUser);
       if (lead) {
         const line = planBlurb(rebuilt.plan, classification.carStance).split("\n")[0] ?? "";
         return finish(`${lead}\n${line}`, rebuilt.plan, rebuilt.events, rebuilt.task, undefined, false, false, false, "forecast");

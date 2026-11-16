@@ -3,7 +3,9 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { emptyTask, refreshTask } from "../lib/awareness/task.ts";
 import { runPlanAgent, TURN_MODEL_MS } from "../lib/plan-agent.ts";
+import { buildPlan } from "../lib/trip-planner.ts";
 import { LIVE_BOATS, LIVE_FLIGHTS } from "./plan/live-window.ts";
 
 const TODAY = new Date("2026-11-15T12:00:00Z");
@@ -125,8 +127,8 @@ test("plan around that ferry names the sailing and asks for a car only when it i
     listed.task,
   );
   assert.equal(around.plan, null);
-  assert.match(around.reply, /09:00/);
-  assert.match(around.reply, /around 09:00|por volta das 09:00|vers 09:00|arrival/i);
+  assert.match(around.reply, /Plan starts Wed 18 Nov with the 07:00 ferry from Santiago, arriving around 09:00/);
+  assert.doesNotMatch(around.reply, /is the arrival/);
   assert.match(around.reply, /car/i);
   assert.equal(around.task.constraints.arrival?.time, "09:00");
   assert.equal(around.task.constraints.dates?.start, "2026-11-18");
@@ -205,11 +207,55 @@ test("an open 18-20 plan already on the Wednesday ferry names that sailing witho
     asked.task,
   );
   assert.ok(Date.now() - started < 1_000, around.reply);
-  assert.match(around.reply, /09:00/);
-  assert.match(around.reply, /already starts with that arrival|now starts with that arrival/);
+  assert.match(around.reply, /Plan starts Wed 18 Nov with the 07:00 ferry from Santiago, arriving around 09:00/);
+  assert.doesNotMatch(around.reply, /is the arrival|now starts with that arrival/);
   assert.doesNotMatch(around.reply, /didn't change the plan/);
   assert.deepEqual(around.plan?.days.map((day) => day.date), ["2026-11-18", "2026-11-19", "2026-11-20"]);
   assert.equal(around.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "09:00");
+});
+
+test("plan around that ferry names the departure and the estimated arrival in en, pt and fr", async () => {
+  const cases = [
+    ["en", "Is there a ferry on Wednesday?", "plan around that ferry", "Plan starts Wed 18 Nov with the 07:00 ferry from Santiago, arriving around 09:00."],
+    ["pt", "barco quarta?", "apanhar esse ferry", "O plano começa qua 18 nov com o ferry das 07:00 de Santiago, a chegar por volta das 09:00."],
+    ["fr", "ferry mercredi ?", "autour de ce ferry", "Le plan commence mer. 18 nov avec le ferry de 07:00 de Santiago, arrivant vers 09:00."],
+  ] as const;
+  for (const [locale, ask, follow, expected] of cases) {
+    const plan = buildPlan({
+      request: { startDate: "2026-11-16", days: 3, locale, adults: 2, kids: 0, hasCar: true, boatTrips: 0, pace: "slow" },
+      forecast: [],
+      sailings: [],
+    });
+    const task = refreshTask({
+      ...emptyTask(locale),
+      objective: plan.title,
+      constraints: { dates: { start: "2026-11-16", days: 3 }, party: { adults: 2, kids: 0 }, car: true, pace: "slow" },
+      completed: ["itinerary"],
+    });
+    const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
+      if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+      return quietFetch()(input);
+    }) as typeof fetch;
+    const listed = await runPlanAgent(
+      [{ role: "user", content: ask }],
+      plan,
+      { model: bomb(), fetchImpl, now: TODAY },
+      task,
+    );
+    assert.equal(listed.plan, plan, listed.reply);
+    const around = await runPlanAgent(
+      [{ role: "user", content: follow }],
+      listed.plan,
+      { model: bomb(), fetchImpl, now: TODAY },
+      listed.task,
+    );
+    assert.equal(around.reply, expected, `${locale}: ${around.reply}`);
+    assert.equal(around.plan?.days[0]?.date, "2026-11-18");
+    assert.equal(around.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "09:00");
+    assert.doesNotMatch(around.reply, /is the arrival|essa chegada|cette arrivée/);
+  }
 });
 
 test("a setup that already names a rental car does not ask again", async () => {
@@ -263,6 +309,8 @@ test("plan around a ferry uses that sailing's arrival, not a 07:00 departure", a
   const arrival = around.plan?.days[0]?.items.find((item) => item.kind === "transport");
   assert.equal(arrival?.start, "10:30", around.reply);
   assert.notEqual(arrival?.start, "07:00");
+  assert.match(around.reply, /Plan starts Wed 18 Nov with the 07:00 ferry from Santiago, arriving at 10:30/);
+  assert.doesNotMatch(around.reply, /around 10:30|is the arrival/);
 });
 
 test("oui on an open plan and a hospital lookup stay under the model budget", async () => {
