@@ -1710,7 +1710,8 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-seal-rough i { background: var(--maio-error); }
 .plan-alert { margin: 0 0 20px; font-size: 15px; color: var(--maio-error); }
 .plan-ferries, .plan-stops { list-style: none; margin: 0; padding: 0; }
-.plan-ferry { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; padding: 12px 16px; margin-bottom: 22px; border-radius: 12px; background: var(--maio-surface-data); font-size: 15px; }
+.plan-ferry { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 12px 16px; margin-bottom: 22px; border-radius: 12px; background: var(--maio-surface-data); font-size: 15px; }
+.plan-ferry .plan-stop-img { flex: none; }
 .plan-ferry time { font-variant-numeric: tabular-nums; }
 .plan-ferry-note { color: var(--muted); }
 .plan-stops { display: grid; gap: 0; }
@@ -1784,7 +1785,8 @@ body:has(.chat-screen) { overflow: hidden; }
   .plan-print li > div { min-width: 0; }
   .plan-print .plan-weekday { color: #56565b; }
   .plan-print ol { list-style: none; margin: 0; padding: 0; }
-  .plan-print li { display: grid; grid-template-columns: 30mm minmax(0, 1fr); gap: 4mm; padding: 7pt 0; border-bottom: 1px solid #e5e5e7; break-inside: avoid; page-break-inside: avoid; }
+  .plan-print li { display: grid; grid-template-columns: 14mm 32mm minmax(0, 1fr); gap: 3mm 4mm; align-items: center; padding: 7pt 0; border-bottom: 1px solid #e5e5e7; break-inside: avoid; page-break-inside: avoid; }
+  .plan-print-img { display: block; width: 14mm; height: 14mm; object-fit: cover; border-radius: 1.6mm; background: #eaf2ff; }
   .plan-print li strong { display: block; font-size: 11pt; font-weight: 500; }
   .plan-print li span { display: block; color: #56565b; font-size: 9.5pt; }
   .plan-print .plan-print-time { color: #111; font-size: 9.5pt; }
