@@ -86,7 +86,7 @@ function flightRows(payload: unknown): FlightLeg[] {
 
 async function readJson(fetchImpl: typeof fetch, url: string): Promise<unknown | null> {
   try {
-    const response = await fetchImpl(url);
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(3_000) });
     if (!response.ok) return null;
     return await response.json();
   } catch {

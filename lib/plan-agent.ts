@@ -16,6 +16,7 @@ import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searc
 import { formatCapeVerdePhone } from "./phone.ts";
 import { freeStay, isStayDetailQuestion, isStayQuestion, matchStay, stayDetailReply, stayListReply, stayPhrase, staySavedReply, withStay } from "./plan-stay.ts";
 import { dailyForecastCached, forecastSourceName, loadDailyForecast, loadSunsets, maioClock, shareForecastCache, type DailySea } from "./agora.ts";
+import { budgetFetch } from "./fetch-budget.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule } from "./essentials.ts";
@@ -368,9 +369,20 @@ function namedRestaurants(): string[] {
   return FOOD.filter((item) => venueType(item) === "restaurant").slice(0, 3).map((item) => item.title);
 }
 
+function rememberContacts(sink: string[], rows: { name: string; phone?: string }[]) {
+  const names = rows.map((row) => row.name.trim()).filter(Boolean).slice(0, 24);
+  const phones = [...new Set(rows.map((row) => (row.phone ?? "").replace(/\D/g, "")).filter((phone) => phone.length >= 7))].slice(0, 40);
+  if (!names.length && !phones.length) return;
+  const line = `contacts: ${names.join(", ")}; phones: ${phones.join(" ")}`.slice(0, 2000);
+  if (!sink.includes(line)) sink.push(line);
+}
+
 export async function runPlanAgent(messages: ModelMessage[], current: TripPlan | null, deps: PlanDeps, taskInput?: Task | null): Promise<PlanAgentResult> {
   const toolFacts: string[] = [];
-  deps = { ...deps, fetchImpl: observeFetch(deps.fetchImpl, toolFacts) };
+  const rootFetch = deps.fetchImpl;
+  const observed = observeFetch(budgetFetch(rootFetch), toolFacts);
+  shareForecastCache(observed, rootFetch);
+  deps = { ...deps, fetchImpl: observed };
   const now = deps.now ?? new Date();
   const today = maioClock(now).date;
   const history = turns(messages);
@@ -415,8 +427,19 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   };
   let offeringPromise: ReturnType<typeof loadOfferings> | null = null;
   const offerings = () => {
-    if (!offeringPromise) offeringPromise = loadOfferings(deps.fetchImpl, noteCatalog);
+    if (!offeringPromise) offeringPromise = loadOfferings(deps.fetchImpl, noteCatalog).then((catalog) => {
+      rememberContacts(toolFacts, [
+        ...catalog.stays.map((stay) => ({ name: stay.name, phone: stay.phone })),
+        ...catalog.experiences.map((item) => ({ name: item.title, phone: item.operator.phone })),
+      ]);
+      return catalog;
+    });
     return offeringPromise;
+  };
+  const listedBusinesses = async () => {
+    const catalog = await loadBusinesses(deps.fetchImpl);
+    rememberContacts(toolFacts, catalog.records);
+    return catalog;
   };
   const applyStay = (plan: TripPlan, nextTask: Task) => {
     const stay = nextTask.constraints.stay;
@@ -691,7 +714,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (isCarRentalQuestion(lastUser) && !classification.planShaping) {
-    const catalog = await loadBusinesses(deps.fetchImpl);
+    const catalog = await listedBusinesses();
     const found = catalog.source === "api" ? carRentalRecords(catalog.records) : [];
     const listed = found.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ");
     const reply = found.length
@@ -708,7 +731,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (isBusinessLookup(lastUser) && !classification.planShaping) {
-    const catalog = await loadBusinesses(deps.fetchImpl);
+    const catalog = await listedBusinesses();
     const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(spoken);
     if (pharmacy) {
       const found = pharmacyRecords(catalog.records);
@@ -737,7 +760,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     let rentals: { name: string; phone: string }[] | null = null;
     let api = false;
     try {
-      const catalog = await loadBusinesses(deps.fetchImpl);
+      const catalog = await listedBusinesses();
       api = catalog.source === "api";
       rentals = api ? carRentalRecords(catalog.records) : null;
     } catch { /* the road answer still stands without a rental name */ }
@@ -1207,7 +1230,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const q = query?.toLowerCase();
         const match = (text: string) => !q || q.split(/\s+/).some((word) => word.length > 2 && text.toLowerCase().includes(word));
         const tFetch = Date.now();
-        const [businesses, listed] = await Promise.all([loadBusinesses(deps.fetchImpl), offerings()]);
+        const [businesses, listed] = await Promise.all([listedBusinesses(), offerings()]);
         fetchMs += Date.now() - tFetch;
         const phoneFor = (title: string) => {
           const raw = businesses.source === "api" ? searchBusinesses(businesses.records, title).find((item) => item.phone)?.phone : undefined;

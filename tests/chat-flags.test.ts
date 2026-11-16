@@ -210,6 +210,12 @@ test("phones and businesses missing from the Maio result are flagged, known ones
   assert.equal(known.includes("invented_contact"), false);
   const prose = inspectTurn(turn({ botReply: "The bar is calm in the afternoon.", toolFacts: "", planTurn: true }));
   assert.equal(prose.includes("invented_contact"), false);
+  const stayFacts = "contacts: Villa Azul, Hotel Big Game Maio, Casa do Mar; phones: 5974467 002385977305";
+  const stayReply = "Places to stay. Cidade do Porto Inglês: Villa Azul (+238 597 44 67), Hotel Big Game Maio (+238 597 73 05). Calheta: Casa do Mar (airbnb.com).";
+  const stays = inspectTurn(turn({ botReply: stayReply, toolFacts: stayFacts, planTurn: false, userMessage: "where can we stay?" }));
+  assert.equal(stays.includes("invented_contact"), false, stays.join(","));
+  const inventedStay = inspectTurn(turn({ botReply: "Call Villa Azul on +238 991 00 00.", toolFacts: stayFacts, planTurn: false, userMessage: "where can we stay?" }));
+  assert.ok(inventedStay.includes("invented_contact"));
 });
 
 test("context keeps at most four recent turns and about 2000 characters", () => {

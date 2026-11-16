@@ -346,12 +346,23 @@ function groundedName(name: string, corpus: string): boolean {
 
 const BUSINESS = /\b(?:Restaurante|Restaurant|Bar|Café|Cafe|Hotel|Pousada|Farmácia|Farmacia|Pharmacie|Padaria)\s+([A-ZÀ-Ý][\p{L}'’.-]+(?:\s+[A-ZÀ-Ý][\p{L}'’.-]+){0,3})/gu;
 
+/** 5974467, 2385974467 and 002385974467 are the same Cape Verde number. */
+function phoneForms(digits: string): string[] {
+  const forms = new Set<string>([digits]);
+  let local = digits;
+  if (local.startsWith("00238")) local = local.slice(5);
+  else if (local.startsWith("238") && local.length > 7) local = local.slice(3);
+  if (local) forms.add(local);
+  if (local.length === 7) forms.add(`238${local}`);
+  return [...forms];
+}
+
 function inventedContact(reply: string, corpus: string): boolean {
   const hay = corpus.replace(/\D/g, "");
   for (const phone of phonesIn(reply)) {
-    const local = phone.startsWith("238") ? phone.slice(3) : phone;
-    if (EMERGENCY_DIGITS.has(phone) || EMERGENCY_DIGITS.has(local)) continue;
-    if (hay.includes(phone) || (local !== phone && hay.includes(local))) continue;
+    const forms = phoneForms(phone);
+    if (forms.some((form) => EMERGENCY_DIGITS.has(form))) continue;
+    if (forms.some((form) => form.length >= 7 && hay.includes(form))) continue;
     return true;
   }
   BUSINESS.lastIndex = 0;
