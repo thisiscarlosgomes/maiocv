@@ -103,6 +103,15 @@ test("prompt rules keep stays, activities, and boat trips apart from the ferry",
   assert.equal(classifyAsk("what activities are there"), "activities");
   assert.equal(classifyAsk("boat trips around the island"), "boat_trip");
   assert.equal(classifyAsk("passeio de barco"), "boat_trip");
+  assert.equal(classifyAsk("passeios de barco"), "boat_trip");
+  assert.equal(classifyAsk("sorties en bateau"), "boat_trip");
+  assert.equal(classifyAsk("tours en bateau"), "boat_trip");
+  assert.equal(classifyAsk("excursions en bateau"), "boat_trip");
+  assert.equal(classifyAsk("excursion en bateau"), "boat_trip");
+  assert.equal(classifyAsk("Excursions en bateau autour de l'île"), "boat_trip");
+  assert.equal(classifyAsk("excursions"), "activities");
+  assert.equal(classifyAsk("excursion"), "activities");
+  assert.equal(classifyAsk("quelles excursions proposer"), "activities");
   assert.equal(classifyAsk("next ferry Santiago to Maio"), "ferry");
   assert.equal(classifyAsk("what time is the boat from Santiago"), "ferry");
   assert.equal(classifyAsk("next flight to Maio"), "flight");

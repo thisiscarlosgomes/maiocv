@@ -571,8 +571,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (isStayQuestion(lastUser) || stayPhrase(lastUser) || isStayDetailQuestion(lastUser, task.constraints.stay?.name) || lodgingAsk) {
     const catalog = await offerings();
     if (isStayQuestion(lastUser)) {
-      const listed = stayListReply(task.locale, catalog.stays);
-      return finish(listed.reply, current, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, listed.chips, true);
+      const listed = stayListReply(task.locale, catalog.stays, catalog.staysRead);
+      return finish(listed.reply, current, [{ name: "maio-offerings", ok: catalog.staysRead }], task, listed.chips, true);
     }
     const phrase = stayPhrase(lastUser);
     if (phrase) {

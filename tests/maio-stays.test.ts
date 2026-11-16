@@ -298,3 +298,47 @@ test("a boat plan uses the API fishing trip, and the catalog line is only on a r
   assert.equal(againLines.includes("Checking stays and experiences…"), false, againLines.join(" | "));
   assert.equal(again.steps.includes("Checking stays and experiences…"), false, again.steps.join(" | "));
 });
+
+function slowStaysFetch(state: { staysDown: boolean; experiencesDown?: boolean }): typeof fetch {
+  const world = worldFetch();
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (state.staysDown && url.endsWith("/accommodation")) throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    if (state.experiencesDown && url.endsWith("/experiences")) throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    return world(input, init);
+  }) as typeof fetch;
+}
+
+test("a timed-out stays read is not cached as an empty list, in EN and PT", async () => {
+  const asks = [
+    ["en", "where can we stay?", /couldn't open the Maio stays list/, /Cidade do Porto Inglês: Villa Azul \(\+238 597 44 67\)/],
+    ["pt", "onde ficar?", /Não consegui abrir a lista de alojamento/, /Calheta: Casa do Mar \(airbnb.com\)/],
+  ] as const;
+  for (const [locale, ask, down, listed] of asks) {
+    clearOfferingCache();
+    const state = { staysDown: true };
+    const fetchImpl = slowStaysFetch(state);
+    const task = refreshTask({ ...emptyTask(locale), constraints: { dates: { start: "2026-11-18", days: 3 } } });
+    const first = await runPlanAgent([{ role: "user", content: ask }], null, { model: bomb(), fetchImpl, now: TODAY }, task);
+    assert.match(first.reply, down, first.reply);
+    assert.doesNotMatch(first.reply, /don't have stays|Não tenho alojamento/, first.reply);
+
+    state.staysDown = false;
+    const second = await runPlanAgent([{ role: "user", content: ask }], null, { model: bomb(), fetchImpl, now: TODAY }, task);
+    assert.match(second.reply, listed, second.reply);
+  }
+});
+
+test("a timed-out stays read reuses the last stays the API returned", async () => {
+  clearOfferingCache();
+  const state = { staysDown: false, experiencesDown: true };
+  const fetchImpl = slowStaysFetch(state);
+  const first = await loadOfferings(fetchImpl);
+  assert.equal(first.stays.length, 3);
+  state.staysDown = true;
+  state.experiencesDown = false;
+  const second = await loadOfferings(fetchImpl);
+  assert.equal(second.source, "api");
+  assert.equal(second.staysRead, true);
+  assert.deepEqual(second.stays.map((stay) => stay.name), first.stays.map((stay) => stay.name));
+});

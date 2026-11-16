@@ -139,15 +139,22 @@ export type OfferingCatalog = {
   stays: Stay[];
   /** Experiences came from the API. A failed read keeps the bundled fixture and an empty stay list. */
   source: "api" | "fallback";
+  /** False when the stay list could not be read, so an empty list is not "no stays". */
+  staysRead: boolean;
 };
 
 type OfferingCache = { epoch: number; at: number; value: OfferingCatalog };
 let offeringCache: OfferingCache | null = null;
 let offeringEpoch = 0;
+/** The last list each collection actually returned. A slow read reuses it instead of going empty. */
+let lastExperiences: { epoch: number; rows: Experience[] } | null = null;
+let lastStays: { epoch: number; rows: Stay[] } | null = null;
 
 export function clearOfferingCache(): void {
   offeringEpoch += 1;
   offeringCache = null;
+  lastExperiences = null;
+  lastStays = null;
 }
 
 function featuresOf(payload: unknown): unknown[] {
@@ -246,34 +253,43 @@ async function readCollection(fetchImpl: typeof fetch, path: string): Promise<un
 export async function loadOfferings(fetchImpl: typeof fetch = fetch, onFetch?: () => void): Promise<OfferingCatalog> {
   const hit = offeringCache;
   if (hit && hit.epoch === offeringEpoch && Date.now() - hit.at < TTL_MS) return hit.value;
-  try {
-    const [experienceResult, stayResult] = await Promise.allSettled([
-      readCollection(fetchImpl, "experiences"),
-      readCollection(fetchImpl, "accommodation"),
-    ]);
-    if (experienceResult.status === "rejected" && stayResult.status === "rejected") {
-      throw experienceResult.reason;
-    }
-    const experiences = (experienceResult.status === "fulfilled" ? experienceResult.value : []).flatMap((row) => {
+  const epoch = offeringEpoch;
+  const [experienceResult, stayResult] = await Promise.allSettled([
+    readCollection(fetchImpl, "experiences"),
+    readCollection(fetchImpl, "accommodation"),
+  ]);
+  const experienceRows = experienceResult.status === "fulfilled"
+    ? experienceResult.value.flatMap((row) => {
       const item = experienceFromFeature(row);
       return item ? [item] : [];
-    });
-    const stays = (stayResult.status === "fulfilled" ? stayResult.value : []).flatMap((row) => {
+    })
+    : null;
+  const stayRows = stayResult.status === "fulfilled"
+    ? stayResult.value.flatMap((row) => {
       const item = stayFromFeature(row);
       return item ? [item] : [];
-    });
-    if (!experiences.length && !stays.length) throw new Error("Maio API returned no stays or experiences");
-    onFetch?.();
-    const value: OfferingCatalog = {
-      experiences: experiences.length ? experiences : EXPERIENCES,
-      stays,
-      source: experiences.length ? "api" : "fallback",
-    };
-    offeringCache = { epoch: offeringEpoch, at: Date.now(), value };
-    return value;
-  } catch {
-    return { experiences: EXPERIENCES, stays: [], source: "fallback" };
+    })
+    : null;
+  if (epoch === offeringEpoch) {
+    if (experienceRows?.length) lastExperiences = { epoch, rows: experienceRows };
+    if (stayRows) lastStays = { epoch, rows: stayRows };
   }
+  const experiences = experienceRows?.length
+    ? experienceRows
+    : lastExperiences?.epoch === offeringEpoch ? lastExperiences.rows : null;
+  const stays = stayRows ?? (lastStays?.epoch === offeringEpoch ? lastStays.rows : null);
+  if (experiences?.length || stays?.length) onFetch?.();
+  const value: OfferingCatalog = {
+    experiences: experiences?.length ? experiences : EXPERIENCES,
+    stays: stays ?? [],
+    source: experiences?.length ? "api" : "fallback",
+    staysRead: stays !== null,
+  };
+  // Cache only a complete read. A timed-out collection must not pin an empty list for the TTL.
+  if (experienceRows?.length && stayRows && epoch === offeringEpoch) {
+    offeringCache = { epoch, at: Date.now(), value };
+  }
+  return value;
 }
 
 export function carRentalRecords(records: BusinessRecord[]): BusinessRecord[] {
