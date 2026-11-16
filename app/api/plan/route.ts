@@ -10,6 +10,7 @@ import { planEnabled } from "../../../lib/plan-flag";
 import { isProductionEnv, readTask, signTask, taskSecret } from "../../../lib/awareness/sign";
 import { emptyTask, type TaskLocale } from "../../../lib/awareness/task";
 import { sideQuestionFallback } from "../../../lib/island-answer";
+import { wantsPlanStream } from "../../../lib/plan-status";
 import { parseTripPlan } from "../../../lib/trip";
 
 export const runtime = "nodejs";
@@ -21,6 +22,8 @@ const BodySchema = z.object({
   /** Server-signed task blob. The browser stores it; it is not a source of numbers. */
   task: z.string().max(16_000).nullish(),
   locale: z.enum(["pt", "en", "fr"]).optional(),
+  /** Ask for the ndjson status stream. Omitted by every caller that still wants one JSON body. */
+  stream: z.boolean().optional(),
 });
 
 function flagDeps(): ReviewDeps {
@@ -45,17 +48,40 @@ function reviewPlan(turn: PlanReplyTurn, messages: { role: string; content: stri
   }, deps);
 }
 
+function ndjson(work: (send: (event: unknown) => void) => Promise<void>): Response {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctrl) { controller = ctrl; },
+  });
+  const send = (event: unknown) => {
+    try { controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)); } catch { /* the client went away */ }
+  };
+  void work(send).finally(() => { try { controller.close(); } catch { /* already closed */ } });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   if (!planEnabled()) return Response.json({ error: "Not found" }, { status: 404 });
   const body = BodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Invalid request" }, { status: 400 });
   if (isProductionEnv() && !taskSecret()) return Response.json({ error: "Planner unavailable" }, { status: 500 });
-  const messages = body.data.messages as ModelMessage[];
-  const current = body.data.plan ? parseTripPlan(body.data.plan) : null;
-  const locale = body.data.locale ?? current?.locale ?? "en";
-  const task = body.data.task ? readTask(body.data.task, process.env, locale) : current ? null : emptyTask(locale);
+  const data = body.data;
+  const messages = data.messages as ModelMessage[];
+  const current = data.plan ? parseTripPlan(data.plan) : null;
+  const locale = data.locale ?? current?.locale ?? "en";
+  const task = data.task ? readTask(data.task, process.env, locale) : current ? null : emptyTask(locale);
   const deps = flagDeps();
-  try {
+  const fallbackLocale: TaskLocale = locale === "pt" || locale === "fr" ? locale : "en";
+  const stream = wantsPlanStream(request.headers.get("accept"), data.stream);
+
+  async function execute(onStatus?: (text: string) => void) {
     let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
     let sideModel: LanguageModel = gateway(process.env.PLAN_SIDE_MODEL ?? "openai/gpt-5-nano");
     // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.
@@ -68,13 +94,16 @@ export async function POST(request: Request) {
       model,
       sideModel,
       fetchImpl: fetch,
-      onReply: (turn) => reviewPlan(turn, body.data.messages, deps),
+      onReply: (turn) => reviewPlan(turn, data.messages, deps),
+      onStatus,
     }, task);
     const signed = signTask(result.task);
-    return Response.json({ reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status });
-  } catch {
+    return { reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps };
+  }
+
+  function failureBody() {
     try {
-      const context = conversationContext(body.data.messages);
+      const context = conversationContext(data.messages);
       scheduleTurnReview({
         surface: "plan",
         locale,
@@ -90,20 +119,37 @@ export async function POST(request: Request) {
         failure: "model_error",
       }, deps);
     } catch { /* the error response still returns */ }
-    const fallbackLocale: TaskLocale = locale === "pt" || locale === "fr" ? locale : "en";
     let signed: string | undefined;
-    if (typeof body.data.task === "string") signed = body.data.task;
+    if (typeof data.task === "string") signed = data.task;
     else if (task) {
       try { signed = signTask(task); } catch { signed = undefined; }
     }
-    return Response.json({
+    return {
       reply: sideQuestionFallback(fallbackLocale),
       plan: current,
       toolEvents: [],
       ...(signed ? { task: signed } : {}),
-      chips: [],
-      intent: "side_question",
+      chips: [] as string[],
+      intent: "side_question" as const,
       status: "ready",
-    });
+      steps: [] as string[],
+    };
   }
+
+  // Status lines are enqueued as each step starts. Nothing here waits before the work, and nothing holds the answer.
+  if (!stream) {
+    try {
+      return Response.json(await execute());
+    } catch {
+      return Response.json(failureBody());
+    }
+  }
+  return ndjson(async (send) => {
+    try {
+      const payload = await execute((text) => send({ type: "status", text }));
+      send({ type: "result", ...payload });
+    } catch {
+      send({ type: "result", ...failureBody() });
+    }
+  });
 }

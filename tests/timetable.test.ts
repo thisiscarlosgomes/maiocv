@@ -10,7 +10,8 @@ import { scriptedModel } from "./plan/mock-model.ts";
 
 const TODAY = new Date("2026-11-15T12:00:00Z");
 const SEA = /checking sea forecast|previsão do mar|prévision de la mer/i;
-const FERRY = /checking ferries and flights|barcos e voos|ferries et des vols/i;
+const FERRY = /checking ferry times|horários do barco|horaires du ferry/i;
+const FLIGHT = /checking flight times|horários do voo|horaires du vol/i;
 
 const boats = {
   retrievedAt: "2026-11-15T12:00:00.000Z",
@@ -119,6 +120,7 @@ for (const locale of ["en", "pt", "fr"] as const) {
     assert.match(ferryResult.reply, /Santiago|Maio/);
     assert.doesNotMatch(ferryResult.reply, /Tap the card|Toque no cartão|Touchez la carte/);
     assert.match(ferryResult.status, FERRY);
+    assert.equal(ferryResult.steps.length, 1);
     assert.doesNotMatch(ferryResult.status, SEA);
     assert.equal(ferryResult.toolEvents.some((event) => event.name === "propose_itinerary"), false);
 
@@ -131,7 +133,8 @@ for (const locale of ["en", "pt", "fr"] as const) {
     assert.equal(flightResult.intent, "side_question");
     assert.equal(flightResult.task.constraints.dates?.days, 3);
     assert.match(flightResult.reply, /14:35/);
-    assert.match(flightResult.status, FERRY);
+    assert.match(flightResult.status, FLIGHT);
+    assert.equal(flightResult.steps.length, 1);
     assert.doesNotMatch(flightResult.status, SEA);
   });
 }

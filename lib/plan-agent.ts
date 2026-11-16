@@ -10,10 +10,10 @@ import { editDiffReply, isGenericPlanReply } from "./plan-diff.ts";
 import { addBoatTrip, addListedActivity, addListedStop, answerAboutPlan, busyDay, dropBoatTrip, itinerarySig, lengthDiffReply, lengthUnchangedReply, moveListedActivity, noTripReply, pdfReply, relaxDay, removeListedActivity, samePlanShape, shiftDiffReply, swapDayBeach, unfitLeavingReply } from "./plan-edits.ts";
 import { boardRentalReply, suggestionChips } from "./plan-chips.ts";
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
-import { loadingStatus, turnWork, type TurnWork } from "./plan-status.ts";
+import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
-import { forecastSourceName, loadDailyForecast, loadSunsets, maioClock, type DailySea } from "./agora.ts";
+import { dailyForecastCached, forecastSourceName, loadDailyForecast, loadSunsets, maioClock, shareForecastCache, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule } from "./essentials.ts";
@@ -29,8 +29,10 @@ export type PlanAgentResult = {
   task: Task;
   chips: string[];
   intent: Intent;
-  /** Loading line for this turn. Empty when the turn does no visible work. */
+  /** Last loading line for this turn. Empty when the turn does no visible work. */
   status: string;
+  /** Loading lines actually emitted, in order. */
+  steps: string[];
 };
 /** Snapshot handed to the failure log after the reply is chosen. Does not affect the reply. */
 export type PlanReplyTurn = {
@@ -46,10 +48,18 @@ export type PlanReplyTurn = {
   toolFacts: string;
   appliedEdit: string | null;
 };
-export type PlanDeps = { model: LanguageModel; sideModel?: LanguageModel; fetchImpl: typeof fetch; now?: Date; onReply?: (turn: PlanReplyTurn) => void };
+export type PlanDeps = {
+  model: LanguageModel;
+  sideModel?: LanguageModel;
+  fetchImpl: typeof fetch;
+  now?: Date;
+  onReply?: (turn: PlanReplyTurn) => void;
+  /** Fired when a step starts. Must not be awaited and must not throw into the turn. */
+  onStatus?: (text: string) => void;
+};
 
 function observeFetch(fetchImpl: typeof fetch, sink: string[]): typeof fetch {
-  return async (input, init) => {
+  const wrapped: typeof fetch = async (input, init) => {
     const response = await fetchImpl(input, init);
     try {
       if (sink.length < 6) {
@@ -59,6 +69,8 @@ function observeFetch(fetchImpl: typeof fetch, sink: string[]): typeof fetch {
     } catch { /* tool text is only for the failure log */ }
     return response;
   };
+  shareForecastCache(wrapped, fetchImpl);
+  return wrapped;
 }
 
 function safeReplyHook(hook: PlanDeps["onReply"], turn: PlanReplyTurn) {
@@ -194,7 +206,7 @@ function pendingFrom(task: Task, reply: string, intent: Intent): Task {
   return { ...task, pendingQuestion: question ? question.slice(0, 200) : null };
 }
 
-function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null, built = false, work: TurnWork = "thinking", lastAsk = ""): PlanAgentResult {
+function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: ToolEvent[], intent: Intent, chipsOverride?: string[], preservePlaces = false, keepPending = false, stance?: "yes" | "no" | "unsure" | null, built = false, _work: TurnWork = "thinking", steps: string[] = [], lastAsk = ""): PlanAgentResult {
   let next = refreshTask(pendingFrom(task, reply, intent));
   if (keepPending && isCarPending(task.pendingQuestion)) next = { ...next, pendingQuestion: task.pendingQuestion };
   let text = reply.trim();
@@ -219,10 +231,7 @@ function result(task: Task, reply: string, plan: TripPlan | null, toolEvents: To
   if (plan && !next.completed.includes("itinerary")) next = refreshTask({ ...next, completed: [...next.completed, "itinerary"] });
   const carChips = isCarPending(next.pendingQuestion) ? CAR_CHIPS[next.locale] : null;
   const chips = (carChips ?? chipsOverride ?? suggestionChips({ locale: next.locale, plan, task: next, lastAsk, reply: text, intent })).slice(0, 3);
-  const ferryRan = toolEvents.some((event) => event.name === "get_transport");
-  const forecastRan = toolEvents.some((event) => event.name === "get_sea_forecast" || event.name === "propose_itinerary");
-  const shown: TurnWork = work === "ferries" || (ferryRan && !forecastRan) ? "ferries" : forecastRan ? "forecast" : work === "forecast" ? "moment" : work;
-  return { reply: text, plan, toolEvents, task: next, chips, intent, status: loadingStatus(next.locale, shown) };
+  return { reply: text, plan, toolEvents, task: next, chips, intent, status: steps.at(-1) ?? "", steps };
 }
 
 function includeFromConstraints(task: Task, utterance: string): string[] {
@@ -333,6 +342,25 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const t0 = Date.now();
   let modelMs = 0;
   let fetchMs = 0;
+  const turn = planTurn(lastUser, task, today, { hasPlan: Boolean(current), plan: current });
+  const emitted: PlanStep[] = [];
+  const lines: string[] = [];
+  const updateStep = turn.steps.find((step) => step.id === "update") ?? { id: "update" as const };
+  // Synchronous. The callback only enqueues a few bytes; it is never awaited.
+  const note = (step: PlanStep, force = false) => {
+    const last = emitted[emitted.length - 1];
+    if (last && last.id === step.id && last.day === step.day && last.dates === step.dates) return;
+    if (turn.kind === "quiet" && emitted.length > 0 && !force) return;
+    if (force && turn.kind === "quiet") {
+      emitted.length = 0;
+      lines.length = 0;
+    }
+    emitted.push(step);
+    const text = stepText(task.locale, step);
+    lines.push(text);
+    try { deps.onStatus?.(text); } catch { /* status must not change the reply */ }
+  };
+  if (turn.steps[0]) note(turn.steps[0]);
 
   const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => {
     const changed = Boolean(plan && !samePlanShape(plan, current));
@@ -359,8 +387,11 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         showBlurb = false;
       }
     }
+    if (turn.kind === "edit" && changed) note(updateStep);
+    if (turn.kind === "build" && built && changed && !emitted.some((step) => step.id === "build")) note({ id: "build" });
+    if ((turn.kind === "edit" && changed) || (turn.kind === "build" && built && changed)) note({ id: "finalize" });
     const returned = changed ? plan : current && plan && samePlanShape(plan, current) ? current : plan;
-    const out = result(next, text, returned, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, showBlurb, work ?? turnWork(lastUser, seeded, today), lastUser);
+    const out = result(next, text, returned, toolEvents, classification.intent, chips, preservePlaces, keepPending, classification.carStance, showBlurb, work, lines, lastUser);
     console.info(`plan.timing intent=${classification.intent} built=${showBlurb ? 1 : 0} modelMs=${modelMs} fetchMs=${fetchMs} totalMs=${Date.now() - t0}`);
     safeReplyHook(deps.onReply, {
       userMessage: lastUser,
@@ -674,8 +705,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const forecastCache = new Map<string, Promise<DailySea[]>>();
   const forecast = (start: string, days: number) => {
     const key = `${start}:${days}`;
-    if (!forecastCache.has(key)) forecastCache.set(key, loadDailyForecast(deps.fetchImpl, start, days).catch(() => []));
+    if (!forecastCache.has(key)) {
+      // The cache check is a map read. The status goes out before the network call, and a hit skips the sea line.
+      const cached = dailyForecastCached(deps.fetchImpl, start, days);
+      if (!cached) note({ id: "forecast" }, turn.kind === "quiet");
+      else if (turn.kind === "build") note({ id: "places" });
+      forecastCache.set(key, loadDailyForecast(deps.fetchImpl, start, days).catch(() => []));
+    }
     return forecastCache.get(key)!;
+  };
+  const noteCompose = () => {
+    if (turn.kind === "build") note({ id: "build" });
+    else if (turn.kind === "edit") note(updateStep);
   };
   let plan: TripPlan | null = current;
   let builtRequest: TripRequest | null = null;
@@ -706,6 +747,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       const { table, sea } = await loadPieces(String(base.startDate), Number(base.days));
       const withTravel = attachPublishedTravel(base, table);
       const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
+      noteCompose();
       const built = annotateMissingTravel(buildPlan({
         request: withTravel as z.input<typeof TripRequestSchema>,
         forecast: rows,
@@ -946,7 +988,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   }
 
   if (!classification.planShaping && /\b(?:weather|forecast|wave|waves|previsao do mar|meteo|houle|sea state)\b/.test(spoken) && !/\b(?:days?|dias?|jours?)\b/.test(spoken)) {
-    const rows = await loadDailyForecast(deps.fetchImpl, today, 2).catch(() => []);
+    const rows = await forecast(today, 2);
     const first = rows.find((row) => row.waveHeightM != null || row.tempMaxC != null);
     const reply = first
       ? say(task.locale,
@@ -1086,6 +1128,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const { table, sea } = await loadPieces(askedStart, askedDays);
         const withTravel = attachPublishedTravel(clean, table);
         const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
+        noteCompose();
         const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: rows, sailings: table.sailings, forecastSource: forecastSourceName }), table);
         builtRequest = TripRequestSchema.parse(withTravel);
         plan = built;
@@ -1129,6 +1172,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       const { table, sea } = await loadPieces(String(fallback.startDate), Number(fallback.days));
       const withTravel = attachPublishedTravel(fallback, table);
       const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
+      noteCompose();
       const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: rows, sailings: table.sailings, forecastSource: forecastSourceName }), table);
       builtRequest = TripRequestSchema.parse(withTravel);
       plan = built;

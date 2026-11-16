@@ -16,7 +16,7 @@ import { DayStops, PlaceDetail, RoughAlert, SeaText } from "./cards";
 import { ChatShell } from "../chat/shell";
 import { emptyTask, parseGuestChip, refreshTask } from "../../lib/awareness/task";
 import { keepAssistantReply } from "../../lib/plan-edits";
-import { loadingStatus, turnWork } from "../../lib/plan-status";
+import { paceLines, planTurn, pushStatusPlay, readPlanEvents, startStatusPlay, tickStatusPlay, type StatusPlay } from "../../lib/plan-status";
 
 // The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
 const TASK_KEY = "maio.plan.task";
@@ -40,7 +40,9 @@ export function Planner({ locale }: { locale: Locale }) {
   const hadPlan = useRef(false);
   const printOnOpen = useRef(false);
   const [printNonce, setPrintNonce] = useState(0);
-  const [busyLabel, setBusyLabel] = useState(s.thinking);
+  const [busyLabel, setBusyLabel] = useState("");
+  const play = useRef<StatusPlay | null>(null);
+  const shownLabel = useRef("");
   const [copied, setCopied] = useState(false);
   const [taskBlob, setTaskBlob] = useState<string | null>(null);
   const [chips, setChips] = useState<string[]>([]);
@@ -120,13 +122,30 @@ export function Planner({ locale }: { locale: Locale }) {
       setPrintNonce((nonce) => nonce + 1);
     }
     const conversation: Msg[] = [...messages, { role: "user", content }];
-    setMessages(conversation); setDraft(""); setBusyLabel(loadingStatus(locale, turnWork(content, hintTask(), new Date().toISOString().slice(0, 10)))); setBusy(true); setError(null);
+    const today = new Date().toISOString().slice(0, 10);
+    const paced = paceLines(locale, planTurn(content, hintTask(), today, { hasPlan: Boolean(plan), plan }));
+    const showStatus = (next: StatusPlay) => {
+      play.current = next;
+      if (next.label === shownLabel.current) return;
+      shownLabel.current = next.label;
+      setBusyLabel(next.label);
+    };
+    showStatus(startStatusPlay(paced.lines, paced.blocked, performance.now()));
+    setMessages(conversation); setDraft(""); setBusy(true); setError(null);
     if (!exporting && screen === "trip") setScreen("chat");
+    let stopped = false;
+    const timer = window.setInterval(() => {
+      if (stopped || !play.current) return;
+      const next = tickStatusPlay(play.current, performance.now());
+      if (next !== play.current) showStatus(next);
+    }, 80);
     try {
-      const response = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: conversation.slice(-25).map(({ role, content: c }) => ({ role, content: c })), plan, locale, ...(taskBlob ? { task: taskBlob } : {}) }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error();
+      const response = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+        body: JSON.stringify({ messages: conversation.slice(-25).map(({ role, content: c }) => ({ role, content: c })), plan, locale, stream: true, ...(taskBlob ? { task: taskBlob } : {}) }) });
+      const data = await readPlanEvents(response, (text) => {
+        if (stopped || !play.current) return;
+        showStatus(pushStatusPlay(play.current, text, performance.now()));
+      });
       if (typeof data.task === "string") writeTask(data.task);
       const nextChips = Array.isArray(data.chips) ? data.chips.filter((chip: unknown): chip is string => typeof chip === "string") : chips;
       if (Array.isArray(data.chips)) setChips(nextChips);
@@ -143,7 +162,13 @@ export function Planner({ locale }: { locale: Locale }) {
       }
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
-    } finally { setBusy(false); }
+    } finally {
+      stopped = true;
+      window.clearInterval(timer);
+      play.current = null;
+      shownLabel.current = "";
+      setBusy(false);
+    }
   }
 
   function shareUrl() {
@@ -197,7 +222,7 @@ export function Planner({ locale }: { locale: Locale }) {
       placeholder={plan ? s.ask : s.placeholder}
       thinking={busyLabel}
       sendLabel={s.send}
-      sendingLabel={s.thinking}
+      sendingLabel={busyLabel || s.send}
       inputId="plan-input"
       note={s.foot}
       suggestions={suggestions.map((label) => ({ label }))}

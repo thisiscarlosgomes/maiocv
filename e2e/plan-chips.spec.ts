@@ -19,7 +19,8 @@ const copy = {
     hospital: "what's the hospital number",
     phone: "phone number for Enzo Caffe Pizza",
     sea: /sea forecast/i,
-    ferry: /ferries and flights/i,
+    ferry: /ferries and flights|ferry times/i,
+    understand: /Understanding your trip/i,
     thinking: /Thinking/i,
   },
   pt: {
@@ -33,7 +34,8 @@ const copy = {
     hospital: "qual é o número do hospital",
     phone: "número de telefone do Enzo Caffe Pizza",
     sea: /previsão do mar/i,
-    ferry: /barcos e voos/i,
+    ferry: /barcos e voos|horários do barco/i,
+    understand: /A perceber o pedido/i,
     thinking: /pensar/i,
   },
   fr: {
@@ -47,7 +49,8 @@ const copy = {
     hospital: "quel est le numéro de l'hôpital",
     phone: "numéro de téléphone de Enzo Caffe Pizza",
     sea: /prévision de la mer/i,
-    ferry: /ferries et des vols/i,
+    ferry: /ferries et des vols|horaires du ferry/i,
+    understand: /Je lis votre demande/i,
     thinking: /réfléchis/i,
   },
 } as const;
@@ -137,7 +140,11 @@ for (const locale of ["en", "pt", "fr"] as const) {
     await page.goto(`/${locale}/plan`);
     const text = copy[locale];
     const typing = page.getByTestId("typing");
-    for (const message of [text.hi, text.first, text.hospital, text.phone]) {
+    await ask(page, text.hi);
+    await expect(typing).toHaveCount(0);
+    release();
+    await expect(page.getByTestId("assistant-reply").last()).toBeVisible();
+    for (const message of [text.first, text.hospital, text.phone]) {
       await ask(page, message);
       await expect(typing).toBeVisible();
       await expect(typing).not.toContainText(text.sea);
@@ -147,7 +154,8 @@ for (const locale of ["en", "pt", "fr"] as const) {
     }
     await ask(page, text.open);
     await expect(typing).toBeVisible();
-    await expect(typing).toContainText(text.sea);
+    await expect(typing).toContainText(text.understand);
+    await expect(typing).not.toContainText(text.sea);
     await expect(typing).not.toContainText(text.ferry);
     release();
   });
