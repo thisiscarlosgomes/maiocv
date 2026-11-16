@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { Locale } from "../../lib/locale";
 import type { PlanDay, PlanItem } from "../../lib/trip";
 import type { PlanStrings } from "../../lib/trip-strings";
+import { stopImage } from "../../lib/stop-image";
 import { cardView, contactLinks, dayParts, dayTitle, dayHasVehicle, hopBetween, partOfDay, timeSpan } from "../../lib/trip-view";
-
-/** A photo that falls back to the plain placeholder tile if it fails to load, so a bad URL never shows a broken-image icon. */
-export function SafeImg({ src, className, lazy }: { src: string | null; className?: string; lazy?: boolean }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  if (!src || failed === src) return <span className={className} aria-hidden="true" />;
-  return <img className={className} src={src} alt="" loading={lazy ? "lazy" : undefined} onError={() => setFailed(src)} />;
-}
+import { SafeImg } from "../stop-photo";
 
 export function RoughAlert({ day, s }: { day: PlanDay; s: PlanStrings }) {
   if (day.sea?.status !== "rough") return null;
@@ -29,12 +24,20 @@ export function SeaText({ day, s }: { day: PlanDay; s: PlanStrings }) {
 export function PlanStop({ item, locale, s, onOpen }: { item: PlanItem; locale: Locale; s: PlanStrings; onOpen?: (item: PlanItem, el: HTMLElement) => void }) {
   const v = cardView(item, locale, s);
   if (!v) return null;
+  const img = stopImage(item);
   if (item.kind === "transport") {
-    return <li className="plan-ferry" data-testid="card-transport"><time className="mono">{item.start ?? s.timeUnpublished}</time><span>{v.title}</span>{v.meta && <span className="plan-ferry-note">· {v.meta}</span>}</li>;
+    return (
+      <li className="plan-ferry" data-testid="card-transport">
+        <SafeImg className="plan-stop-img" src={img.src} fallback={img.fallback} alt={img.alt[locale]} />
+        <time className="mono">{item.start ?? s.timeUnpublished}</time>
+        <span>{v.title}</span>
+        {v.meta && <span className="plan-ferry-note">· {v.meta}</span>}
+      </li>
+    );
   }
   const body = (
     <>
-      <SafeImg className="plan-stop-img" src={v.image} lazy />
+      <SafeImg className="plan-stop-img" src={img.src} fallback={img.fallback} alt={img.alt[locale]} lazy />
       <span className="plan-stop-m">
         <span className="plan-stop-title">{v.title}</span>
         <span className="plan-stop-meta">{v.meta}</span>
@@ -99,6 +102,7 @@ export function Dialog({ label, onClose, children, className = "" }: { label: st
 export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: PlanItem; day: PlanDay; locale: Locale; s: PlanStrings; onClose: () => void; onAsk?: (text: string) => void }) {
   const v = cardView(item, locale, s);
   if (!v) return null;
+  const img = stopImage(item);
   const contact = contactLinks(v.operator);
   const end = item.start ? (() => { const m = Number(item.start.slice(0, 2)) * 60 + Number(item.start.slice(3)) + item.durationMin; return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; })() : "";
   const type = v.meta.split(" · ")[0];
@@ -106,7 +110,7 @@ export function PlaceDetail({ item, day, locale, s, onClose, onAsk }: { item: Pl
   return (
     <Dialog label={v.title} onClose={onClose}>
       <button type="button" className="plan-sheet-close" onClick={onClose} aria-label={s.close} autoFocus>×</button>
-      <SafeImg className="plan-sheet-hero" src={v.image} />
+      <SafeImg className="plan-sheet-hero" src={img.src} fallback={img.fallback} alt={img.alt[locale]} />
       <div className="plan-sheet-body">
         <p className="plan-eyebrow">{type} · {dayTitle(day.date, locale)}</p>
         <h2 id="plan-sheet-title">{v.title}</h2>

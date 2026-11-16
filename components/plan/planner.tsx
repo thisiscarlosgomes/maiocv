@@ -8,9 +8,11 @@ import type { Locale } from "../../lib/locale";
 import { parseTripPlan, type PlanItem, type TripPlan } from "../../lib/trip";
 import { planStrings, type PlanStrings } from "../../lib/trip-strings";
 import { samplePlan } from "../../lib/trip-sample";
+import { coverImage, stopImage } from "../../lib/stop-image";
 import { cardView, dateRange, dayParts, seaLine, timeSpan, visibleStops } from "../../lib/trip-view";
 import { decodeTrip, encodeTrip } from "../../lib/trip-share";
-import { DayStops, PlaceDetail, RoughAlert, SafeImg, SeaText } from "./cards";
+import { SafeImg } from "../stop-photo";
+import { DayStops, PlaceDetail, RoughAlert, SeaText } from "./cards";
 import { ChatShell } from "../chat/shell";
 import { emptyTask, parseGuestChip, refreshTask } from "../../lib/awareness/task";
 import { keepAssistantReply } from "../../lib/plan-edits";
@@ -21,10 +23,7 @@ const TASK_KEY = "maio.plan.task";
 type Msg = { role: "user" | "assistant"; content: string; trip?: boolean; flag?: { planBefore: ReturnType<typeof summarizePlan>; planAfter: ReturnType<typeof summarizePlan>; chips: string[] } };
 type Screen = "chat" | "trip";
 
-const cover = (plan: TripPlan, locale: Locale, s: PlanStrings) => {
-  for (const d of plan.days) for (const i of d.items) { const v = cardView(i, locale, s); if (v?.image) return v.image; }
-  return null;
-};
+const cover = (plan: TripPlan) => coverImage(plan.days.flatMap((day) => day.items));
 const meta = (plan: TripPlan, locale: Locale, s: PlanStrings) => `${dateRange(plan.days, locale)} · ${s.people(plan.party.adults + plan.party.kids)}`;
 const stopCount = (plan: TripPlan) => plan.days.reduce((n, day) => n + visibleStops(day.items), 0);
 
@@ -141,8 +140,8 @@ export function Planner({ locale }: { locale: Locale }) {
       if (next !== play.current) showStatus(next);
     }, 80);
     try {
-      const response = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: conversation.slice(-25).map(({ role, content: c }) => ({ role, content: c })), plan, locale, ...(taskBlob ? { task: taskBlob } : {}) }) });
+      const response = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+        body: JSON.stringify({ messages: conversation.slice(-25).map(({ role, content: c }) => ({ role, content: c })), plan, locale, stream: true, ...(taskBlob ? { task: taskBlob } : {}) }) });
       const data = await readPlanEvents(response, (text) => {
         if (stopped || !play.current) return;
         showStatus(pushStatusPlay(play.current, text, performance.now()));
@@ -288,10 +287,10 @@ export function Planner({ locale }: { locale: Locale }) {
 
 /** The trip in the chat (v3.3 mini card): 64 thumbnail, title, mono dates · stops, "Open trip". */
 function TripCard({ plan, locale, s, onOpen }: { plan: TripPlan; locale: Locale; s: PlanStrings; onOpen: () => void }) {
-  const img = cover(plan, locale, s);
+  const img = cover(plan);
   return (
     <div className="plan-tripcard" data-testid="plan-trip-card">
-      <SafeImg className="plan-tripcard-img" src={img} />
+      <SafeImg className="plan-tripcard-img" src={img.src} fallback={img.fallback} alt={img.alt[locale]} />
       <div><p className="plan-tripcard-title">{plan.title}</p><p className="plan-tripcard-meta mono">{dateRange(plan.days, locale)} · {stopCount(plan)} {s.stops}</p></div>
       <button type="button" className="plan-primary" onClick={onOpen}>{s.openTrip}</button>
     </div>
@@ -322,8 +321,10 @@ function PrintPlan({ plan, locale }: { plan: TripPlan; locale: Locale }) {
               {d.items.map((item) => {
                 const v = cardView(item, locale, s);
                 if (!v) return null;
+                const img = stopImage(item);
                 return (
                   <li key={item.id}>
+                    <SafeImg className="plan-print-img" src={img.src} fallback={img.fallback} alt={img.alt[locale]} />
                     <span className="plan-print-time mono">{timeSpan(item)}</span>
                     <div><strong>{v.title}</strong><span>{v.meta}</span></div>
                   </li>

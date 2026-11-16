@@ -8,7 +8,7 @@ import { emptyTask, refreshTask, type Task } from "../lib/awareness/task.ts";
 import { lengthDiffReply } from "../lib/plan-edits.ts";
 import { runPlanAgent } from "../lib/plan-agent.ts";
 import { humanPlanDate } from "../lib/plan-reply.ts";
-import { parseDateShift } from "../lib/plan-router.ts";
+import { applyDateShift, endShiftProblem, parseDateShift } from "../lib/plan-router.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { place, type TripPlan } from "../lib/trip.ts";
 
@@ -150,19 +150,107 @@ test("a start-only move still keeps the length", () => {
   assert.deepEqual(parseDateShift("actually the 18th", today, "2026-11-16"), { start: "2026-11-18" });
 });
 
-test("an end before the start or past 7 days asks and does not change the plan", async () => {
-  const { plan, task } = planned("en");
-  for (const phrase of ["actually am leaving on the 10th", "actually am leaving on the 30th"]) {
+test("end days before the start stay in the trip month and are not the 7-day failure", () => {
+  assert.deepEqual(parseDateShift("actually am leaving on the 10th", today, "2026-11-16"), { end: "2026-11-10" });
+  assert.deepEqual(parseDateShift("saio no dia 10", today, "2026-11-16"), { end: "2026-11-10" });
+  assert.deepEqual(parseDateShift("je pars le 10", today, "2026-11-16"), { end: "2026-11-10" });
+  assert.equal(endShiftProblem("2026-11-16", "2026-11-10"), "before-start");
+  assert.equal(endShiftProblem("2026-11-16", "2026-11-30"), "over-max");
+  assert.equal(endShiftProblem("2026-11-16", "2026-11-23"), "over-max");
+  assert.equal(endShiftProblem("2026-11-16", "2026-11-22"), null);
+  assert.equal(endShiftProblem("2026-11-16", "2026-11-20"), null);
+  assert.equal(applyDateShift("2026-11-16", 3, { end: "2026-11-10" }), null);
+  assert.equal(applyDateShift("2026-11-16", 3, { end: "2026-11-23" }), null);
+  assert.equal(applyDateShift("2026-11-16", 3, { end: "2026-11-30" }), null);
+  assert.deepEqual(applyDateShift("2026-11-16", 3, { end: "2026-11-22" }), { start: "2026-11-16", days: 7 });
+  assert.deepEqual(applyDateShift("2026-11-16", 3, { end: "2026-11-20" }), { start: "2026-11-16", days: 5 });
+  assert.deepEqual(applyDateShift("2026-11-16", 3, { start: "2026-11-18" }), { start: "2026-11-18", days: 3 });
+  // The same day next month still applies when that stay is inside the cap.
+  assert.deepEqual(parseDateShift("leaving on the 4th", today, "2026-11-28"), { end: "2026-12-04" });
+  assert.deepEqual(applyDateShift("2026-11-28", 3, { end: "2026-12-04" }), { start: "2026-11-28", days: 7 });
+});
+
+test("an end before the start names that day and leaves the plan", async () => {
+  const phrases = [
+    ["en", "actually am leaving on the 10th", /10th/, /before your start/, /later day/],
+    ["pt", "saio no dia 10", /dia 10/, /antes do início/, /mais tarde/],
+    ["fr", "je pars le 10", /Le 10/, /avant votre début/, /plus tard/],
+  ] as const;
+  for (const [locale, phrase, day, why, ask] of phrases) {
+    const { plan, task } = planned(locale);
+    const started = Date.now();
     const result = await runPlanAgent(
       [{ role: "user", content: phrase }],
       plan,
       { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
       task,
     );
+    assert.ok(Date.now() - started < 1_000, result.reply);
     assert.equal(result.plan, plan, result.reply);
-    assert.match(result.reply, /leaving/i);
-    assert.doesNotMatch(result.reply, /runs \d+ days|Moved your/);
+    assert.equal(result.toolEvents.length, 0, result.reply);
+    assert.equal(result.task.constraints.dates?.start, "2026-11-16", result.reply);
+    assert.equal(result.task.constraints.dates?.days, 3, result.reply);
+    assert.match(result.reply, day, result.reply);
+    assert.match(result.reply, why, result.reply);
+    assert.match(result.reply, ask, result.reply);
+    assert.ok(result.reply.includes(humanPlanDate("2026-11-16", locale)), result.reply);
+    assert.doesNotMatch(result.reply, /7 days|7 dias|7 jours|doesn't fit|não cabe|ne tient pas|runs \d+ days|passa a ter|fait maintenant/);
   }
+});
+
+test("a stay past 7 days names the cap and the latest leaving day", async () => {
+  const phrases = [
+    ["en", "actually am leaving on the 30th"],
+    ["en", "actually am leaving on the 23rd"],
+    ["pt", "saio no dia 30"],
+    ["pt", "saio no dia 23"],
+    ["fr", "je pars le 30"],
+    ["fr", "je pars le 23"],
+  ] as const;
+  for (const [locale, phrase] of phrases) {
+    const { plan, task } = planned(locale);
+    const started = Date.now();
+    const result = await runPlanAgent(
+      [{ role: "user", content: phrase }],
+      plan,
+      { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+      task,
+    );
+    assert.ok(Date.now() - started < 1_000, result.reply);
+    assert.equal(result.plan, plan, result.reply);
+    assert.equal(result.toolEvents.length, 0, result.reply);
+    assert.equal(result.task.constraints.dates?.start, "2026-11-16", result.reply);
+    assert.equal(result.task.constraints.dates?.days, 3, result.reply);
+    assert.match(result.reply, locale === "fr" ? /7 jours/ : locale === "pt" ? /7 dias/ : /7 days/, result.reply);
+    assert.match(result.reply, locale === "fr" ? /plus tôt/ : locale === "pt" ? /mais cedo/ : /earlier day/, result.reply);
+    assert.ok(result.reply.includes(humanPlanDate("2026-11-16", locale)), result.reply);
+    assert.ok(result.reply.includes(humanPlanDate("2026-11-22", locale)), result.reply);
+    assert.doesNotMatch(result.reply, /before your start|antes do início|avant votre début|doesn't fit|não cabe|ne tient pas|runs \d+ days|passa a ter|fait maintenant/);
+  }
+});
+
+test("the 30th after a rejected 10th explains the cap instead of repeating", async () => {
+  const { plan, task } = planned("en");
+  const first = await runPlanAgent(
+    [{ role: "user", content: "actually am leaving on the 10th" }],
+    plan,
+    { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+    task,
+  );
+  assert.equal(first.plan, plan, first.reply);
+  assert.match(first.reply, /before your start/);
+  const second = await runPlanAgent(
+    [{ role: "user", content: "actually am leaving on the 30th" }],
+    plan,
+    { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+    first.task,
+  );
+  assert.equal(second.plan, plan, second.reply);
+  assert.equal(second.task.constraints.dates?.days, 3);
+  assert.match(second.reply, /7 days/);
+  assert.ok(second.reply.includes(humanPlanDate("2026-11-22", "en")), second.reply);
+  assert.notEqual(second.reply, first.reply);
+  assert.doesNotMatch(second.reply, /runs \d+ days|Moved your/);
 });
 
 test("a bare day after the start question moves the start", async () => {
@@ -243,7 +331,7 @@ test("replace the beach on day 1 swaps that beach", async () => {
     const after = beachId(result.plan!, 0);
     assert.ok(after && after !== before, result.reply);
     assert.equal(beachId(result.plan!, 1), beachId(plan, 1));
-    assert.match(result.reply, locale === "fr" ? /Jour 1/ : locale === "pt" ? /Dia 1/ : /Day 1/);
+    assert.match(result.reply, locale === "fr" ? /jour 1/i : locale === "pt" ? /dia 1/i : /day 1/i);
     assert.doesNotMatch(result.reply, /Tap the card|Toque no cartão|Touchez la carte|Slow 3 days|Calmo, 3/);
     assert.equal(result.reply.includes("\n"), false);
   }
@@ -409,7 +497,8 @@ test("a bare date after the leaving question is the end date", async () => {
     { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
     task,
   );
-  assert.match(asked.reply, /leaving/i);
+  assert.match(asked.reply, /before your start/);
+  assert.match(asked.reply, /later day/);
   assert.equal(asked.plan, plan);
   const moved = await runPlanAgent(
     [{ role: "user", content: "the 20th" }],
@@ -420,7 +509,28 @@ test("a bare date after the leaving question is the end date", async () => {
   assert.equal(moved.plan?.days[0]?.date, "2026-11-16", moved.reply);
   assert.equal(moved.plan?.days.at(-1)?.date, "2026-11-20", moved.reply);
   assert.equal(moved.plan?.days.length, 5);
-  assert.doesNotMatch(moved.reply, /Which day should the trip start/);
+  assert.match(moved.reply, /5 days/);
+  assert.doesNotMatch(moved.reply, /Which day should the trip start|doesn't fit/);
+  const tooLong = await runPlanAgent(
+    [{ role: "user", content: "the 23rd" }],
+    plan,
+    { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+    asked.task,
+  );
+  assert.equal(tooLong.plan, plan, tooLong.reply);
+  assert.match(tooLong.reply, /7 days/);
+  assert.ok(tooLong.reply.includes(humanPlanDate("2026-11-22", "en")), tooLong.reply);
+  assert.match(tooLong.reply, /earlier day/);
+  assert.notEqual(tooLong.reply, asked.reply);
+  const alsoLong = await runPlanAgent(
+    [{ role: "user", content: "the 30th" }],
+    plan,
+    { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+    asked.task,
+  );
+  assert.equal(alsoLong.plan, plan, alsoLong.reply);
+  assert.match(alsoLong.reply, /7 days/);
+  assert.ok(alsoLong.reply.includes(humanPlanDate("2026-11-22", "en")), alsoLong.reply);
 });
 
 test("a named day is answered before the next sailing", async () => {

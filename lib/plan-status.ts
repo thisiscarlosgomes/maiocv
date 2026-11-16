@@ -148,8 +148,14 @@ export function stepTexts(locale: TaskLocale, steps: PlanStep[]): string[] {
   return steps.map((step) => stepText(locale, step));
 }
 
-/** Hold each line long enough that a fast turn does not flicker through the list. */
+/** Hold each line long enough that a fast turn does not flicker through the list. The wait is only on the client. */
 export const STATUS_HOLD_MS = 400;
+
+/** A plain POST stays one JSON body. The stream is only for a caller that asks for it. */
+export function wantsPlanStream(accept: string | null | undefined, stream: boolean | undefined): boolean {
+  const asked = (accept ?? "").toLowerCase().split(",").some((part) => part.split(";")[0].trim() === "application/x-ndjson");
+  return asked || stream === true;
+}
 
 function editSteps(update: { day?: number; dates?: boolean }, refetch: boolean): PlanStep[] {
   const steps: PlanStep[] = [{ id: "read" }];

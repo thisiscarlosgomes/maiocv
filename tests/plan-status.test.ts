@@ -5,7 +5,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { emptyTask, type Task } from "../lib/awareness/task.ts";
 import { dailyForecastCached, loadDailyForecast } from "../lib/agora.ts";
 import { runPlanAgent } from "../lib/plan-agent.ts";
-import { isSeaForecastStatus, isPlacesStatus, loadingStatus, paceLines, planTurn, pushStatusPlay, readPlanEvents, startStatusPlay, STATUS_HOLD_MS, stepText, stepTexts, tickStatusPlay, turnWork, type PlanStep } from "../lib/plan-status.ts";
+import { isSeaForecastStatus, isPlacesStatus, loadingStatus, paceLines, planTurn, pushStatusPlay, readPlanEvents, startStatusPlay, STATUS_HOLD_MS, stepText, stepTexts, tickStatusPlay, turnWork, wantsPlanStream, type PlanStep } from "../lib/plan-status.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { scriptedModel } from "./plan/mock-model.ts";
 
@@ -245,6 +245,8 @@ test("a relax edit never says it is checking the sea, and a cached date move ski
   );
   assert.deepEqual(relax.steps, stepTexts("en", planTurn("Make day 2 more relaxed", task, "2026-11-15", { hasPlan: true, plan: built }).steps));
   assert.equal(relax.steps.some((line) => isSeaForecastStatus(line)), false);
+  assert.match(relax.reply, /lighter now/);
+  assert.ok(relax.chips.length > 0, relax.chips.join(" | "));
   assert.deepEqual(heard, relax.steps);
 
   const live = seaFetch(["2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"]);
@@ -285,6 +287,15 @@ test("a cached forecast build says it is checking places", async () => {
   assert.equal(result.steps.some((line) => isSeaForecastStatus(line)), false, result.steps.join(" | "));
   assert.ok(result.steps.some((line) => isPlacesStatus(line)), result.steps.join(" | "));
   assert.deepEqual(result.steps, stepTexts("en", planTurn("3 days, slow pace, with a car", task, "2026-11-15", { refetchForecast: false }).steps));
+});
+
+test("a plain plan post stays JSON unless the caller asks for the stream", () => {
+  assert.equal(wantsPlanStream(null, undefined), false);
+  assert.equal(wantsPlanStream("application/json", undefined), false);
+  assert.equal(wantsPlanStream("*/*", false), false);
+  assert.equal(wantsPlanStream("application/x-ndjson", undefined), true);
+  assert.equal(wantsPlanStream("application/json, application/x-ndjson;q=0.9", undefined), true);
+  assert.equal(wantsPlanStream(null, true), true);
 });
 
 test("a greeting emits no status line", async () => {

@@ -295,7 +295,7 @@ export function planQuestionKind(text: string): "day" | "leave" | "lunch" | null
 
 /** A reply that tells the guest the trip changed. PT and FR included. An honest "already" line does not. */
 export function claimsUnappliedEdit(text: string): boolean {
-  if (/\b(?:already the lighter|already a full|já está mais leve|já está cheio|ja esta mais leve|ja esta cheio|déjà plus léger|déjà bien rempli|deja plus leger|deja bien rempli)\b/i.test(text)) return false;
+  if (/\b(?:already the lighter|already a full|already on day|already in the morning|already in the afternoon|já está mais leve|já está cheio|já está no dia|ja esta mais leve|ja esta cheio|ja esta no dia|déjà plus léger|déjà bien rempli|déjà au jour|deja plus leger|deja bien rempli|deja au jour)\b/i.test(text)) return false;
   if (/\b(?:done\b|all set|i(?:'ve| have)? (?:moved|added|updated|removed|extended|packed)|moved your|updated the (?:plan|trip)|i made it|day is packed|packed with|acrescentei|adicionei|mudei|alterei|atualizei|pronto|já está|ja esta|c'est fait|tout est (?:bon|regle)|j'ai (?:ajout|deplac|modifi|mis a jour|rendu|all[eé]g))\b/i.test(text)) return true;
   return /\b(?:day|dia|jour)\s+\d+\b[\s\S]{0,160}\b(?:packed|busier|lighter|easier|quieter|relaxed|fuller|cheio|mais leve|plus l[eé]ger|plus charg)\b/i.test(text);
 }
@@ -423,7 +423,8 @@ function pendingKind(pending: string | null): "start" | "end" | "changes" | null
   if (!pending) return null;
   const n = loosen(pending);
   if (/which day should the trip start|para que dia mudo|quel jour pour le debut/.test(n)) return "start";
-  if (/which day are you leaving|em que dia sai|quel jour partez/.test(n)) return "end";
+  // "Which later day" (before the start) and "Which earlier day" (past 7 days) are both an end.
+  if (/which (?:later |earlier )?day are you leaving|em que dia (?:mais tarde |mais cedo )?sai|quel jour (?:plus tard |plus tot )?partez/.test(n)) return "end";
   if (/want changes|quer mudanc|changer quelque chose|voulez changer/.test(n)) return "changes";
   return null;
 }
@@ -494,13 +495,59 @@ export function parseDateShift(text: string, today: string, anchor?: string): Da
   const endCue = END_CUE.test(n);
   const day = bareDay(n, hardStart || hedge);
   if (!day) return null;
-  const placed = resolveDayOfMonth(today, day, anchor);
+  // "leaving on the 10th" is a day of this trip. A named month ("10 December") stays that month.
+  const namedMonth = monthMentioned(n);
+  const placed = endCue && anchor && !namedMonth
+    ? placeEndDay(today, day, anchor)
+    : endCue && namedMonth
+      ? monthDay(today, namedMonth, day)
+      : resolveDayOfMonth(today, day, anchor);
   if (!placed) return "ask";
   // "actually… leaving on the 22nd" is an end. A hedge alone ("actually the 18th") stays a start.
   if (hardStart && endCue) return "ask";
   if (endCue) return { end: placed };
   if (hardStart || hedge) return { start: placed };
   return "ask";
+}
+
+/** Longest stay the planner will build, counting the start and the leaving day. */
+export const MAX_TRIP_DAYS = 7;
+
+export type EndShiftProblem = "before-start" | "over-max";
+
+/**
+ * Why an end date is refused. Null when the stay is 1–MAX_TRIP_DAYS days.
+ * inclusiveDays is missing both when the end is before the start and when the
+ * span is over 14 days, so a missing count is not one reason.
+ */
+export function endShiftProblem(start: string, end: string): EndShiftProblem | null {
+  if (end < start) return "before-start";
+  const counted = inclusiveDays(start, end);
+  if (!counted || counted > MAX_TRIP_DAYS) return "over-max";
+  return null;
+}
+
+/** That day-of-month in the open trip's month, even when it is already past. */
+function dayInAnchorMonth(anchor: string, day: number): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor) || day < 1 || day > 31) return null;
+  return isoInYear(Number(anchor.slice(0, 4)), Number(anchor.slice(5, 7)), day);
+}
+
+/**
+ * Where a bare leaving day lands.
+ * On or after the start, it stays in the trip's month ("the 22nd" on a 16 Nov trip).
+ * Before the start, it stays there too ("the 10th" is 10 Nov, not 10 Dec) unless the
+ * same day next month is still within the 7-day cap (a 28 Nov start can leave on the 4th).
+ */
+export function placeEndDay(today: string, day: number, anchor: string): string | null {
+  const inMonth = dayInAnchorMonth(anchor, day);
+  if (inMonth && inMonth >= anchor) return inMonth;
+  const forward = resolveDayOfMonth(today, day, anchor);
+  if (forward && forward >= anchor) {
+    const counted = inclusiveDays(anchor, forward);
+    if (counted && counted <= MAX_TRIP_DAYS) return forward;
+  }
+  return inMonth ?? forward;
 }
 
 /** Apply a shift to the open span. Start alone keeps the length. End alone keeps the start. */
@@ -510,11 +557,11 @@ export function applyDateShift(start: string, days: number, shift: DateShift): {
   if (shift.shiftDays) nextStart = addDays(start, shift.shiftDays);
   if (shift.start) nextStart = shift.start;
   if (shift.end) {
-    const counted = inclusiveDays(shift.start ?? nextStart, shift.end);
-    // An end before the start, or a stay longer than the trip max, is not applied.
-    if (!counted || counted > 7) return null;
+    const origin = shift.start ?? nextStart;
+    const counted = inclusiveDays(origin, shift.end);
+    if (endShiftProblem(origin, shift.end) || !counted) return null;
     nextDays = counted;
-  } else if (shift.days) nextDays = Math.min(7, Math.max(1, shift.days));
+  } else if (shift.days) nextDays = Math.min(MAX_TRIP_DAYS, Math.max(1, shift.days));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(nextStart) || nextDays < 1) return null;
   return { start: nextStart, days: nextDays };
 }
