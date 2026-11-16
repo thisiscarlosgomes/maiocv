@@ -1,6 +1,6 @@
 /**
  * Recorded portal.maio.cv timetable, fetched 2026-11-15.
- * Boats: /api/schedules/boats. Flights: /api/schedules/flights.
+ * Boats: /api/v1/boats. Flights: /api/v1/flights.
  * This is a fixture for the planner, not a live call.
  */
 

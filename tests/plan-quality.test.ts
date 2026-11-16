@@ -52,8 +52,8 @@ function worldFetch(sunset = "2026-11-18T19:42:00.000Z"): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("astronomy/sky")) return Response.json({ solarEvents: { sunset } });
-    if (url.includes("schedules/boats")) return Response.json(boats);
-    if (url.includes("schedules/flights")) return Response.json(flights);
+    if (url.includes("/boats")) return Response.json(boats);
+    if (url.includes("/flights")) return Response.json(flights);
     if (url.includes("marine-api")) return Response.json({ daily: { time: forecastDates, wave_height_max: forecastDates.map(() => 0.8) } });
     if (url.includes("api.open-meteo.com")) {
       return Response.json({ daily: { time: forecastDates, wind_speed_10m_max: forecastDates.map(() => 16), temperature_2m_max: forecastDates.map(() => 28), sunset: forecastDates.map((date) => `${date}T18:10`) } });
@@ -452,8 +452,8 @@ test("plan around the ferry just named keeps that date", async () => {
   };
   const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(boatsOnly);
-    if (url.includes("schedules/flights")) return Response.json({ routes: {} });
+    if (url.includes("/boats")) return Response.json(boatsOnly);
+    if (url.includes("/flights")) return Response.json({ routes: {} });
     return worldFetch()(input);
   }) as typeof fetch;
   const listed = await runPlanAgent(
@@ -548,8 +548,8 @@ test("a named day is answered before the next sailing", async () => {
   };
   const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(boatsOnly);
-    if (url.includes("schedules/flights")) return Response.json(flightsOnly);
+    if (url.includes("/boats")) return Response.json(boatsOnly);
+    if (url.includes("/flights")) return Response.json(flightsOnly);
     return worldFetch()(input);
   }) as typeof fetch;
   const asks = [

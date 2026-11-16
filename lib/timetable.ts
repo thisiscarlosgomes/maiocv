@@ -1,11 +1,11 @@
 import { upcomingDate } from "./awareness/classify.ts";
 import type { TaskLocale } from "./awareness/task.ts";
 import type { Sailing } from "./essentials.ts";
+import { MAIO_API } from "./maio-catalog.ts";
 import { humanPlanDate } from "./plan-reply.ts";
 import { loosen, spokenDates, type TransportMention } from "./plan-router.ts";
 import { addDays, type TripPlan } from "./trip.ts";
 
-const PORTAL = "https://portal.maio.cv";
 const TTL_MS = 10 * 60 * 1000;
 
 export type FlightLeg = { date: string; from: string; to: string; departure: string; flight?: string };
@@ -13,6 +13,8 @@ export type FlightLeg = { date: string; from: string; to: string; departure: str
 export type Timetable = {
   ok: boolean;
   retrievedAt: string;
+  /** The Maio API marked the snapshot older than its freshness window. Rows are still the published times. */
+  stale: boolean;
   sailings: Sailing[];
   flights: FlightLeg[];
 };
@@ -94,28 +96,31 @@ async function readJson(fetchImpl: typeof fetch, url: string): Promise<unknown |
   }
 }
 
-/** Published boats and flights from portal.maio.cv. Successes are cached for 10 minutes per fetch. */
+/** Published boats and flights from api.maio.cv. Successes are cached for 10 minutes per fetch. */
 export async function loadTimetable(fetchImpl: typeof fetch, now = new Date()): Promise<Timetable> {
   const hit = cache.get(fetchImpl);
   if (hit && hit.data.ok && now.getTime() - hit.at < TTL_MS) return hit.data;
   const retrievedAt = now.toISOString();
+  const empty = { ok: false, retrievedAt, stale: false, sailings: [], flights: [] };
   try {
     const [boats, flights] = await Promise.all([
-      readJson(fetchImpl, `${PORTAL}/api/schedules/boats`),
-      readJson(fetchImpl, `${PORTAL}/api/schedules/flights`),
+      readJson(fetchImpl, `${MAIO_API}/boats`),
+      readJson(fetchImpl, `${MAIO_API}/flights`),
     ]);
-    if (boats == null && flights == null) return { ok: false, retrievedAt, sailings: [], flights: [] };
+    if (boats == null && flights == null) return empty;
     const boatBody = asRecord(boats);
+    const flightBody = asRecord(flights);
     const data: Timetable = {
       ok: true,
       retrievedAt: typeof boatBody.retrievedAt === "string" ? boatBody.retrievedAt : retrievedAt,
+      stale: boatBody.stale === true || flightBody.stale === true,
       sailings: boats == null ? [] : sailingRows(boats),
       flights: flights == null ? [] : flightRows(flights),
     };
     cache.set(fetchImpl, { at: now.getTime(), data });
     return data;
   } catch {
-    return { ok: false, retrievedAt, sailings: [], flights: [] };
+    return empty;
   }
 }
 
@@ -240,7 +245,8 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
   if (!table.ok) return downReply(locale);
   const when = mentionedDate(text, today);
   const flight = wantsFlight(text);
-  const published = say(locale, "Published timetable, not live status.", "Horário publicado, não é estado ao vivo.", "Horaire publié, pas un statut en direct.");
+  const published = say(locale, "Published timetable, not live status.", "Horário publicado, não é estado ao vivo.", "Horaire publié, pas un statut en direct.")
+    + (table.stale ? say(locale, " The snapshot is over 48 hours old.", " A fotografia tem mais de 48 horas.", " L'instantané a plus de 48 heures.") : "");
   if (flight) {
     const pool = flightPool(text, table);
     const onDay = when

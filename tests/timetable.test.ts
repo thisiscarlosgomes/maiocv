@@ -4,7 +4,7 @@ import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { emptyTask, refreshTask, type Task } from "../lib/awareness/task.ts";
 import { runPlanAgent } from "../lib/plan-agent.ts";
-import { attachPublishedTravel, loadTimetable } from "../lib/timetable.ts";
+import { answerTravelQuestion, attachPublishedTravel, loadTimetable } from "../lib/timetable.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { scriptedModel } from "./plan/mock-model.ts";
 
@@ -39,8 +39,8 @@ function timetableFetch(opts: { fail?: boolean; boats?: unknown; flights?: unkno
     if (opts.fail) throw new Error("down");
     const url = String(input);
     if (url.includes("marine-api") || url.includes("api.open-meteo.com")) return Response.json({ daily: { time: [], wave_height_max: [], wind_speed_10m_max: [], temperature_2m_max: [] } });
-    if (url.includes("schedules/boats")) return Response.json(opts.boats ?? boats);
-    if (url.includes("schedules/flights")) return Response.json(opts.flights ?? flights);
+    if (url.includes("/boats")) return Response.json(opts.boats ?? boats);
+    if (url.includes("/flights")) return Response.json(opts.flights ?? flights);
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
 }
@@ -64,7 +64,7 @@ test("published travel fills arrival and departure clocks and does not invent on
   let boatCalls = 0;
   const fetchImpl = timetableFetch();
   const counted = (async (input: RequestInfo | URL) => {
-    if (String(input).includes("schedules/boats")) boatCalls += 1;
+    if (String(input).includes("/boats")) boatCalls += 1;
     return fetchImpl(input);
   }) as typeof fetch;
   const table = await loadTimetable(counted, TODAY);
@@ -172,6 +172,36 @@ test("a plan with dates uses the published ferry, and a failure does not invent 
   assert.equal(missing?.start, undefined);
   assert.match(missing?.note ?? "", /not published/i);
   assert.equal(down.plan?.days.some((day) => day.items.some((item) => item.start === "16:00" || item.start === "14:00")), false);
+});
+
+test("a stale Maio API snapshot still supplies published times and does not invent an arrival", async () => {
+  const urls: string[] = [];
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("/boats")) return Response.json({
+      stale: true,
+      retrievedAt: "2026-11-02T14:32:44.512Z",
+      schedules: [{ date: "2026-11-18", from: "Santiago", to: "Maio", departure: "07:00", arrival: null, operator: "CV Interilhas", line: "LS", vessel: null }],
+    });
+    if (url.includes("/flights")) return Response.json({
+      stale: true,
+      source: "CVSky",
+      routes: { rai_mmo: [], mmo_rai: [] },
+      upcoming: { rai_mmo: [{ date: "2026-11-18", from: "RAI", to: "MMO", departure: "11:50", arrival: "12:10", flight: "7B-170" }] },
+    });
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+  const table = await loadTimetable(fetchImpl, new Date("2026-11-16T12:00:00Z"));
+  assert.ok(urls.every((url) => url.startsWith("https://api.maio.cv/api/v1/")));
+  assert.equal(urls.some((url) => url.includes("portal.maio.cv")), false);
+  assert.equal(table.stale, true);
+  assert.equal(table.sailings[0]?.departure, "07:00");
+  assert.equal(table.sailings[0]?.arrival, undefined);
+  assert.equal(table.flights[0]?.flight, "7B-170");
+  const noted = answerTravelQuestion("next ferry to Maio", "en", table, "2026-11-16", { time: "12:00" });
+  assert.match(noted, /07:00/);
+  assert.match(noted, /48 hours/);
 });
 
 test("an empty day names the nearest published ferry", async () => {

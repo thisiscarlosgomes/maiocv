@@ -31,8 +31,8 @@ function awareFetch(opts: { waves?: Record<string, number>; sailings?: { date: s
     const dates = Object.keys(waves).sort();
     if (url.includes("marine-api")) return json({ daily: { time: dates, wave_height_max: dates.map((d) => waves[d]) } });
     if (url.includes("api.open-meteo.com")) return json({ daily: { time: dates, wind_speed_10m_max: dates.map((d) => ((waves[d] ?? 0) >= 2 ? 38 : 16)), temperature_2m_max: dates.map(() => 28) } });
-    if (url.includes("schedules/boats")) return json({ schedules: sailings, retrievedAt: opts.retrievedAt ?? NOW.toISOString(), caveats: ["No current records does not mean no service."] });
-    if (url.includes("schedules/flights")) {
+    if (url.includes("/boats")) return json({ schedules: sailings, retrievedAt: opts.retrievedAt ?? NOW.toISOString(), caveats: ["No current records does not mean no service."] });
+    if (url.includes("/flights")) {
       if (opts.flight === "unavailable") return new Response("down", { status: 503 });
       return json({ status: "partial", retrievedAt: opts.retrievedAt ?? NOW.toISOString(), routes: {}, sourceUrls: {}, caveats: ["No current records does not mean no flights."] });
     }

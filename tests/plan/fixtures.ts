@@ -1,4 +1,4 @@
-// Shared eval fixtures: a fake fetch for Open-Meteo and portal.maio.cv, and golden scenarios.
+// Shared eval fixtures: a fake fetch for Open-Meteo and api.maio.cv, and golden scenarios.
 export const NOW = new Date("2026-10-27T10:00:00Z"); // Tuesday in Cabo Verde
 
 export function fakeFetch(waves: Record<string, number>, sailings: { date: string; from: string; to: string; departure: string }[] = []): typeof fetch {
@@ -8,7 +8,7 @@ export function fakeFetch(waves: Record<string, number>, sailings: { date: strin
     const dates = Object.keys(waves).sort();
     if (url.includes("marine-api")) return json({ daily: { time: dates, wave_height_max: dates.map((d) => waves[d]) } });
     if (url.includes("api.open-meteo.com")) return json({ daily: { time: dates, wind_speed_10m_max: dates.map((d) => (waves[d] >= 2 ? 38 : 16)), temperature_2m_max: dates.map(() => 28) } });
-    if (url.includes("schedules/boats")) return json({ schedules: sailings });
+    if (url.includes("/boats")) return json({ schedules: sailings });
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
 }
