@@ -123,11 +123,11 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
       ? sailing.arrival
       : (req.arrival.time ?? sailing?.departure);
     if (at) {
-      const published = Boolean(sailing && (!req.arrival.time || req.arrival.time === sailing.departure || req.arrival.time === sailing.arrival));
-      const landed = Boolean(sailing?.arrival && at === sailing.arrival);
+      const published = Boolean(sailing && (!req.arrival.time || req.arrival.time === sailing.departure || req.arrival.time === at));
+      const landed = Boolean(sailing && at !== sailing.departure);
       arrival = {
         id: `d${arrivalIndex}-arrive`, kind: "transport", refId: req.arrival.mode, start: at, durationMin: req.arrival.mode === "ferry" ? 120 : 30,
-        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}${landed ? ` → ${sailing.arrival}` : ""}` : NOTES[req.locale].given,
+        note: published && sailing ? `CV Interilhas ${sailing.from} → ${sailing.to} ${sailing.departure}${landed ? ` → ${at}` : ""}` : NOTES[req.locale].given,
       };
       arrivalReady = toMin(at) + (landed ? 30 : req.arrival.mode === "ferry" ? 150 : 60);
       kinds[arrivalIndex] = "arrival";

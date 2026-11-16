@@ -103,7 +103,7 @@ test("yes, renting a car after plan around that ferry does not call the model", 
   assert.ok(Date.now() - started < 6_000);
   assert.equal(built.plan?.hasCar, true);
   assert.equal(built.plan?.days[0]?.date, "2026-11-18");
-  assert.equal(built.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "07:00");
+  assert.equal(built.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "09:00");
 });
 
 test("plan around that ferry names the sailing and asks for a car only when it is unknown", async () => {
@@ -125,9 +125,10 @@ test("plan around that ferry names the sailing and asks for a car only when it i
     listed.task,
   );
   assert.equal(around.plan, null);
-  assert.match(around.reply, /07:00/);
+  assert.match(around.reply, /09:00/);
+  assert.match(around.reply, /around 09:00|por volta das 09:00|vers 09:00|arrival/i);
   assert.match(around.reply, /car/i);
-  assert.equal(around.task.constraints.arrival?.time, "07:00");
+  assert.equal(around.task.constraints.arrival?.time, "09:00");
   assert.equal(around.task.constraints.dates?.start, "2026-11-18");
 });
 
@@ -204,11 +205,11 @@ test("an open 18-20 plan already on the Wednesday ferry names that sailing witho
     asked.task,
   );
   assert.ok(Date.now() - started < 1_000, around.reply);
-  assert.match(around.reply, /07:00/);
+  assert.match(around.reply, /09:00/);
   assert.match(around.reply, /already starts with that arrival|now starts with that arrival/);
   assert.doesNotMatch(around.reply, /didn't change the plan/);
   assert.deepEqual(around.plan?.days.map((day) => day.date), ["2026-11-18", "2026-11-19", "2026-11-20"]);
-  assert.equal(around.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "07:00");
+  assert.equal(around.plan?.days[0]?.items.find((item) => item.kind === "transport")?.start, "09:00");
 });
 
 test("a setup that already names a rental car does not ask again", async () => {
@@ -282,7 +283,23 @@ test("oui on an open plan and a hospital lookup stay under the model budget", as
   );
   const ouiMs = Date.now() - ouiStarted;
   assert.ok(ouiMs < 1_000, `${ouiMs}ms ${oui.reply}`);
-  assert.match(oui.reply, /voyage|jours/i);
+  const hello = "Bonjour ! Votre voyage de 3 jours est toujours là. Vous voulez changer quelque chose ?";
+  assert.notEqual(oui.reply, hello);
+  assert.match(oui.reply, /plus calme|sortie en bateau|décaler/i);
+  assert.doesNotMatch(oui.reply, /est toujours là/);
+  assert.ok(oui.chips.length >= 2 && oui.chips.length <= 3);
+  assert.ok(oui.chips.every((chip) => oui.reply.toLowerCase().includes(chip.split(" ").slice(-2).join(" ").toLowerCase()) || /jour|bateau|jours/i.test(chip)));
+  for (const [word, pattern] of [["yes", /calmer|boat trip|shift the dates/i], ["sim", /calmo|barco|datas/i]] as const) {
+    const answer = await runPlanAgent(
+      [{ role: "user", content: word }],
+      built.plan,
+      { model: hang, fetchImpl: quietFetch(), now: TODAY },
+      { ...built.task, locale: word === "sim" ? "pt" : "en" },
+    );
+    assert.match(answer.reply, pattern, word);
+    assert.notEqual(answer.reply, oui.reply);
+    assert.ok(answer.chips.length >= 2 && answer.chips.length <= 3, word);
+  }
   const hospitalStarted = Date.now();
   const hospital = await runPlanAgent(
     [{ role: "user", content: "what's the hospital number?" }],

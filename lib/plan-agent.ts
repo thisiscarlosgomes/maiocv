@@ -8,10 +8,10 @@ import { clipToolBody, foodNear, prepareContext, presentedPlaces, type ChatTurn 
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, isCarPending, mergeConstraints, refreshTask, rememberFact, type Task, type TaskLocale } from "./awareness/task.ts";
 import { editDiffReply, isGenericPlanReply } from "./plan-diff.ts";
 import { addBoatTrip, addListedActivity, addListedStop, answerAboutPlan, busyDay, dropBoatTrip, itinerarySig, lengthDiffReply, lengthUnchangedReply, moveListedActivity, noTripReply, pdfReply, relaxDay, removeListedActivity, samePlanShape, shiftDiffReply, swapDayBeach, unfitLeavingReply } from "./plan-edits.ts";
-import { boardRentalReply, suggestionChips } from "./plan-chips.ts";
+import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.ts";
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
-import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, loadTimetable } from "./timetable.ts";
+import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
 import { dailyForecastCached, forecastSourceName, loadDailyForecast, loadSunsets, maioClock, shareForecastCache, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
@@ -442,8 +442,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(smallTalkReply(task.locale, spoken, current), current, [], task, undefined, false, false, false, "thinking");
   }
 
-  if (/^(?:yes|yeah|yep|oui|ouais|sim|si|ok|okay)$/.test(spoken.replace(/[.!?]+$/g, "")) && !isCarPending(task.pendingQuestion) && !isCarPending(seeded.pendingQuestion)) {
-    return finish(smallTalkReply(task.locale, "hi", current), current, [], task, undefined, false, false, false, "thinking");
+  if (/^(?:yes|yeah|yep|oui|ouais|sim|si)$/.test(spoken.replace(/[.!?]+$/g, "")) && !isCarPending(task.pendingQuestion) && !isCarPending(seeded.pendingQuestion)) {
+    if (!current) return finish(say(task.locale, "Tell me how many days, and whether you will have a car.", "Diga quantos dias, e se vão de carro.", "Dites-moi le nombre de jours, et si vous aurez une voiture."), null);
+    const offer = yesChangeOffer(task.locale, current);
+    return finish(offer.reply, current, [], task, offer.chips, true, false, false, "thinking");
   }
 
   if (classification.chip) {
@@ -541,9 +543,12 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const rows = (boats.data ?? []).filter((row) => !date || row.date === date);
     noteTransport(boats.retrievedAt, rows.length ? encodeTransportFact(rows.slice(0, 3).map((row) => {
       const inbound = /maio/i.test(row.to) && !/maio/i.test(row.from);
-      return { kind: inbound ? "in" as const : "out" as const, date: row.date, time: inbound && row.arrival ? row.arrival : row.departure, from: row.from, to: row.to };
+      return { kind: inbound ? "in" as const : "out" as const, date: row.date, time: landingClock(row).time, from: row.from, to: row.to };
     })) : "none");
-    const clock = (row: { departure: string; arrival?: string; from: string; to: string }) => row.arrival && row.arrival !== row.departure ? `${row.departure}→${row.arrival}` : row.departure;
+    const clock = (row: { departure: string; arrival?: string; from: string; to: string }) => {
+      const land = landingClock(row);
+      return land.estimated ? `${row.departure}, arrives around ${land.time}` : land.time !== row.departure ? `${row.departure}→${land.time}` : row.departure;
+    };
     const reply = rows.length
       ? say(task.locale,
         `Published sailing: ${rows.map((row) => `${clock(row)} ${row.from} to ${row.to}`).join(", ")}. Retrieved ${boats.retrievedAt}. Not live status.`,
