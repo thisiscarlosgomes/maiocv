@@ -48,6 +48,9 @@ export function proxy(request: NextRequest) {
     return response;
   }
 
+  // Bare short share link: the page picks the trip's language, so skip the default-locale redirect.
+  if (/^\/t\/[0-9A-Za-z]{6,8}\/?$/.test(pathname)) return NextResponse.next();
+
   const destination = request.nextUrl.clone();
   const locale = DEFAULT_LOCALE;
   destination.pathname = pathname === "/" ? localize(locale, "/") : localize(locale, pathname);

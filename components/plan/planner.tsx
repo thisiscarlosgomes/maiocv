@@ -27,7 +27,8 @@ const cover = (plan: TripPlan) => coverImage(plan.days.flatMap((day) => day.item
 const meta = (plan: TripPlan, locale: Locale, s: PlanStrings) => `${dateRange(plan.days, locale)} · ${s.people(plan.party.adults + plan.party.kids)}`;
 const stopCount = (plan: TripPlan) => plan.days.reduce((n, day) => n + visibleStops(day.items), 0);
 
-export function Planner({ locale }: { locale: Locale }) {
+/** `sharedPlan`: a stored trip from a short /t/<id> link, shown read-only like ?trip=…&view=1. */
+export function Planner({ locale, sharedPlan }: { locale: Locale; sharedPlan?: TripPlan }) {
   const s = planStrings[locale];
   const [messages, setMessages] = useState<Msg[]>([]);
   const [plan, setPlan] = useState<TripPlan | null>(null);
@@ -55,7 +56,15 @@ export function Planner({ locale }: { locale: Locale }) {
     } catch { /* private mode: the tab simply has no task */ }
   }
 
+  const shortLinks = useRef(new Map<string, string>());
+
   useEffect(() => {
+    if (sharedPlan) {
+      setPlan(sharedPlan);
+      setShared(true);
+      setScreenState("trip");
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const fromLink = params.get("trip") ? parseTripPlan(decodeTrip(params.get("trip")!)) : null;
     const start = fromLink ?? (params.get("demo") === "1" ? samplePlan(locale) : null);
@@ -68,10 +77,11 @@ export function Planner({ locale }: { locale: Locale }) {
     const open = params.get("stop");
     if (open) setDetail(start.days.flatMap((d) => d.items).find((i) => i.id === open) ?? null);
     try { setTaskBlob(window.sessionStorage.getItem(TASK_KEY)); } catch { /* ignore */ }
-  }, [locale, s]);
+  }, [locale, s, sharedPlan]);
 
   // Keep the plan and the view in the address bar so a reload (or a screenshot) lands in the same place.
   useEffect(() => {
+    if (sharedPlan) return; // The short link is already the address.
     if (plan) hadPlan.current = true;
     else if (hadPlan.current) {
       hadPlan.current = false;
@@ -86,7 +96,7 @@ export function Planner({ locale }: { locale: Locale }) {
     url.searchParams.set("trip", encodeTrip(plan));
     if (screen === "trip" && !shared) url.searchParams.set("screen", "trip"); else url.searchParams.delete("screen");
     window.history.replaceState(null, "", url);
-  }, [plan, screen, shared]);
+  }, [plan, screen, shared, sharedPlan]);
 
   function setScreen(next: Screen) { setScreenState(next); window.scrollTo(0, 0); }
 
@@ -178,8 +188,32 @@ export function Planner({ locale }: { locale: Locale }) {
     url.searchParams.set("view", "1");
     return url.toString();
   }
+  /** maio.cv/t/<id>: the plan stored server-side. The same plan reuses its id. Falls back to the long link. */
+  async function shortShareUrl(): Promise<string> {
+    if (!plan) return shareUrl();
+    const key = JSON.stringify(plan);
+    const known = shortLinks.current.get(key);
+    if (known) return known;
+    try {
+      const res = await fetch("/api/trips", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, locale }) });
+      const data = res.ok ? await res.json() as { path?: string } : null;
+      if (!data?.path) return shareUrl();
+      const url = `${window.location.origin.replace("://www.", "://")}${data.path}`; // https://maio.cv/t/<id>
+      shortLinks.current.set(key, url);
+      return url;
+    } catch { return shareUrl(); }
+  }
   async function share() {
-    try { await navigator.clipboard.writeText(shareUrl()); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt(s.share, shareUrl()); }
+    const pending = shortShareUrl();
+    try {
+      // Safari only lets a click write the clipboard if the write starts inside the click.
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": pending.then((text) => new Blob([text], { type: "text/plain" })) })]);
+      } else {
+        await navigator.clipboard.writeText(await pending);
+      }
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    } catch { window.prompt(s.share, await pending); }
   }
   function exportPdf() {
     const title = document.title;
@@ -278,7 +312,7 @@ export function Planner({ locale }: { locale: Locale }) {
       {shared && plan && (
         <div className="plan-sharebar">
           <p>{s.wantOwn}</p>
-          <a className="plan-primary" href={window.location.pathname}>{s.planMine}</a>
+          <a className="plan-primary" href={sharedPlan ? `/${locale}/plan` : window.location.pathname}>{s.planMine}</a>
         </div>
       )}
       {detail && detailDay && <PlaceDetail item={detail} day={detailDay} locale={locale} s={s}
