@@ -604,7 +604,7 @@ function askedText(question: string): string {
   return question.split(/\n\n/)[0]?.trim() || question.trim();
 }
 
-const BOAT_TRIP_RE = /\b(?:boat trips?|boat tours?|boat excursions?|passeios? de barco|excurs(?:ao|oes|ões|ion)s? (?:de |en )?barco|sorties? en bateau|tours? en bateau)\b/i;
+const BOAT_TRIP_RE = /\b(?:boat trips?|boat tours?|boat excursions?|passeios? de barco|excurs(?:ao|oes|ões|ion)s? (?:de |en )?barco|sorties? en bateaux?|tours? en bateaux?|excursions? en bateaux?)\b/i;
 const FERRY_RE = /\b(?:ferr(?:y|ies)|interilhas)\b/i;
 const FLIGHT_RE = /\b(?:flights?|voos?|vols?\b|cvsky)\b/i;
 const CONTACT_RE = /\b(?:phones?|telefone|telephone|téléphone|contactos?|contacts?|n[uú]meros?|email|e-mail)\b/i;

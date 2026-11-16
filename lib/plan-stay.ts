@@ -154,9 +154,17 @@ function stayLabel(stay: Stay): string {
 }
 
 /** Every published stay, up to 8, grouped by area. Chips stay at three. */
-export function stayListReply(locale: TaskLocale, stays: Stay[]): { reply: string; chips: string[] } {
+export function stayListReply(locale: TaskLocale, stays: Stay[], read = true): { reply: string; chips: string[] } {
   const shown = stays.slice(0, 8);
   const chips = shown.slice(0, 3).map((stay) => stayChip(locale, stay.name));
+  if (!shown.length && !read) {
+    const reply = locale === "pt"
+      ? "Não consegui abrir a lista de alojamento do Maio agora. Tenta outra vez daqui a pouco."
+      : locale === "fr"
+        ? "Je n'arrive pas à ouvrir la liste d'hébergement de Maio pour l'instant. Réessaie dans un moment."
+        : "I couldn't open the Maio stays list just now. Try again in a moment.";
+    return { reply, chips: [] };
+  }
   if (!shown.length) {
     const reply = locale === "pt"
       ? "Não tenho alojamento na lista do Maio, por isso não invento um sítio."
