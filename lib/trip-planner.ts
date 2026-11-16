@@ -93,14 +93,23 @@ function earlyDepartureNote(locale: TripRequest["locale"], mode: "ferry" | "flig
   return `Short day: the ${ride.en} leaves at ${time}.`;
 }
 
-export type PlannerInput = { request: z.input<typeof TripRequestSchema>; forecast: DailySea[]; sailings: Sailing[]; forecastSource?: string };
+export type PlannerInput = {
+  request: z.input<typeof TripRequestSchema>;
+  forecast: DailySea[];
+  sailings: Sailing[];
+  forecastSource?: string;
+  /** API experiences when the catalog loaded. Omitted, the bundled fixture is the list. */
+  experiences?: Experience[];
+};
 
-export function buildPlan({ request: raw, forecast, sailings, forecastSource = "Open-Meteo" }: PlannerInput): TripPlan {
+export function buildPlan({ request: raw, forecast, sailings, forecastSource = "Open-Meteo", experiences }: PlannerInput): TripPlan {
   const req = TripRequestSchema.parse(raw);
+  const catalog = experiences ?? EXPERIENCES;
+  const byId = new Map(catalog.map((item) => [item.id, item]));
   const unmet = [...req.unmet];
   const exclude = new Set(req.exclude);
   const kids = req.kids > 0;
-  const eligible = EXPERIENCES.filter((e) => !exclude.has(e.id) && !isExcludedExperience(e.id) && ageOk(e, req) && reachable(e, req.hasCar));
+  const eligible = catalog.filter((e) => !exclude.has(e.id) && !isExcludedExperience(e.id) && ageOk(e, req) && reachable(e, req.hasCar));
   for (const id of req.include) {
     const exp = experience(id);
     if (exp && !ageOk(exp, req)) unmet.push(`${exp.title}: under minimum age ${exp.example.minAge}`);
@@ -154,7 +163,7 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
   const fullDays = dates.map((_, i) => i).filter((i) => kinds[i] === "full");
   const safe = (i: number) => status[i] === "calm" || status[i] === "moderate";
   const calmest = [...fullDays].filter(safe).sort((a, b) => (sea[a]?.waveHeightM ?? 9) - (sea[b]?.waveHeightM ?? 9));
-  const requested = req.include.map(experience).filter((e): e is Experience => !!e && eligible.includes(e));
+  const requested = req.include.map((id) => byId.get(id) ?? experience(id)).filter((e): e is Experience => !!e && eligible.includes(e));
   const packed = req.pace === "normal" || req.pace === "packed";
   // Quad and jet ski stay out unless the guest named that include, at every pace.
   const seaPool = eligible.filter((e) => e.seaDependent && (!isAdrenalineExperience(e) || requested.includes(e))).sort((a, b) => Number(b.boat) - Number(a.boat));
@@ -181,6 +190,16 @@ export function buildPlan({ request: raw, forecast, sailings, forecastSource = "
     const s = sea[i];
     return { date, sea: s ? { status: status[i], waveHeightM: s.waveHeightM, windKmh: s.windKmh, tempMaxC: s.tempMaxC, source: forecastSource } : null, items };
   });
+  const titled = days.map((day) => ({
+    ...day,
+    items: day.items.map((item) => {
+      if (item.kind !== "experience" || item.note) return item;
+      const listed = byId.get(item.refId);
+      const fixtureTitle = experience(item.refId)?.title;
+      if (!listed || !fixtureTitle || listed.title === fixtureTitle) return item;
+      return { ...item, note: listed.title.slice(0, 200) };
+    }),
+  }));
 
-  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, pace, days, unmet: unmet.slice(0, 5) }, { requested: req.include });
+  return enforcePlanRules({ version: 1, locale: req.locale, title: titles[req.locale](req.days), party: { adults: req.adults, kids: req.kids, ...(req.youngestAge !== undefined ? { youngestAge: req.youngestAge } : {}) }, hasCar: req.hasCar, pace, days: titled, unmet: unmet.slice(0, 5) }, { requested: req.include });
 }

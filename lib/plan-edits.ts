@@ -243,7 +243,7 @@ export function samePlanShape(a: TripPlan | null, b: TripPlan | null): boolean {
     party: plan.party,
     days: plan.days.map((day) => ({
       date: day.date,
-      items: day.items.map((item) => ({ kind: item.kind, refId: item.refId, slot: item.slot ?? null, start: item.start ?? null })),
+      items: day.items.map((item) => ({ kind: item.kind, refId: item.refId, slot: item.slot ?? null, start: item.start ?? null, note: item.note ?? null })),
     })),
   });
   return sig(a) === sig(b);

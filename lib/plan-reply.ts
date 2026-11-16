@@ -37,12 +37,13 @@ const FREE: Record<TaskLocale, Record<string, string>> = {
 
 /** Guest-facing name. Catalog ids stay out of the sentence. */
 export function itemLabel(item: PlanItem, locale: TaskLocale): string {
-  if (item.kind === "experience") return experience(item.refId)?.title ?? SLOT[locale].activity;
+  if (item.kind === "experience") return (item.note && item.note.length <= 80 ? item.note : undefined) ?? experience(item.refId)?.title ?? SLOT[locale].activity;
   if (item.kind === "food") return food(item.refId)?.title ?? SLOT[locale].lunch;
   if (item.kind === "place") {
     const record = place(item.refId);
     return record ? localizedPlaceName(record.name, locale) : SLOT[locale].activity;
   }
+  if (item.kind === "free" && item.refId === "breakfast-stay" && item.note) return item.note;
   if (item.kind === "free") return FREE[locale][item.refId] ?? SLOT[locale][item.slot ?? ""] ?? FREE[locale]["free-time"];
   if (item.kind === "transport") return item.refId === "ferry" ? (locale === "fr" ? "Ferry" : locale === "pt" ? "Barco" : "Ferry") : (locale === "fr" ? "Vol" : locale === "pt" ? "Voo" : "Flight");
   return SLOT[locale].activity;

@@ -42,6 +42,14 @@ export const TaskConstraintsSchema = z.object({
     mode: z.enum(["ferry", "flight"]),
     time: clock.optional(),
   }).optional(),
+  /** A stay from the Maio API. Absent until the guest names one that is on the list. */
+  stay: z.object({
+    id: z.string().min(1).max(80),
+    name: z.string().min(1).max(120),
+    area: z.string().max(120).optional(),
+    lat: z.number().optional(),
+    lon: z.number().optional(),
+  }).optional(),
 });
 export type TaskConstraints = z.infer<typeof TaskConstraintsSchema>;
 
@@ -131,6 +139,7 @@ export function mergeConstraints(base: TaskConstraints, patch: TaskConstraints):
   if (patch.boatTrips !== undefined) next.boatTrips = patch.boatTrips;
   if (patch.arrival) next.arrival = patch.arrival;
   if (patch.departure) next.departure = patch.departure;
+  if (patch.stay) next.stay = patch.stay;
   return next;
 }
 

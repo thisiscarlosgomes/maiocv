@@ -1,4 +1,5 @@
 import { isBusinessLookup, isListingsLookup, isPlaceListQuestion, isSmallTalk, isTimetableQuestion, isTravelLookup, classify } from "./awareness/classify.ts";
+import { isStayQuestion, stayPhrase } from "./plan-stay.ts";
 import { parseGuestChip, type Task, type TaskLocale } from "./awareness/task.ts";
 import { beachSwapDay, looksLikePlanEdit, parseDateShift, parseLengthEdit } from "./plan-router.ts";
 import type { TripPlan } from "./trip.ts";
@@ -64,7 +65,7 @@ export function turnWork(text: string, task: Task, today: string): TurnWork {
 }
 
 /** One real slice of work. The client shows these, in order, only when they happen. */
-export type PlanStepId = "understand" | "read" | "forecast" | "places" | "build" | "update" | "lookup" | "ferries" | "flights" | "finalize";
+export type PlanStepId = "understand" | "read" | "forecast" | "places" | "catalog" | "build" | "update" | "lookup" | "ferries" | "flights" | "finalize";
 
 export type PlanStep = {
   id: PlanStepId;
@@ -88,7 +89,7 @@ export type TurnPlan = {
 };
 
 const STEP: Record<TaskLocale, {
-  understand: string; read: string; forecast: string; places: string; build: string; update: string;
+  understand: string; read: string; forecast: string; places: string; catalog: string; build: string; update: string;
   updateDates: string; lookup: string; ferries: string; flights: string; finalize: string;
   updateDay: (day: number) => string;
 }> = {
@@ -97,6 +98,7 @@ const STEP: Record<TaskLocale, {
     read: "Reading your change…",
     forecast: "Checking sea forecast and places…",
     places: "Checking places…",
+    catalog: "Checking stays and experiences…",
     build: "Building your plan…",
     update: "Updating your plan…",
     updateDates: "Updating your dates…",
@@ -111,6 +113,7 @@ const STEP: Record<TaskLocale, {
     read: "A ler a mudança…",
     forecast: "A ver a previsão do mar e os lugares…",
     places: "A ver os lugares…",
+    catalog: "A ver alojamento e experiências…",
     build: "A montar o plano…",
     update: "A atualizar o plano…",
     updateDates: "A atualizar as datas…",
@@ -125,6 +128,7 @@ const STEP: Record<TaskLocale, {
     read: "Je lis le changement…",
     forecast: "Prévision de la mer et des lieux…",
     places: "Je vérifie les lieux…",
+    catalog: "Vérification des hébergements et des expériences…",
     build: "Je compose le plan…",
     update: "Je mets le plan à jour…",
     updateDates: "Je mets les dates à jour…",
@@ -214,6 +218,7 @@ export function planTurn(text: string, task: Task, today: string, options?: {
 
   if (parseGuestChip(text)?.kind === "pdf" || isSmallTalk(text)) return none();
   if (isTravelLookup(text) || isTimetableQuestion(text)) return quiet(transportStep(text));
+  if (isStayQuestion(text) || stayPhrase(text)) return quiet({ id: "lookup" });
   if (isListingsLookup(text) || isBusinessLookup(text) || isPlaceListQuestion(text)) return quiet({ id: "lookup" });
 
   if (hasPlan) {
