@@ -240,11 +240,9 @@ export function Planner({ locale }: { locale: Locale }) {
       onSend={(text) => { void send(text); }}
       clearLabel={s.startOver}
       composer={!shared}
-      aboveComposer={!shared && (messages.length > 0 || plan) ? (
+      aboveComposer={!shared && screen === "trip" && plan ? (
         <div className="plan-actions" data-testid="plan-actions">
-          {screen === "trip" && plan && (
-            <button type="button" className="plan-primary" onClick={() => setScreen("chat")}>{s.backToChat}</button>
-          )}
+          <button type="button" className="plan-primary" onClick={() => setScreen("chat")}>{s.backToChat}</button>
           <button type="button" className="plan-btn" onClick={startOver}>{s.startOver}</button>
         </div>
       ) : undefined}

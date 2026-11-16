@@ -236,6 +236,8 @@ for (const viewport of viewports) {
       expect(text).toMatch(/day|dias|jours/i);
       note(`${viewport.name}/${locale}/reload-task`, "pass", `task ${taskBefore ? "had-prior" : "fresh"} ${text.slice(0, 80)}`);
 
+      // Start over lives on the trip view only.
+      await page.getByTestId("plan-trip-card").last().getByRole("button").click();
       await page.getByRole("button", { name: c.start }).click();
       await expect(page.getByTestId("assistant-reply")).toHaveCount(0);
       const cleared = await page.evaluate(() => sessionStorage.getItem("maio.plan.task"));
@@ -244,7 +246,7 @@ for (const viewport of viewports) {
 
       await page.route("**/api/plan", (route) => route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Planner unavailable" }) }));
       await send(page, c.plan, { wait: false });
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator(".chat-error[role=alert]")).toBeVisible();
       await expect(page.getByTestId("chat-input")).toHaveValue(c.plan);
       await page.unroute("**/api/plan");
       note(`${viewport.name}/${locale}/error`, "pass");

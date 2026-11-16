@@ -1337,7 +1337,7 @@ body:has(.chat-screen) { overflow: hidden; }
 .chat-status { color: var(--maio-muted); padding: 12px 0; }
 .chat-error, .search-error { color: var(--maio-error); border-left: 3px solid var(--maio-error); padding-left: 12px; }
 .chat-message .chat-no-source, .chat-message .chat-example { font-size: 13px; color: var(--maio-text-data); margin-top: 8px; }
-.chat-composer-wrap { flex: none; background: var(--background); padding: 16px 0 max(16px, env(safe-area-inset-bottom)); }
+.chat-composer-wrap { flex: none; background: var(--paper); padding: 16px 0 max(16px, env(safe-area-inset-bottom)); }
 .chat-voice-status, .chat-voice-error { text-align: center; font-size: 13px; padding: 0 0 10px; }
 .chat-voice-status { color: #a14235; }
 .chat-voice-error { color: var(--maio-error); padding: 9px 0 0; }
@@ -1699,8 +1699,10 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-back { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
 .plan-trip { display: flex; flex-direction: column; min-width: 0; }
 .plan-cover { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-card); margin-top: 8px; }
-/* Title and Share / Export PDF stay at the top of the scrolling plan. */
-.plan-trip-head { position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 12px 0; background: var(--background); border-bottom: 1px solid var(--line); }
+/* Title and Share / Export PDF stay pinned under the site nav while the plan scrolls. --paper is the
+   page colour in both themes (--background is not defined, so it was transparent). The shadow paints
+   over the scroller's top padding (10-24px) so no stop peeks through above the pinned header. */
+.plan-trip-head { position: sticky; top: 0; z-index: 20; isolation: isolate; display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 12px 0 14px; background-color: var(--paper); border-bottom: 1px solid var(--line); box-shadow: 0 -24px 0 var(--paper); }
 .plan-trip-head .plan-sub { margin-top: 6px; }
 /* Back to chat (primary) and Start over (secondary), centred just above the input on every screen. */
 .plan-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; padding-bottom: 10px; }
