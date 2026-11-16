@@ -1,8 +1,8 @@
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { resolveOverlaps } from "./full-day.ts";
-import { applyLength, planQuestionKind, type LengthEdit } from "./plan-router.ts";
+import { applyLength, MAX_TRIP_DAYS, planQuestionKind, type EndShiftProblem, type LengthEdit } from "./plan-router.ts";
 import { closeSentence, humanPlanDate, itemLabel } from "./plan-reply.ts";
-import { EXPERIENCES, FOOD, PLACES, distanceKm, food, isExcludedExperience, localizedPlaceName, place, type PlanItem, type TripPlan } from "./trip.ts";
+import { addDays, EXPERIENCES, FOOD, PLACES, distanceKm, food, isExcludedExperience, localizedPlaceName, place, type PlanItem, type TripPlan } from "./trip.ts";
 
 /** Meals and anchored places. Free rows and the arrival header are not stops. */
 export function visibleStops(items: PlanItem[]): number {
@@ -285,6 +285,33 @@ export function lengthUnchangedReply(plan: TripPlan, locale: TaskLocale): string
     `The trip is already ${n} ${n === 1 ? "day" : "days"}, ${start} to ${end}`,
     `A viagem já tem ${n} ${n === 1 ? "dia" : "dias"}, de ${start} a ${end}`,
     `Le voyage a déjà ${n} ${n === 1 ? "jour" : "jours"}, du ${start} au ${end}`));
+}
+
+function ordinal(day: number): string {
+  const teen = day % 100;
+  if (teen >= 11 && teen <= 13) return `${day}th`;
+  if (day % 10 === 1) return `${day}st`;
+  if (day % 10 === 2) return `${day}nd`;
+  if (day % 10 === 3) return `${day}rd`;
+  return `${day}th`;
+}
+
+/** The leaving day is not applied. The two reasons do not share a sentence. */
+export function unfitLeavingReply(locale: TaskLocale, start: string, end: string, problem: EndShiftProblem): string {
+  const startLabel = humanPlanDate(start, locale);
+  if (problem === "before-start") {
+    const dayNum = Number(end.slice(8, 10));
+    const day = locale === "en" ? ordinal(dayNum) : locale === "fr" && dayNum === 1 ? "1er" : String(dayNum);
+    return say(locale,
+      `The ${day} is before your start on ${startLabel}. Which later day are you leaving?`,
+      `O dia ${day} é antes do início em ${startLabel}. Em que dia mais tarde sai?`,
+      `Le ${day} est avant votre début, le ${startLabel}. Quel jour plus tard partez-vous ?`);
+  }
+  const latest = humanPlanDate(addDays(start, MAX_TRIP_DAYS - 1), locale);
+  return say(locale,
+    `The planner can do up to ${MAX_TRIP_DAYS} days, so the latest leaving day from ${startLabel} is ${latest}. Which earlier day are you leaving?`,
+    `O planeador faz até ${MAX_TRIP_DAYS} dias, por isso o último dia de saída desde ${startLabel} é ${latest}. Em que dia mais cedo sai?`,
+    `Le planificateur va jusqu'à ${MAX_TRIP_DAYS} jours, donc le dernier jour de départ depuis le ${startLabel} est le ${latest}. Quel jour plus tôt partez-vous ?`);
 }
 
 export function nextLength(plan: TripPlan, edit: LengthEdit): { start: string; days: number } {
