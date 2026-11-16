@@ -279,6 +279,16 @@ function guestClocksOnly(request: Record<string, unknown>, task: Task): Record<s
   return next;
 }
 
+/** Planner model budget. A hung gateway call must not hold the reply. */
+export const TURN_MODEL_MS = 4_500;
+
+function failFast<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error("timeout"), { name: "TimeoutError" })), ms);
+    work.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+  });
+}
+
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
   return locale === "pt" ? pt : locale === "fr" ? fr : en;
 }
@@ -432,6 +442,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(smallTalkReply(task.locale, spoken, current), current, [], task, undefined, false, false, false, "thinking");
   }
 
+  if (/^(?:yes|yeah|yep|oui|ouais|sim|si|ok|okay)$/.test(spoken.replace(/[.!?]+$/g, "")) && !isCarPending(task.pendingQuestion) && !isCarPending(seeded.pendingQuestion)) {
+    return finish(smallTalkReply(task.locale, "hi", current), current, [], task, undefined, false, false, false, "thinking");
+  }
+
   if (classification.chip) {
     const locale = task.locale;
     if (!current) return finish(noTripReply(locale), null, [], task, [], true, false, false, classification.chip.kind === "pdf" ? "none" : "moment");
@@ -525,12 +539,16 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const boats = await loadBoatSchedule(deps.fetchImpl, now);
     const date = extractConstraints(lastUser, today).dates?.start;
     const rows = (boats.data ?? []).filter((row) => !date || row.date === date);
-    noteTransport(boats.retrievedAt, rows.length ? encodeTransportFact(rows.slice(0, 3).map((row) => ({ kind: /maio/i.test(row.to) && !/maio/i.test(row.from) ? "in" as const : "out" as const, date: row.date, time: row.departure, from: row.from, to: row.to }))) : "none");
+    noteTransport(boats.retrievedAt, rows.length ? encodeTransportFact(rows.slice(0, 3).map((row) => {
+      const inbound = /maio/i.test(row.to) && !/maio/i.test(row.from);
+      return { kind: inbound ? "in" as const : "out" as const, date: row.date, time: inbound && row.arrival ? row.arrival : row.departure, from: row.from, to: row.to };
+    })) : "none");
+    const clock = (row: { departure: string; arrival?: string; from: string; to: string }) => row.arrival && row.arrival !== row.departure ? `${row.departure}→${row.arrival}` : row.departure;
     const reply = rows.length
       ? say(task.locale,
-        `Published sailing: ${rows.map((row) => `${row.departure} ${row.from} to ${row.to}`).join(", ")}. Retrieved ${boats.retrievedAt}. Not live status.`,
-        `Saída publicada: ${rows.map((row) => `${row.departure} ${row.from} para ${row.to}`).join(", ")}. Obtido em ${boats.retrievedAt}. Não é estado ao vivo.`,
-        `Traversée publiée : ${rows.map((row) => `${row.departure} ${row.from} vers ${row.to}`).join(", ")}. Récupéré le ${boats.retrievedAt}. Pas un statut en direct.`)
+        `Published sailing: ${rows.map((row) => `${clock(row)} ${row.from} to ${row.to}`).join(", ")}. Retrieved ${boats.retrievedAt}. Not live status.`,
+        `Saída publicada: ${rows.map((row) => `${clock(row)} ${row.from} para ${row.to}`).join(", ")}. Obtido em ${boats.retrievedAt}. Não é estado ao vivo.`,
+        `Traversée publiée : ${rows.map((row) => `${clock(row)} ${row.from} vers ${row.to}`).join(", ")}. Récupéré le ${boats.retrievedAt}. Pas un statut en direct.`)
       : say(task.locale,
         `No sailing is published (retrieved ${boats.retrievedAt}). That is not the same as no service, and it is not live status.`,
         `Não há saída publicada (obtido em ${boats.retrievedAt}). Isso não é o mesmo que não haver serviço, nem é estado ao vivo.`,
@@ -1144,15 +1162,16 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const tModel = Date.now();
   let generated: { text: string };
   try {
-    generated = await generateText({
+    generated = await failFast(generateText({
       model: offerPlan ? deps.model : (deps.sideModel ?? deps.model),
       instructions: planInstructions(today, task, windowed.recall, offerPlan),
       messages: windowed.messages,
       tools: activeTools,
       stopWhen: stepCountIs(offerPlan ? 6 : 3),
       temperature: 0,
-      ...(offerPlan ? {} : { abortSignal: AbortSignal.timeout(4_000) }),
-    } as Parameters<typeof generateText>[0]);
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(TURN_MODEL_MS),
+    } as Parameters<typeof generateText>[0]), TURN_MODEL_MS);
   } catch {
     modelMs += Date.now() - tModel;
     if (offerPlan) {

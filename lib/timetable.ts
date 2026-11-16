@@ -34,7 +34,8 @@ function sailingRows(payload: unknown): Sailing[] {
     const item = asRecord(row);
     const departure = clock(item.departure);
     if (typeof item.date !== "string" || !departure || typeof item.from !== "string" || typeof item.to !== "string") return [];
-    return [{ from: item.from, to: item.to, departure, date: item.date }];
+    const arrival = clock(item.arrival);
+    return [{ from: item.from, to: item.to, departure, date: item.date, ...(arrival ? { arrival } : {}) }];
   });
 }
 
@@ -206,7 +207,8 @@ export function citedTransport(text: string, table: Timetable, today: string, ti
   const hit = upcoming[0] ?? (when ? nextPublished(directed, when) : nearest(directed, today));
   if (!hit) return [];
   const kind: TransportMention["kind"] = toIsland(hit) ? "in" : "out";
-  return [{ kind, date: hit.date, time: hit.departure, from: hit.from, to: hit.to }];
+  const land = kind === "in" && hit.arrival ? hit.arrival : hit.departure;
+  return [{ kind, date: hit.date, time: land, from: hit.from, to: hit.to }];
 }
 
 /** Short answer for a ferry or flight question. Times come only from the payload. */
@@ -253,10 +255,17 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
   const upcoming = byClock(directed.filter((row) => when ? row.date === when : stillAhead(row.date, row.departure, today, context.time)));
   const hit = upcoming[0] ?? null;
   if (hit) {
+    const lands = hit.arrival && hit.arrival !== hit.departure;
     return say(locale,
-      `Next ferry: ${travelDate(hit.date, locale)} at ${hit.departure}, ${hit.from} to ${hit.to}. ${published}`,
-      `Próximo barco: ${travelDate(hit.date, locale)} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
-      `Prochain ferry : ${travelDate(hit.date, locale)} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
+      lands
+        ? `Next ferry: ${travelDate(hit.date, locale)}, departs ${hit.departure} from ${hit.from}, arrives ${hit.arrival} in ${hit.to}. ${published}`
+        : `Next ferry: ${travelDate(hit.date, locale)} at ${hit.departure}, ${hit.from} to ${hit.to}. ${published}`,
+      lands
+        ? `Próximo barco: ${travelDate(hit.date, locale)}, sai às ${hit.departure} de ${hit.from}, chega às ${hit.arrival} a ${hit.to}. ${published}`
+        : `Próximo barco: ${travelDate(hit.date, locale)} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
+      lands
+        ? `Prochain ferry : ${travelDate(hit.date, locale)}, part à ${hit.departure} de ${hit.from}, arrive à ${hit.arrival} à ${hit.to}. ${published}`
+        : `Prochain ferry : ${travelDate(hit.date, locale)} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
   }
   const near = when ? nextPublished(directed, when) : nearest(directed, today);
   if (!near) return say(locale,

@@ -402,7 +402,7 @@ export function isFourByFourQuestion(text: string): boolean {
 
 const HOW_AROUND = /\b(?:how|como|comment)\b.*\b(?:around|desloc|deplacer|car|carro|voiture)\b/;
 const CAR_NO = /\b(?:no rental car|without (?:a )?rental car|won'?t rent (?:a )?car|will not rent (?:a )?car|not renting (?:a )?car|sem carro(?: alugado)?|sans voiture(?: de location)?|no car|without a car)\b/;
-const CAR_YES = /\b(?:with a car|have a car|has a car|rent(?:ing|ed)?(?: a)? car|we(?:'ll| will) rent|yes we rent|com carro|de carro|vamos alugar|alug(?:ar|amos|uei)|temos carro|lou(?:er|ons|e)(?: une)? voiture|avec (?:une )?voiture|en voiture|on a loue|on loue)\b/;
+const CAR_YES = /\b(?:with a (?:rental )?car|rental car|have a car|has a car|rent(?:ing|ed)?(?: a)? car|we(?:'ll| will) rent|yes we rent|com carro(?: alugado)?|carro alugado|de carro|vamos alugar|alug(?:ar|amos|uei)|temos carro|lou(?:er|ons|e)(?: une)? voiture|avec (?:une )?voiture(?: de location)?|voiture de location|en voiture|on a loue|on loue)\b/;
 const CAR_UNSURE = /\b(?:not sure(?: yet)?|unsure|ainda nao sei|nao sei|pas encore sur|pas sur|je ne sais pas)\b/;
 
 /** Explicit car wording. A how-to ("how do we get around without a car") is not an answer. */
