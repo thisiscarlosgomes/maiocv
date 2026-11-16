@@ -1,4 +1,4 @@
-import { gateway } from "@ai-sdk/gateway";
+import { languageModel } from "../../../lib/ai-model";
 import type { LanguageModel, ModelMessage } from "ai";
 import { after } from "next/server";
 import { z } from "zod";
@@ -82,8 +82,8 @@ export async function POST(request: Request) {
   const stream = wantsPlanStream(request.headers.get("accept"), data.stream);
 
   async function execute(onStatus?: (text: string) => void) {
-    let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
-    let sideModel: LanguageModel = gateway(process.env.PLAN_SIDE_MODEL ?? "openai/gpt-5-nano");
+    let model: LanguageModel = languageModel(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
+    let sideModel: LanguageModel = languageModel(process.env.PLAN_SIDE_MODEL ?? "openai/gpt-5-nano");
     // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.
     if (process.env.PLAN_MOCK === "1") {
       const { mockModel, mockScript } = await import("../../../lib/plan-mock");

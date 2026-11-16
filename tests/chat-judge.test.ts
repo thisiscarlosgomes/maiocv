@@ -222,7 +222,7 @@ test("a 429 does not call the other model, backs off for 60s, and health stores 
   const calls: string[] = [];
   const limited = Object.assign(new Error("Too many requests"), { statusCode: 429 });
   await assert.rejects(() => attemptJudgeModels(
-    ["openai/gpt-5-nano", "openai/gpt-4.1-nano"],
+    ["openai/gpt-5-nano", "openai/gpt-4o-mini"],
     async (modelId) => {
       calls.push(modelId);
       throw limited;
@@ -265,14 +265,14 @@ test("a 400 on the preferred model tries the cheap model once", async () => {
   const calls: string[] = [];
   const rejected = Object.assign(new Error("Invalid schema for response_format"), { statusCode: 400 });
   const verdict = await attemptJudgeModels(
-    ["openai/gpt-5-nano", "openai/gpt-4.1-nano"],
+    ["openai/gpt-5-nano", "openai/gpt-4o-mini"],
     async (modelId) => {
       calls.push(modelId);
       if (modelId === "openai/gpt-5-nano") throw rejected;
       return { ok: true, reasons: [], severity: "low", confidence: "low" };
     },
   );
-  assert.deepEqual(calls, ["openai/gpt-5-nano", "openai/gpt-4.1-nano"]);
+  assert.deepEqual(calls, ["openai/gpt-5-nano", "openai/gpt-4o-mini"]);
   assert.equal(verdict.ok, true);
 });
 

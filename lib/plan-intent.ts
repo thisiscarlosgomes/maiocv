@@ -1,4 +1,4 @@
-import { gateway } from "@ai-sdk/gateway";
+import { languageModel, modelReady } from "./ai-model.ts";
 import { generateText, tool } from "ai";
 import { z } from "zod";
 import type { TaskLocale } from "./awareness/task.ts";
@@ -32,8 +32,9 @@ export const EditIntentSchema = z.object({
 });
 export type EditIntent = z.infer<typeof EditIntentSchema>;
 
+/** A model can be called: direct OpenAI (OPENAI_API_KEY) or the AI Gateway. */
 export function gatewayReady(): boolean {
-  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+  return modelReady();
 }
 
 export function intentFromToolInput(input: unknown): EditIntent | null {
@@ -340,7 +341,7 @@ export const INTENT_TIMEOUT_MS = 4_000;
 export async function intentFromModel(text: string, plan: TripPlan, today: string): Promise<EditIntent | null> {
   const days = plan.days.map((day, index) => `${index + 1}=${day.date}`).join(", ");
   const generated = await generateText({
-    model: gateway(process.env.PLAN_INTENT_MODEL?.trim() || INTENT_MODEL),
+    model: languageModel(process.env.PLAN_INTENT_MODEL?.trim() || INTENT_MODEL),
     temperature: 0,
     maxRetries: 0,
     abortSignal: AbortSignal.timeout(INTENT_TIMEOUT_MS),
