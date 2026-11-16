@@ -30,8 +30,8 @@ function quietFetch(): typeof fetch {
 function liveFetch(): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
-    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    if (url.includes("/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("/flights")) return Response.json(LIVE_FLIGHTS);
     if (url.includes("marine-api") || url.includes("api.open-meteo.com")) {
       return Response.json({ daily: { time: [], wave_height_max: [], wind_speed_10m_max: [], temperature_2m_max: [] } });
     }

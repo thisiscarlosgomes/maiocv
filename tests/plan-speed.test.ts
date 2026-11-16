@@ -78,8 +78,8 @@ const SIDES = [
 test("yes, renting a car after plan around that ferry does not call the model", async () => {
   const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
-    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    if (url.includes("/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("/flights")) return Response.json(LIVE_FLIGHTS);
     return quietFetch()(input);
   }) as typeof fetch;
   const listed = await runPlanAgent(
@@ -111,8 +111,8 @@ test("yes, renting a car after plan around that ferry does not call the model", 
 test("plan around that ferry names the sailing and asks for a car only when it is unknown", async () => {
   const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
-    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    if (url.includes("/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("/flights")) return Response.json(LIVE_FLIGHTS);
     return quietFetch()(input);
   }) as typeof fetch;
   const listed = await runPlanAgent(
@@ -183,8 +183,8 @@ test("hospital, police, pharmacy and contact stay listings answers with no open 
 test("an open 18-20 plan already on the Wednesday ferry names that sailing without the model", async () => {
   const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
-    if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+    if (url.includes("/boats")) return Response.json(LIVE_BOATS);
+    if (url.includes("/flights")) return Response.json(LIVE_FLIGHTS);
     return quietFetch()(input);
   }) as typeof fetch;
   const built = await runPlanAgent(
@@ -234,8 +234,8 @@ test("plan around that ferry names the departure and the estimated arrival in en
     });
     const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes("schedules/boats")) return Response.json(LIVE_BOATS);
-      if (url.includes("schedules/flights")) return Response.json(LIVE_FLIGHTS);
+      if (url.includes("/boats")) return Response.json(LIVE_BOATS);
+      if (url.includes("/flights")) return Response.json(LIVE_FLIGHTS);
       return quietFetch()(input);
     }) as typeof fetch;
     const listed = await runPlanAgent(
@@ -288,8 +288,8 @@ test("plan around a ferry uses that sailing's arrival, not a 07:00 departure", a
   };
   const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("schedules/boats")) return Response.json(boats);
-    if (url.includes("schedules/flights")) return Response.json({ retrievedAt: boats.retrievedAt, routes: {}, upcoming: {} });
+    if (url.includes("/boats")) return Response.json(boats);
+    if (url.includes("/flights")) return Response.json({ retrievedAt: boats.retrievedAt, routes: {}, upcoming: {} });
     return quietFetch()(input);
   }) as typeof fetch;
   const asked = await runPlanAgent(

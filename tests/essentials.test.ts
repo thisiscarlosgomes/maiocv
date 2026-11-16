@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { EMERGENCY } from "../lib/emergency.ts";
-import { flightRouteLabel, loadEssentials, paymentCount, sailingsForToday, scheduleSource, verifiedDate, visibleCaveat } from "../lib/essentials.ts";
+import { flightRouteLabel, loadEssentials, paymentCount, paymentDocument, sailingsForToday, scheduleSource, verifiedDate, visibleCaveat } from "../lib/essentials.ts";
 
 test("emergency links are the decided numbers", () => {
   assert.deepEqual(EMERGENCY.map((item) => item.href), ["tel:132", "tel:+2382551130", "tel:130"]);
@@ -37,6 +37,22 @@ test("yesterday's sailings are not today's", () => {
     ],
   }, "2026-10-11");
   assert.deepEqual(rows, [{ from: "Maio", to: "Santiago", departure: "08:00", date: "2026-10-11" }]);
+});
+
+test("the payments dataset unwraps the nested Maio API document", () => {
+  const nested = paymentDocument({
+    id: "payments",
+    payload: {
+      atm_terminals_by_island: [{ name: "Maio", values: { "2023": 3 } }],
+      pos_terminals_by_island: [{ name: "Maio", values: { "2023": 194 } }],
+    },
+  });
+  assert.equal(paymentCount(nested, "atm_terminals_by_island", "Maio", "2023"), 3);
+  assert.equal(paymentCount(nested, "pos_terminals_by_island", "Maio", "2023"), 194);
+  const stale = "This snapshot is over 48 hours old. Recheck CV Interilhas.";
+  assert.match(visibleCaveat(stale, "en"), /48 hours/);
+  assert.match(visibleCaveat(stale, "pt"), /48 horas/);
+  assert.doesNotMatch(visibleCaveat(stale, "pt"), /retrievedAt|snapshot/);
 });
 
 test("Maio payment counts come from the payload", () => {
