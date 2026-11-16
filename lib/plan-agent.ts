@@ -13,7 +13,8 @@ import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, pars
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searchBusinesses, type Stay } from "./maio-catalog.ts";
-import { isStayQuestion, matchStay, stayListReply, stayPhrase, staySavedReply, stayUnknownReply, withStay } from "./plan-stay.ts";
+import { formatCapeVerdePhone } from "./phone.ts";
+import { freeStay, isStayDetailQuestion, isStayQuestion, matchStay, stayDetailReply, stayListReply, stayPhrase, staySavedReply, withStay } from "./plan-stay.ts";
 import { dailyForecastCached, forecastSourceName, loadDailyForecast, loadSunsets, maioClock, shareForecastCache, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
@@ -542,19 +543,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(say(task.locale, "Okay. We'll leave that.", "Está bem. Deixamos isso.", "D'accord. On laisse ça."), current);
   }
 
-  if (isStayQuestion(lastUser) || stayPhrase(lastUser)) {
+  const lodgingAsk = /\b(?:address|morada|adresse|phone|telefone|telephone|contacto|contato|contact)\b/.test(spoken)
+    && /\b(?:stay|staying|hotel|airbnb|alojamento|estadia|hebergement|logement|pousada|villa|casa)\b/.test(spoken);
+  if (isStayQuestion(lastUser) || stayPhrase(lastUser) || isStayDetailQuestion(lastUser, task.constraints.stay?.name) || lodgingAsk) {
     const catalog = await offerings();
     if (isStayQuestion(lastUser)) {
       const listed = stayListReply(task.locale, catalog.stays);
       return finish(listed.reply, current, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, listed.chips, true);
     }
-    const phrase = stayPhrase(lastUser) ?? "";
-    const stay = matchStay(phrase, catalog.stays);
-    if (!stay) {
-      if (!(catalog.source === "fallback" && classification.planShaping)) {
-        return finish(stayUnknownReply(task.locale, phrase), current, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, undefined, true);
-      }
-    } else {
+    const phrase = stayPhrase(lastUser);
+    if (phrase) {
+      const published = matchStay(phrase, catalog.stays);
+      const stay = published ?? freeStay(phrase);
       task = refreshTask({
         ...task,
         constraints: {
@@ -563,14 +563,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
             id: stay.id,
             name: stay.name,
             ...(stay.area ? { area: stay.area } : {}),
-            ...(stay.lat !== undefined && stay.lon !== undefined ? { lat: stay.lat, lon: stay.lon } : {}),
+            ...(published && stay.lat !== undefined && stay.lon !== undefined ? { lat: stay.lat, lon: stay.lon } : {}),
           },
         },
       });
       if (!classification.planShaping) {
         const patched = current ? applyStay(current, task) : current;
-        return finish(staySavedReply(task.locale, stay), patched, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, undefined, true);
+        return finish(staySavedReply(task.locale, stay, Boolean(published)), patched, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, undefined, true);
       }
+    } else if (isStayDetailQuestion(lastUser, task.constraints.stay?.name) || lodgingAsk) {
+      const published = matchStay(lastUser, catalog.stays);
+      const name = published?.name ?? task.constraints.stay?.name ?? "";
+      return finish(stayDetailReply(task.locale, name, published), current, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, undefined, true);
     }
   }
 
@@ -689,7 +693,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (isCarRentalQuestion(lastUser) && !classification.planShaping) {
     const catalog = await loadBusinesses(deps.fetchImpl);
     const found = catalog.source === "api" ? carRentalRecords(catalog.records) : [];
-    const listed = found.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ");
+    const listed = found.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ");
     const reply = found.length
       ? say(task.locale,
         `Car rental: ${listed}.`,
@@ -708,7 +712,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(spoken);
     if (pharmacy) {
       const found = pharmacyRecords(catalog.records);
-      const listed = found.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ");
+      const listed = found.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ");
       const reply = found.length
         ? say(task.locale, `Pharmacy: ${listed}.`, `Farmácia: ${listed}.`, `Pharmacie : ${listed}.`)
         : say(task.locale,
@@ -722,7 +726,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     const reply = !hit
       ? say(task.locale, "I don't have that business on the Maio list, so I won't invent a number.", "Não tenho esse negócio na lista do Maio, por isso não invento um número.", "Je n'ai pas ce commerce dans la liste de Maio, donc je n'invente pas de numéro.")
       : hit.phone
-        ? say(task.locale, `${hit.name}: ${hit.phone}.`, `${hit.name}: ${hit.phone}.`, `${hit.name} : ${hit.phone}.`)
+        ? say(task.locale, `${hit.name}: ${formatCapeVerdePhone(hit.phone)}.`, `${hit.name}: ${formatCapeVerdePhone(hit.phone)}.`, `${hit.name} : ${formatCapeVerdePhone(hit.phone)}.`)
         : say(task.locale, `${hit.name} is listed. No phone number is published.`, `${hit.name} está na lista. Não há telefone publicado.`, `${hit.name} est dans la liste. Aucun numéro n'est publié.`);
     return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
   }
@@ -1205,7 +1209,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const tFetch = Date.now();
         const [businesses, listed] = await Promise.all([loadBusinesses(deps.fetchImpl), offerings()]);
         fetchMs += Date.now() - tFetch;
-        const phoneFor = (title: string) => businesses.source === "api" ? searchBusinesses(businesses.records, title).find((item) => item.phone)?.phone : undefined;
+        const phoneFor = (title: string) => {
+          const raw = businesses.source === "api" ? searchBusinesses(businesses.records, title).find((item) => item.phone)?.phone : undefined;
+          return raw ? formatCapeVerdePhone(raw) : undefined;
+        };
         const pool = listed.source === "api" ? listed.experiences : EXPERIENCES;
         const exps = kind === "food" ? [] : pool.filter((item) => (kind === "any" || item.kind === kind) && match(`${item.title} ${item.description.en} ${item.description.pt}`))
           .map((item) => ({ id: item.id, title: item.title, kind: item.kind, location: item.location, seaDependent: item.seaDependent, boat: item.boat, minAge: item.example.minAge, slots: item.example.slots, durationMin: item.example.durationMin, ...(phoneFor(item.title) ? { phone: phoneFor(item.title) } : {}) }));

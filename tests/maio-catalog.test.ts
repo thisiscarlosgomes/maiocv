@@ -43,7 +43,7 @@ test("phone and pharmacy questions use the Maio API in EN, PT and FR", async () 
   clearBusinessCache();
   const fetchImpl = apiFetch([
     feature("maio-guide-food-006", "Enzo Caffe Pizza"),
-    feature("maio-guide-blue-rental-quad-big-game", "Big Game Rental Quad", "+238 971 05 93", { category: "sports" }),
+    feature("maio-guide-blue-rental-quad-big-game", "Big Game Rental Quad", "5974467", { category: "sports" }),
   ]);
   const model = scriptedModel([], "should not be used");
   const enzo = await runPlanAgent(
@@ -82,7 +82,7 @@ test("phone and pharmacy questions use the Maio API in EN, PT and FR", async () 
     null,
     { model, fetchImpl, now: TODAY },
   );
-  assert.match(quad.reply, /\+238 971 05 93/);
+  assert.match(quad.reply, /\+238 597 44 67/);
   assert.doesNotMatch(quad.reply, /€|\$/);
 
   clearBusinessCache();
