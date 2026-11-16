@@ -288,7 +288,9 @@ test("replace alone, and yes after want-changes, ask what to change", async () =
     fr.task,
   );
   assert.equal(yes.plan, fr.plan);
-  assert.match(yes.reply, /changer/i);
+  assert.match(yes.reply, /plus calme|sortie en bateau|décaler/i);
+  assert.doesNotMatch(yes.reply, /est toujours là/);
+  assert.ok(yes.chips.length >= 2 && yes.chips.length <= 3);
   assert.equal(yes.task.locale, "fr");
   assert.doesNotMatch(yes.reply, /n'atteins pas le modèle/);
 });

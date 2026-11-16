@@ -215,6 +215,21 @@ function planChips(turn: ChipTurn, plan: TripPlan): string[] {
   return take(chips.filter((chip) => !(plan.hasCar === false && !gettingAround(turn.lastAsk) && chip === copy.rent)));
 }
 
+/** A bare yes after the greeting. Distinct from the hello line, with chips the planner can apply. */
+export function yesChangeOffer(locale: TaskLocale, plan: TripPlan): { reply: string; chips: string[] } {
+  const day = plan.days.length >= 2 ? 2 : 1;
+  const relax = relaxChip(locale, day);
+  const boat = hasBoat(plan) ? COPY[locale].removeBoat : COPY[locale].boat;
+  const shift = locale === "pt" ? "Adiar 2 dias" : locale === "fr" ? "Décale de 2 jours" : "Push it 2 days";
+  const chips = [relax, boat, shift];
+  const reply = locale === "pt"
+    ? `Posso deixar o dia ${day} mais calmo, ${hasBoat(plan) ? "tirar o passeio de barco" : "acrescentar um passeio de barco"} ou adiar as datas. O que prefere?`
+    : locale === "fr"
+      ? `Je peux rendre le jour ${day} plus calme, ${hasBoat(plan) ? "enlever la sortie en bateau" : "ajouter une sortie en bateau"} ou décaler les dates. Que préférez-vous ?`
+      : `I can make day ${day} calmer, ${hasBoat(plan) ? "remove the boat trip" : "add a boat trip"}, or shift the dates. Which do you want?`;
+  return { reply, chips };
+}
+
 /** Chips for this turn: the ask, the reply, and what the plan actually contains. At most three, in the guest's voice. */
 export function suggestionChips(turn: ChipTurn): string[] {
   if (isCarPending(turn.task.pendingQuestion)) return [...CAR_CHIPS[turn.locale]];

@@ -198,7 +198,7 @@ test("plan around that ferry anchors day 1 after the 07:00 arrival", async () =>
     emptyTask("en"),
   );
   const rows = decodeTransportFact(listed.task.lastToolFacts.find((fact) => fact.name === "get_transport")?.value);
-  assert.ok(rows.some((row) => row.date === "2026-11-18" && row.time === "07:00" && row.kind === "in"), JSON.stringify(rows));
+  assert.ok(rows.some((row) => row.date === "2026-11-18" && row.time === "09:00" && row.kind === "in"), JSON.stringify(rows));
   const built = await runPlanAgent(
     [{ role: "user", content: "plan around that ferry, 2 days, with a car" }],
     null,
@@ -208,7 +208,7 @@ test("plan around that ferry anchors day 1 after the 07:00 arrival", async () =>
   assert.equal(built.plan?.days[0].date, "2026-11-18");
   assert.equal(built.plan?.days.length, 2);
   const arrival = built.plan?.days[0].items.find((item) => item.kind === "transport");
-  assert.equal(arrival?.start, "07:00");
+  assert.equal(arrival?.start, "09:00");
   for (const item of built.plan?.days[0].items ?? []) {
     if (item.kind === "transport" || !item.start) continue;
     assert.ok(item.start >= "09:00", item.start);

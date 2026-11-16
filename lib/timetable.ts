@@ -28,6 +28,31 @@ function clock(value: unknown): string | null {
   return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null;
 }
 
+/** Minutes on the water when the timetable publishes a departure and no arrival. */
+const ROUTE_CROSSING_MINUTES: { from: RegExp; to: RegExp; minutes: number }[] = [
+  { from: /santiago|praia/i, to: /maio/i, minutes: 120 },
+];
+
+export function crossingMinutes(from: string, to: string): number | null {
+  const row = ROUTE_CROSSING_MINUTES.find((route) => (route.from.test(from) && route.to.test(to)) || (route.from.test(to) && route.to.test(from)));
+  return row?.minutes ?? null;
+}
+
+export function addClock(hhmm: string, minutes: number): string {
+  const [hour, minute] = hhmm.split(":").map(Number);
+  const total = ((hour * 60 + minute + minutes) % (24 * 60) + (24 * 60)) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Published arrival, or departure plus the route crossing when the payload has none. */
+export function landingClock(row: { from: string; to: string; departure: string; arrival?: string }): { time: string; estimated: boolean } {
+  if (row.arrival && row.arrival !== row.departure) return { time: row.arrival, estimated: false };
+  const inbound = /maio/i.test(row.to) && !/maio/i.test(row.from);
+  const minutes = inbound ? crossingMinutes(row.from, row.to) : null;
+  if (minutes == null) return { time: row.departure, estimated: false };
+  return { time: addClock(row.departure, minutes), estimated: true };
+}
+
 function sailingRows(payload: unknown): Sailing[] {
   const rows = Array.isArray(asRecord(payload).schedules) ? asRecord(payload).schedules as unknown[] : [];
   return rows.flatMap((row) => {
@@ -207,8 +232,7 @@ export function citedTransport(text: string, table: Timetable, today: string, ti
   const hit = upcoming[0] ?? (when ? nextPublished(directed, when) : nearest(directed, today));
   if (!hit) return [];
   const kind: TransportMention["kind"] = toIsland(hit) ? "in" : "out";
-  const land = kind === "in" && hit.arrival ? hit.arrival : hit.departure;
-  return [{ kind, date: hit.date, time: land, from: hit.from, to: hit.to }];
+  return [{ kind, date: hit.date, time: landingClock(hit).time, from: hit.from, to: hit.to }];
 }
 
 /** Short answer for a ferry or flight question. Times come only from the payload. */
@@ -254,19 +278,7 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
   const directed = directedSailings(text, table);
   const upcoming = byClock(directed.filter((row) => when ? row.date === when : stillAhead(row.date, row.departure, today, context.time)));
   const hit = upcoming[0] ?? null;
-  if (hit) {
-    const lands = hit.arrival && hit.arrival !== hit.departure;
-    return say(locale,
-      lands
-        ? `Next ferry: ${travelDate(hit.date, locale)}, departs ${hit.departure} from ${hit.from}, arrives ${hit.arrival} in ${hit.to}. ${published}`
-        : `Next ferry: ${travelDate(hit.date, locale)} at ${hit.departure}, ${hit.from} to ${hit.to}. ${published}`,
-      lands
-        ? `Próximo barco: ${travelDate(hit.date, locale)}, sai às ${hit.departure} de ${hit.from}, chega às ${hit.arrival} a ${hit.to}. ${published}`
-        : `Próximo barco: ${travelDate(hit.date, locale)} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
-      lands
-        ? `Prochain ferry : ${travelDate(hit.date, locale)}, part à ${hit.departure} de ${hit.from}, arrive à ${hit.arrival} à ${hit.to}. ${published}`
-        : `Prochain ferry : ${travelDate(hit.date, locale)} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
-  }
+  if (hit) return ferryHitReply(hit, locale, published);
   const near = when ? nextPublished(directed, when) : nearest(directed, today);
   if (!near) return say(locale,
     `No ferry is in the published timetable. That is not the same as no service. ${published}`,
@@ -276,6 +288,27 @@ export function answerTravelQuestion(text: string, locale: TaskLocale, table: Ti
     `No ferry is published${when ? ` on ${travelDate(when, locale)}` : ""}. The nearest is ${travelDate(near.date, locale)} at ${near.departure}, ${near.from} to ${near.to}. ${published}`,
     `Não há barco publicado${when ? ` em ${travelDate(when, locale)}` : ""}. O mais próximo é ${travelDate(near.date, locale)} às ${near.departure}, ${near.from} para ${near.to}. ${published}`,
     `Aucun ferry n'est publié${when ? ` le ${travelDate(when, locale)}` : ""}. Le plus proche est le ${travelDate(near.date, locale)} à ${near.departure}, ${near.from} vers ${near.to}. ${published}`);
+}
+
+function ferryHitReply(hit: Sailing, locale: TaskLocale, published: string): string {
+  const land = landingClock(hit);
+  const when = travelDate(hit.date, locale);
+  if (land.estimated) {
+    return say(locale,
+      `Next ferry: ${when}, departs ${hit.departure} from ${hit.from}, arrives around ${land.time} in ${hit.to}. ${published}`,
+      `Próximo barco: ${when}, sai às ${hit.departure} de ${hit.from}, chega por volta das ${land.time} a ${hit.to}. ${published}`,
+      `Prochain ferry : ${when}, part à ${hit.departure} de ${hit.from}, arrive vers ${land.time} à ${hit.to}. ${published}`);
+  }
+  if (hit.arrival && hit.arrival !== hit.departure) {
+    return say(locale,
+      `Next ferry: ${when}, departs ${hit.departure} from ${hit.from}, arrives ${hit.arrival} in ${hit.to}. ${published}`,
+      `Próximo barco: ${when}, sai às ${hit.departure} de ${hit.from}, chega às ${hit.arrival} a ${hit.to}. ${published}`,
+      `Prochain ferry : ${when}, part à ${hit.departure} de ${hit.from}, arrive à ${hit.arrival} à ${hit.to}. ${published}`);
+  }
+  return say(locale,
+    `Next ferry: ${when} at ${hit.departure}, ${hit.from} to ${hit.to}. ${published}`,
+    `Próximo barco: ${when} às ${hit.departure}, ${hit.from} para ${hit.to}. ${published}`,
+    `Prochain ferry : ${when} à ${hit.departure}, ${hit.from} vers ${hit.to}. ${published}`);
 }
 
 type Arrival = { mode?: string; dayIndex?: number; time?: string };
