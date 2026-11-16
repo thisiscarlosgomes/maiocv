@@ -297,7 +297,7 @@ test("before rendering was one paragraph", async ({ page }) => {
     body { margin: 0; font: 17px/1.45 sans-serif; background: #fff; color: #111; }
     .plan-msg { margin: 0; max-width: 92%; padding: 24px; }
   </style></head><body>
-    <p class="plan-msg">Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Enzo (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18</p>
+    <p class="plan-msg">Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Sete Sois Sete Luas (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18</p>
   </body></html>`);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: `${OUT}/plan-before-desktop.png` });
