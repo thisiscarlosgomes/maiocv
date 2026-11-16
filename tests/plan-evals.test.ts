@@ -1,4 +1,4 @@
-// Golden-prompt evals for /api/plan. Mocked by default; set PLAN_EVAL_LIVE=1 with AI_GATEWAY_API_KEY
+// Golden-prompt evals for /api/plan. Mocked by default; set PLAN_EVAL_LIVE=1 with OPENAI_API_KEY, AI_GATEWAY_API_KEY
 // (or VERCEL_OIDC_TOKEN) to run the same prompts and assertions against the real model.
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -7,7 +7,7 @@ import { distanceKm, experience, place, unknownRefs, type TripPlan } from "../li
 import { NOW, SCENARIOS, fakeFetch } from "./plan/fixtures.ts";
 import { scriptedModel } from "./plan/mock-model.ts";
 
-const live = process.env.PLAN_EVAL_LIVE === "1" && !!(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+const live = process.env.PLAN_EVAL_LIVE === "1" && !!(process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
 const results = new Map<string, PlanAgentResult>();
 
 async function run(name: string): Promise<PlanAgentResult> {

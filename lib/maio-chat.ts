@@ -1,4 +1,4 @@
-import { gateway } from "@ai-sdk/gateway";
+import { languageModel, modelReady } from "./ai-model.ts";
 import { generateText, stepCountIs, tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import { conversationContext, type FlagLocale, type TurnForFlags } from "./chat-flags.ts";
@@ -22,7 +22,6 @@ import {
   type Citation,
   type ToolEvent,
 } from "./maio-chat-tools.ts";
-import { gatewayReady } from "./plan-intent.ts";
 
 /** Same model id and turn budget the planner uses. A hung gateway call must not hold the reply. */
 export const CHAT_MODEL = process.env.PLAN_MODEL?.trim() || "openai/gpt-5-mini";
@@ -254,8 +253,8 @@ export async function handleMaioChat(request: Request, deps: ChatDeps = {}): Pro
 
 async function resolveModel(injected: LanguageModel | undefined): Promise<LanguageModel> {
   if (injected) return injected;
-  if (process.env.PLAN_MOCK === "1" || !gatewayReady()) {
-    throw Object.assign(new Error("gateway unavailable"), { name: "GatewayError" });
+  if (process.env.PLAN_MOCK === "1" || !modelReady()) {
+    throw Object.assign(new Error("no model configured"), { name: "GatewayError" });
   }
-  return gateway(CHAT_MODEL);
+  return languageModel(CHAT_MODEL);
 }

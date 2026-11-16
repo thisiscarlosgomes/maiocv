@@ -1,15 +1,15 @@
 import { asSchema, generateText, Output } from "ai";
-import { gateway } from "@ai-sdk/gateway";
+import { languageModel } from "./ai-model.ts";
 import { z } from "zod";
 import { buildFlag, inspectTurn, partyLine, planDayDiff, summarizePlan, trimContext, type FlagSeverity, type TurnForFlags } from "./chat-flags.ts";
 import { bumpJudgeHealth, consumeJudgeBudget } from "./chat-flags-mongo.ts";
 import { recordFlag, type FlagStore } from "./chat-flags-store.ts";
 
 export const JUDGE_DAILY_CAP = 2000;
-/** Confirmed on the AI Gateway catalog. */
+/** Cheapest OpenAI model that grades reliably. Direct OpenAI first, the AI Gateway as fallback (lib/ai-model.ts). */
 export const JUDGE_MODEL = "openai/gpt-5-nano";
-/** Used only when the preferred model id is rejected. */
-export const JUDGE_MODEL_FALLBACK = "openai/gpt-4.1-nano";
+/** Used only when the preferred model id is rejected. gpt-4.1-nano is deprecated on OpenAI. */
+export const JUDGE_MODEL_FALLBACK = "openai/gpt-4o-mini";
 
 export type JudgeVerdict = { ok: boolean; reasons: string[]; severity: FlagSeverity; confidence: "low" | "high" };
 
@@ -19,7 +19,7 @@ export type JudgeBudget = {
 
 /**
  * OpenAI strict structured output rejects optional properties, maxLength, and maxItems
- * with HTTP 400 on both gpt-5-nano and gpt-4.1-nano. Length is clipped after the parse.
+ * with HTTP 400 on both gpt-5-nano and gpt-4o-mini. Length is clipped after the parse.
  */
 export const JudgeSchema = z.object({
   ok: z.boolean(),
@@ -35,7 +35,7 @@ export async function judgeResponseSchema(): Promise<Record<string, unknown>> {
 
 /**
  * gpt-5-nano's gateway catalog does not list temperature. Sending temperature: 0 is a 400.
- * gpt-4.1-nano accepts temperature, and it does not need one.
+ * gpt-4o-mini accepts temperature, and it does not need one.
  */
 export function judgeCallSettings(): { maxRetries: number; maxOutputTokens: number } {
   return { maxRetries: 0, maxOutputTokens: 200 };
@@ -313,7 +313,7 @@ export function resetJudgeHealth() {
 
 async function callJudgeModel(modelId: string, prompt: string): Promise<JudgeVerdict> {
   const result = await generateText({
-    model: gateway(modelId),
+    model: languageModel(modelId),
     output: Output.object({
       schema: JudgeSchema,
       name: "maio_reply_grade",
