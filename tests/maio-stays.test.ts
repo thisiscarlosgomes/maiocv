@@ -4,7 +4,8 @@ import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { emptyTask, refreshTask } from "../lib/awareness/task.ts";
 import { clearOfferingCache, experienceFromFeature, loadOfferings, stayFromFeature } from "../lib/maio-catalog.ts";
-import { runPlanAgent } from "../lib/plan-agent.ts";
+import { runPlanAgent, type PlanReplyTurn } from "../lib/plan-agent.ts";
+import { inspectTurn } from "../lib/chat-flags.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import type { TripPlan } from "../lib/trip.ts";
 
@@ -341,4 +342,26 @@ test("a timed-out stays read reuses the last stays the API returned", async () =
   assert.equal(second.source, "api");
   assert.equal(second.staysRead, true);
   assert.deepEqual(second.stays.map((stay) => stay.name), first.stays.map((stay) => stay.name));
+});
+
+test("the reply review still sees stay phones when the raw API bodies are long", async () => {
+  clearOfferingCache();
+  const pad = "x".repeat(5000);
+  const padded = (rows: ReturnType<typeof stayFeature>[]) => rows.map((row) => ({ ...row, properties: { ...row.properties, note: pad } }));
+  const world = worldFetch();
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/accommodation")) return Response.json({ type: "FeatureCollection", features: padded(STAY_ROWS) });
+    if (url.endsWith("/experiences")) return Response.json({ type: "FeatureCollection", features: EXPERIENCE_ROWS, note: pad });
+    return world(input, init);
+  }) as typeof fetch;
+  const seen: PlanReplyTurn[] = [];
+  const result = await runPlanAgent([{ role: "user", content: "where can we stay?" }], null, { model: bomb(), fetchImpl, now: TODAY, onReply: (turn) => seen.push(turn) });
+  assert.match(result.reply, /\+238 597 44 67/, result.reply);
+  assert.equal(seen.length, 1);
+  const reasons = inspectTurn({
+    surface: "plan", locale: "en", userMessage: "where can we stay?", previousTurns: [], botReply: result.reply,
+    planBefore: null, planAfter: null, chips: result.chips, planTurn: false, toolFacts: seen[0].toolFacts,
+  });
+  assert.equal(reasons.includes("invented_contact"), false, seen[0].toolFacts.slice(0, 200));
 });
