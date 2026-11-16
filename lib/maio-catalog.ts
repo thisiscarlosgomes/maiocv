@@ -64,7 +64,7 @@ function fromFeature(feature: unknown): BusinessRecord | null {
 
 async function fetchPage(fetchImpl: typeof fetch, offset: number): Promise<unknown[]> {
   const url = `${MAIO_API}/collections/businesses/items?limit=100&offset=${offset}`;
-  const response = await fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+  const response = await fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(3_000) });
   if (!response.ok) throw new Error(`Maio API HTTP ${response.status}`);
   const body = asRecord(await response.json());
   const features = body.features;
@@ -232,7 +232,7 @@ export function stayFromFeature(feature: unknown): Stay | null {
 async function readCollection(fetchImpl: typeof fetch, path: string): Promise<unknown[]> {
   const response = await fetchImpl(`${MAIO_API}/${path}`, {
     headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(4_000),
+    signal: AbortSignal.timeout(3_000),
   });
   if (!response.ok) throw new Error(`Maio API ${path} HTTP ${response.status}`);
   return featuresOf(await response.json());

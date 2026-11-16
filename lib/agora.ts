@@ -279,9 +279,16 @@ async function fetchDailyForecast(fetchImpl: typeof fetch, startDate: string, da
   const end = new Date(`${startDate}T12:00:00Z`);
   end.setUTCDate(end.getUTCDate() + Math.max(0, days - 1));
   const range = `start_date=${startDate}&end_date=${end.toISOString().slice(0, 10)}&timezone=Atlantic%2FCape_Verde`;
+  const grab = async (url: string) => {
+    try {
+      return await readJson(await fetchImpl(url));
+    } catch {
+      return null;
+    }
+  };
   const [marine, weather] = await Promise.all([
-    readJson(await fetchImpl(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&daily=wave_height_max&${range}`)).catch(() => null),
-    readJson(await fetchImpl(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=wind_speed_10m_max,temperature_2m_max,sunset&wind_speed_unit=kmh&${range}`)).catch(() => null),
+    grab(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&daily=wave_height_max&${range}`),
+    grab(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=wind_speed_10m_max,temperature_2m_max,sunset&wind_speed_unit=kmh&${range}`),
   ]);
   const m = asRecord(asRecord(marine).daily);
   const w = asRecord(asRecord(weather).daily);
