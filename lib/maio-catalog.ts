@@ -1,4 +1,4 @@
-import { EXPERIENCES, FOOD } from "./trip.ts";
+import { EXPERIENCES, FOOD, experience, isExcludedExperience, type Experience } from "./trip.ts";
 
 /** Public Maio Open API. The same host the portal chat tools call. No key. */
 export const MAIO_API = "https://api.maio.cv/api/v1";
@@ -124,6 +124,158 @@ export function pharmacyRecords(records: BusinessRecord[]): BusinessRecord[] {
 }
 
 /** Car hire only. A quad or jet-ski rental is not a car. */
+export type Stay = {
+  id: string;
+  name: string;
+  area: string;
+  phone: string;
+  link: string;
+  lat?: number;
+  lon?: number;
+};
+
+export type OfferingCatalog = {
+  experiences: Experience[];
+  stays: Stay[];
+  /** Experiences came from the API. A failed read keeps the bundled fixture and an empty stay list. */
+  source: "api" | "fallback";
+};
+
+type OfferingCache = { epoch: number; at: number; value: OfferingCatalog };
+let offeringCache: OfferingCache | null = null;
+let offeringEpoch = 0;
+
+export function clearOfferingCache(): void {
+  offeringEpoch += 1;
+  offeringCache = null;
+}
+
+function featuresOf(payload: unknown): unknown[] {
+  const body = asRecord(payload);
+  return Array.isArray(body.features) ? body.features : [];
+}
+
+function pointOf(feature: unknown): { lat: number; lon: number } | null {
+  const geometry = asRecord(asRecord(feature).geometry);
+  const coordinates = geometry.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
+  const lon = Number(coordinates[0]);
+  const lat = Number(coordinates[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+
+function attrsOf(feature: unknown): Record<string, unknown> {
+  const props = asRecord(asRecord(feature).properties);
+  return asRecord(props.attributes);
+}
+
+function published(feature: unknown): boolean {
+  const status = textOf(asRecord(asRecord(feature).properties).publicationStatus);
+  return !status || status === "published";
+}
+
+/** API id `maio-guide-blue-ondaazul-maio` is the fixture id `blue-ondaazul-maio`. */
+function fixtureId(feature: unknown): string {
+  const raw = textOf(asRecord(feature).id) || textOf(attrsOf(feature).id);
+  return raw.replace(/^maio-guide-/, "");
+}
+
+function descriptionOf(value: unknown, fallback: { en: string; pt: string }): { en: string; pt: string } {
+  const row = asRecord(value);
+  const en = textOf(row.en);
+  const pt = textOf(row.pt);
+  return { en: en || fallback.en, pt: pt || fallback.pt };
+}
+
+/** Fixture experience overlaid with the API name, place, and contact. Unknown API rows are dropped. */
+export function experienceFromFeature(feature: unknown): Experience | null {
+  if (!published(feature)) return null;
+  const id = fixtureId(feature);
+  const base = id ? experience(id) : undefined;
+  if (!base || isExcludedExperience(id)) return null;
+  const attrs = attrsOf(feature);
+  const name = textOf(attrs.name) || textOf(asRecord(asRecord(feature).properties).name) || base.title;
+  const phone = textOf(attrs.phone);
+  const booking = textOf(attrs.booking_url) || textOf(attrs.website) || textOf(attrs.source_url);
+  return {
+    ...base,
+    title: name,
+    location: textOf(attrs.location) || base.location,
+    description: descriptionOf(attrs.description, base.description),
+    operator: {
+      ...base.operator,
+      name: name || base.operator.name,
+      ...(phone ? { phone } : {}),
+      ...(booking ? { bookingUrl: booking } : {}),
+    },
+  };
+}
+
+export function stayFromFeature(feature: unknown): Stay | null {
+  if (!published(feature)) return null;
+  const attrs = attrsOf(feature);
+  const name = textOf(attrs.name) || textOf(asRecord(asRecord(feature).properties).name);
+  if (!name) return null;
+  const point = pointOf(feature);
+  const link = textOf(attrs.website) || textOf(attrs.booking_url) || textOf(attrs.source_url);
+  return {
+    id: (textOf(asRecord(feature).id) || name).slice(0, 80),
+    name,
+    area: textOf(attrs.location),
+    phone: textOf(attrs.phone),
+    link,
+    ...(point ? { lat: point.lat, lon: point.lon } : {}),
+  };
+}
+
+async function readCollection(fetchImpl: typeof fetch, path: string): Promise<unknown[]> {
+  const response = await fetchImpl(`${MAIO_API}/${path}`, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(4_000),
+  });
+  if (!response.ok) throw new Error(`Maio API ${path} HTTP ${response.status}`);
+  return featuresOf(await response.json());
+}
+
+/**
+ * Experiences and stays from api.maio.cv, cached for 10 minutes in this process.
+ * A failed read keeps the bundled experiences and no stays.
+ * `onFetch` runs only when a network read returned stays or experiences, not on a cache hit or a failed read.
+ */
+export async function loadOfferings(fetchImpl: typeof fetch = fetch, onFetch?: () => void): Promise<OfferingCatalog> {
+  const hit = offeringCache;
+  if (hit && hit.epoch === offeringEpoch && Date.now() - hit.at < TTL_MS) return hit.value;
+  try {
+    const [experienceResult, stayResult] = await Promise.allSettled([
+      readCollection(fetchImpl, "experiences"),
+      readCollection(fetchImpl, "accommodation"),
+    ]);
+    if (experienceResult.status === "rejected" && stayResult.status === "rejected") {
+      throw experienceResult.reason;
+    }
+    const experiences = (experienceResult.status === "fulfilled" ? experienceResult.value : []).flatMap((row) => {
+      const item = experienceFromFeature(row);
+      return item ? [item] : [];
+    });
+    const stays = (stayResult.status === "fulfilled" ? stayResult.value : []).flatMap((row) => {
+      const item = stayFromFeature(row);
+      return item ? [item] : [];
+    });
+    if (!experiences.length && !stays.length) throw new Error("Maio API returned no stays or experiences");
+    onFetch?.();
+    const value: OfferingCatalog = {
+      experiences: experiences.length ? experiences : EXPERIENCES,
+      stays,
+      source: experiences.length ? "api" : "fallback",
+    };
+    offeringCache = { epoch: offeringEpoch, at: Date.now(), value };
+    return value;
+  } catch {
+    return { experiences: EXPERIENCES, stays: [], source: "fallback" };
+  }
+}
+
 export function carRentalRecords(records: BusinessRecord[]): BusinessRecord[] {
   return records.filter((record) => {
     const hay = norm(`${record.name} ${record.category}`);

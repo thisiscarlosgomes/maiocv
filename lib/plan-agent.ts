@@ -12,7 +12,8 @@ import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
-import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinesses } from "./maio-catalog.ts";
+import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searchBusinesses, type Stay } from "./maio-catalog.ts";
+import { isStayQuestion, matchStay, stayListReply, stayPhrase, staySavedReply, stayUnknownReply, withStay } from "./plan-stay.ts";
 import { dailyForecastCached, forecastSourceName, loadDailyForecast, loadSunsets, maioClock, shareForecastCache, type DailySea } from "./agora.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
@@ -400,6 +401,35 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     lines.push(text);
     try { deps.onStatus?.(text); } catch { /* status must not change the reply */ }
   };
+  const noteCatalog = () => {
+    if (emitted.some((step) => step.id === "catalog")) return;
+    if (turn.kind === "quiet" && emitted.length > 0) {
+      emitted.push({ id: "catalog" });
+      const text = stepText(task.locale, { id: "catalog" });
+      lines.push(text);
+      try { deps.onStatus?.(text); } catch { /* status must not change the reply */ }
+      return;
+    }
+    note({ id: "catalog" });
+  };
+  let offeringPromise: ReturnType<typeof loadOfferings> | null = null;
+  const offerings = () => {
+    if (!offeringPromise) offeringPromise = loadOfferings(deps.fetchImpl, noteCatalog);
+    return offeringPromise;
+  };
+  const applyStay = (plan: TripPlan, nextTask: Task) => {
+    const stay = nextTask.constraints.stay;
+    if (!stay) return plan;
+    const listed: Stay = {
+      id: stay.id,
+      name: stay.name,
+      area: stay.area ?? "",
+      phone: "",
+      link: "",
+      ...(stay.lat !== undefined && stay.lon !== undefined ? { lat: stay.lat, lon: stay.lon } : {}),
+    };
+    return withStay(plan, listed, nextTask.locale);
+  };
   if (turn.steps[0]) note(turn.steps[0]);
 
   const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => {
@@ -510,6 +540,38 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   if (classification.cancelOnly) {
     return finish(say(task.locale, "Okay. We'll leave that.", "Está bem. Deixamos isso.", "D'accord. On laisse ça."), current);
+  }
+
+  if (isStayQuestion(lastUser) || stayPhrase(lastUser)) {
+    const catalog = await offerings();
+    if (isStayQuestion(lastUser)) {
+      const listed = stayListReply(task.locale, catalog.stays);
+      return finish(listed.reply, current, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, listed.chips, true);
+    }
+    const phrase = stayPhrase(lastUser) ?? "";
+    const stay = matchStay(phrase, catalog.stays);
+    if (!stay) {
+      if (!(catalog.source === "fallback" && classification.planShaping)) {
+        return finish(stayUnknownReply(task.locale, phrase), current, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, undefined, true);
+      }
+    } else {
+      task = refreshTask({
+        ...task,
+        constraints: {
+          ...task.constraints,
+          stay: {
+            id: stay.id,
+            name: stay.name,
+            ...(stay.area ? { area: stay.area } : {}),
+            ...(stay.lat !== undefined && stay.lon !== undefined ? { lat: stay.lat, lon: stay.lon } : {}),
+          },
+        },
+      });
+      if (!classification.planShaping) {
+        const patched = current ? applyStay(current, task) : current;
+        return finish(staySavedReply(task.locale, stay), patched, [{ name: "maio-offerings", ok: catalog.source === "api" }], task, undefined, true);
+      }
+    }
   }
 
   if (classification.intent === "new_objective" && classification.research) {
@@ -798,16 +860,23 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     try {
       const base = requestFromTask(nextTask, today);
       base.include = includeFromConstraints(nextTask, lastUser);
+      const catalog = await offerings();
+      const experiences = catalog.source === "api" ? catalog.experiences : undefined;
+      if (experiences && Array.isArray(base.include)) {
+        const ids = new Set(experiences.map((item) => item.id));
+        base.include = base.include.filter((id): id is string => typeof id === "string" && ids.has(id));
+      }
       const { table, sea } = await loadPieces(String(base.startDate), Number(base.days));
       const withTravel = attachPublishedTravel(base, table);
       const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
       noteCompose();
-      const built = annotateMissingTravel(buildPlan({
+      const built = applyStay(annotateMissingTravel(buildPlan({
         request: withTravel as z.input<typeof TripRequestSchema>,
         forecast: rows,
         sailings: table.sailings,
         forecastSource: forecastSourceName,
-      }), table);
+        ...(experiences ? { experiences } : {}),
+      }), table), nextTask);
       const request = TripRequestSchema.parse(withTravel);
       return {
         plan: built,
@@ -1134,14 +1203,15 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const q = query?.toLowerCase();
         const match = (text: string) => !q || q.split(/\s+/).some((word) => word.length > 2 && text.toLowerCase().includes(word));
         const tFetch = Date.now();
-        const catalog = await loadBusinesses(deps.fetchImpl);
+        const [businesses, listed] = await Promise.all([loadBusinesses(deps.fetchImpl), offerings()]);
         fetchMs += Date.now() - tFetch;
-        const phoneFor = (title: string) => catalog.source === "api" ? searchBusinesses(catalog.records, title).find((item) => item.phone)?.phone : undefined;
-        const exps = kind === "food" ? [] : EXPERIENCES.filter((item) => (kind === "any" || item.kind === kind) && match(`${item.title} ${item.description.en} ${item.description.pt}`))
+        const phoneFor = (title: string) => businesses.source === "api" ? searchBusinesses(businesses.records, title).find((item) => item.phone)?.phone : undefined;
+        const pool = listed.source === "api" ? listed.experiences : EXPERIENCES;
+        const exps = kind === "food" ? [] : pool.filter((item) => (kind === "any" || item.kind === kind) && match(`${item.title} ${item.description.en} ${item.description.pt}`))
           .map((item) => ({ id: item.id, title: item.title, kind: item.kind, location: item.location, seaDependent: item.seaDependent, boat: item.boat, minAge: item.example.minAge, slots: item.example.slots, durationMin: item.example.durationMin, ...(phoneFor(item.title) ? { phone: phoneFor(item.title) } : {}) }));
         const eats = kind === "food" || kind === "any" ? FOOD.filter((item) => match(`${item.title} ${item.description.en}`)).map((item) => ({ id: item.id, title: item.title, location: item.location, ...(phoneFor(item.title) ? { phone: phoneFor(item.title) } : {}) })) : [];
         toolEvents.push({ name: "search_experiences", ok: true, arguments: { kind, query } });
-        return clipToolBody({ experiences: exps, food: eats, businesses: catalog.source, note: exps.length + eats.length ? undefined : "Nothing matches in Visit Maio data." });
+        return clipToolBody({ experiences: exps, food: eats, businesses: businesses.source, note: exps.length + eats.length ? undefined : "Nothing matches in Visit Maio data." });
       },
     }),
     get_sea_forecast: tool({
@@ -1178,15 +1248,24 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       execute: async (request) => {
         const merged = composeRequest(request as Record<string, unknown>);
         const include = Array.isArray(merged.include) ? merged.include.filter((id): id is string => typeof id === "string") : [];
-        const dropped = include.filter((id) => !experience(id));
-        const clean: Record<string, unknown> = { ...merged, include: include.filter((id) => experience(id)) };
+        const catalog = await offerings();
+        const allowed = catalog.source === "api" ? new Set(catalog.experiences.map((item) => item.id)) : null;
+        const kept = include.filter((id) => experience(id) && (!allowed || allowed.has(id)));
+        const dropped = include.filter((id) => !kept.includes(id));
+        const clean: Record<string, unknown> = { ...merged, include: kept };
         const askedStart = String(clean.startDate ?? task.constraints.dates?.start ?? addDays(today, 1));
         const askedDays = Number(clean.days ?? task.constraints.dates?.days ?? 3);
         const { table, sea } = await loadPieces(askedStart, askedDays);
         const withTravel = attachPublishedTravel(clean, table);
         const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
         noteCompose();
-        const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: rows, sailings: table.sailings, forecastSource: forecastSourceName }), table);
+        const built = applyStay(annotateMissingTravel(buildPlan({
+          request: withTravel as z.input<typeof TripRequestSchema>,
+          forecast: rows,
+          sailings: table.sailings,
+          forecastSource: forecastSourceName,
+          ...(catalog.source === "api" ? { experiences: catalog.experiences } : {}),
+        }), table), task);
         builtRequest = TripRequestSchema.parse(withTravel);
         plan = built;
         toolEvents.push({ name: "get_transport", ok: table.ok });
@@ -1227,11 +1306,22 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   if (offerPlan && !builtRequest) {
     const fallback = composeRequest(null);
     try {
+      const catalog = await offerings();
+      if (catalog.source === "api" && Array.isArray(fallback.include)) {
+        const ids = new Set(catalog.experiences.map((item) => item.id));
+        fallback.include = fallback.include.filter((id): id is string => typeof id === "string" && ids.has(id));
+      }
       const { table, sea } = await loadPieces(String(fallback.startDate), Number(fallback.days));
       const withTravel = attachPublishedTravel(fallback, table);
       const rows = await seaFor(String(withTravel.startDate), Number(withTravel.days), sea);
       noteCompose();
-      const built = annotateMissingTravel(buildPlan({ request: withTravel as z.input<typeof TripRequestSchema>, forecast: rows, sailings: table.sailings, forecastSource: forecastSourceName }), table);
+      const built = applyStay(annotateMissingTravel(buildPlan({
+        request: withTravel as z.input<typeof TripRequestSchema>,
+        forecast: rows,
+        sailings: table.sailings,
+        forecastSource: forecastSourceName,
+        ...(catalog.source === "api" ? { experiences: catalog.experiences } : {}),
+      }), table), task);
       builtRequest = TripRequestSchema.parse(withTravel);
       plan = built;
       toolEvents.push({ name: "get_transport", ok: table.ok });

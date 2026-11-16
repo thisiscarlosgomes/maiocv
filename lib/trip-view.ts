@@ -99,7 +99,9 @@ export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardVi
   if (item.kind === "experience") {
     const e = experience(item.refId); if (!e) return null;
     const p = place(e.placeId)!;
-    return { kind: item.kind, title: e.title, meta: withNote(`${s.tags.activity} · ${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, item), description: locale === "en" ? e.description.en : e.description.pt,
+    const title = item.note && item.note.length <= 80 ? item.note : e.title;
+    const shown = title === item.note ? { ...item, note: undefined } : item;
+    return { kind: item.kind, title, meta: withNote(`${s.tags.activity} · ${typeLabel(e, s)} · ${duration(item.durationMin, s)} · ${e.location}`, shown), description: locale === "en" ? e.description.en : e.description.pt,
       location: e.location, image: imageUrl(e.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: e.seaDependent, operator: e.operator ?? null };
   }
   if (item.kind === "food") {
@@ -114,10 +116,11 @@ export function cardView(item: PlanItem, locale: Locale, s: PlanStrings): CardVi
       image: imageUrl(p.image), lat: p.lat, lon: p.lon, link: osm(p.lat, p.lon), seaDependent: false, operator: null };
   }
   if (item.kind === "free") {
-    const title = (s.free as Record<string, string>)[item.refId] ?? s.free["free-time"];
+    const stayBreakfast = item.refId === "breakfast-stay" && item.note ? item.note : null;
+    const title = stayBreakfast ?? (s.free as Record<string, string>)[item.refId] ?? s.free["free-time"];
     const departing = item.slot === "departure" || item.refId.startsWith("depart-");
     const quietNote = departing && item.note && /not set|not published|unpublished|por definir|por publicar|non fixée|pas encore publiée/i.test(item.note);
-    const shown = quietNote ? { ...item, note: undefined } : item;
+    const shown = quietNote || stayBreakfast ? { ...item, note: undefined } : item;
     return { kind: item.kind, title, meta: withNote(rowTag(shown, s), shown), description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
   }
   return { kind: "transport", title: item.refId === "ferry" ? s.ferry : s.flight, meta: item.note ?? "", description: "", location: "", image: null, lat: null, lon: null, link: null, seaDependent: false, operator: null };
