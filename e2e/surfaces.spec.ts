@@ -253,16 +253,7 @@ for (const viewport of viewports) {
 }
 
 test("ask maio shell matches on desktop and mobile", async ({ page }) => {
-  let live = "not-tried";
-  try {
-    const probe = await page.request.post("https://portal.maio.cv/api/chat", {
-      data: { messages: [{ role: "user", content: "hi" }] },
-      timeout: 8000,
-    });
-    live = `portal ${probe.status()}`;
-  } catch (error) {
-    live = `portal unreachable (${error instanceof Error ? error.message : "error"})`;
-  }
+  const live = "local /api/maio-chat";
   note("ask/live-probe", "info", live);
 
   for (const viewport of viewports) {

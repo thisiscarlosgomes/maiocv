@@ -43,7 +43,7 @@ Set `MAIO_TASK_SECRET` to a long random string in every deployed environment (`N
 
 ## Chat and data
 
-`/api/maio-chat` proxies to `https://portal.maio.cv/api/chat`. Recent conversation remains in component memory. Follow-up buttons send the selected prompt with conversation context; answers can be saved as branded PDFs. Voice questions are transcribed by `/api/transcribe` through Vercel AI Gateway. API errors are displayed without invented fallback answers.
+`/api/maio-chat` answers Ask Maio in this app. It reads boats, flights, businesses, accommodation, and experiences from `https://api.maio.cv/api/v1`, and uses the Vercel AI Gateway model the planner uses for open questions. It does not call portal.maio.cv. Recent conversation remains in component memory. Follow-up buttons send the selected prompt with conversation context; answers can be saved as branded PDFs. Voice questions are transcribed by `/api/transcribe` through Vercel AI Gateway. API errors are displayed without invented fallback answers.
 
 Flagged planner and Ask Maio turns are stored in MongoDB collection `chat_flags` (same `ANALYTICS_MONGODB_URI` / `ANALYTICS_MONGODB_DB`, 30-day TTL). Only failed checks, thumbs-down, and failed judge grades are written. Nothing is stored for a clean turn. The record has no IP, user agent, cookie, or user id. `FLAGS_ADMIN_KEY` (Bearer, at least 16 characters) guards `GET /api/flags` and `PATCH /api/flags/:id`. `MAIO_JUDGE=1` turns the grader on (`0` turns it off; production defaults to on). `MAIO_JUDGE_RATE` defaults to `1`. `MAIO_JUDGE_DAILY_CAP` defaults to `2000`. `MAIO_JUDGE_MODEL` defaults to `openai/gpt-5-nano`. The grader runs after the reply via Next.js `after()` and stores a row only when it returns `ok: false`.
 
