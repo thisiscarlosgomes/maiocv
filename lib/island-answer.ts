@@ -2,7 +2,7 @@ import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { isWestCoast } from "./full-day.ts";
 import { humanPlanDate } from "./plan-reply.ts";
-import { FOOD, PLACES, distanceKm, food, place } from "./trip.ts";
+import { FOOD, PLACES, distanceKm, place } from "./trip.ts";
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { isFourByFourQuestion, isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
 import { formatCapeVerdePhone } from "./phone.ts";
@@ -25,13 +25,29 @@ function restaurantNames(): string[] {
 
 const hospital = EMERGENCY.find((item) => item.id === "hospital")!;
 
+/** A place by id, only while the Maio API lists it. */
+function listedPlace(id: string) {
+  return PLACES.find((item) => item.id === id);
+}
+
+/** The Maio API did not answer, so the lists are empty. Say so instead of naming a place. */
+function listsDown(locale: TaskLocale): string {
+  return say(locale,
+    "I couldn't open the Maio listings just now, so I won't name a place. Try again in a moment.",
+    "Não consegui abrir as listas do Maio agora, por isso não nomeio um sítio. Tenta outra vez daqui a pouco.",
+    "Je n'arrive pas à ouvrir les listes de Maio pour l'instant, donc je ne nomme pas d'adresse. Réessaie dans un moment.");
+}
+
 /** Dirt-road answer. The rental sentence is only for a guest who asked where to rent. */
 export function fourByFourReply(locale: TaskLocale, rentals: { name: string; phone: string }[] | null, mentionRental = false): string {
-  const real = place("praia-real");
-  const morrinho = place("cadjetinha-morrinho-beach");
-  const realName = (locale === "pt" ? real?.name.pt : real?.name.en) ?? "Praia Real";
-  const morrinhoName = (locale === "pt" ? morrinho?.name.pt : morrinho?.name.en) ?? "Morrinho";
-  const road = say(locale,
+  const real = listedPlace("praia-real");
+  const morrinho = listedPlace("cadjetinha-morrinho-beach");
+  const realName = locale === "pt" ? real?.name.pt : real?.name.en;
+  const morrinhoName = locale === "pt" ? morrinho?.name.pt : morrinho?.name.en;
+  const road = !realName || !morrinhoName ? say(locale,
+    "I won't say a 4x4 is required, because the listings don't grade the road. The far beaches are off the paved town roads, on dirt or sand. A rental car is how people get there.",
+    "Não digo que um 4x4 é obrigatório, porque as listas não classificam a estrada. As praias mais longe ficam fora das estradas da vila, em terra ou areia. Vai-se de carro alugado.",
+    "Je ne dis pas qu'un 4x4 est obligatoire, parce que les listes ne notent pas la route. Les plages éloignées sont hors des routes de la ville, sur terre ou sable. On y va en voiture de location.") : say(locale,
     `I won't say a 4x4 is required, because the listings don't grade the road. ${realName} and ${morrinhoName} are off the paved town roads, on dirt or sand. A rental car is how people get there.`,
     `Não digo que um 4x4 é obrigatório, porque as listas não classificam a estrada. ${realName} e ${morrinhoName} ficam fora das estradas da vila, em terra ou areia. Vai-se de carro alugado.`,
     `Je ne dis pas qu'un 4x4 est obligatoire, parce que les listes ne notent pas la route. ${realName} et ${morrinhoName} sont hors des routes de la ville, sur terre ou sable. On y va en voiture de location.`);
@@ -94,8 +110,6 @@ export function sideQuestionFallback(locale: TaskLocale): string {
 }
 const TOWN = place("cidade-porto-ingles")!;
 
-/** Vila table, then the market cafe, then the pizzeria. Same order the guest can point at. */
-const VILA_TABLES = ["food-001", "food-006", "food-002", "food-005"];
 
 function joinNames(names: string[], locale: TaskLocale): string {
   if (names.length <= 1) return names[0] ?? "";
@@ -103,9 +117,8 @@ function joinNames(names: string[], locale: TaskLocale): string {
   return `${names.slice(0, -1).join(", ")} ${conj} ${names[names.length - 1]}`;
 }
 
-function asFoodPlace(id: string): LastPlace | null {
-  const item = food(id);
-  if (!item || venueType(item) !== "restaurant") return null;
+function asFoodPlace(item: (typeof FOOD)[number]): LastPlace | null {
+  if (venueType(item) !== "restaurant") return null;
   const spot = place(item.placeId);
   return { id: item.id, name: item.title, area: item.location, ...(spot ? { lat: spot.lat, lon: spot.lon } : {}) };
 }
@@ -137,7 +150,11 @@ export function answerPlaceList(text: string, locale: TaskLocale): { reply: stri
         `Trois plages pour commencer : ${names}. Je n'en classe pas une seule comme la meilleure.`),
     };
   }
-  const rows = (vila ? VILA_TABLES : [...VILA_TABLES, "food-003"]).map(asFoodPlace).filter((item): item is LastPlace => !!item).slice(0, 3);
+  // Only tables the Maio API lists right now, in listing order. In Vila, the ones within walking distance.
+  const rows = FOOD.filter((item) => {
+    const spot = place(item.placeId);
+    return !vila || (spot ? distanceKm(spot, TOWN) <= 3 : false);
+  }).map(asFoodPlace).filter((item): item is LastPlace => !!item).slice(0, 3);
   if (!rows.length) return null;
   const names = joinNames(rows.map((item) => item.name), locale);
   const where = vila ? "Vila do Maio" : "Maio";
@@ -162,8 +179,8 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   const listed = names.join(", ");
   const beachCount = PLACES.filter((item) => item.category === "beach").length;
   const verified = verifiedDate(EMERGENCY_VERIFIED_AT, locale);
-  const rotcha = place("praia-bitche-rotcha");
-  const morro = place("praia-do-morro");
+  const rotcha = listedPlace("praia-bitche-rotcha");
+  const morro = listedPlace("praia-do-morro");
   const rotchaName = locale === "pt" ? rotcha?.name.pt : rotcha?.name.en;
   const morroName = locale === "pt" ? morro?.name.pt : morro?.name.en;
 
@@ -190,6 +207,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   if (coffee) {
     const cafes = FOOD.filter((item) => /caf[eé]|coffee|breakfast|bakery|pastelaria/i.test(`${item.title} ${item.description.en}`)).slice(0, 3).map((item) => item.title);
     const names = cafes.length ? cafes.join(", ") : restaurantNames().join(", ");
+    if (!names) return listsDown(locale);
     return say(locale,
       `Places for coffee in the Visit Maio listings include ${names}. The listings have no menus and no prices.`,
       `Sítios para um café nas listas do Visit Maio incluem ${names}. As listas não têm menus nem preços.`,
@@ -228,6 +246,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
       `Je n'ai pas de rapport de sécurité dans ces listes, donc je ne devine pas si un endroit est sûr. Pour les urgences, l'hôpital de Maio est le ${hospital.number} (vérifié le ${verified}). Les plages listées comprennent ${listed}.`);
   }
   if (beachQ && !/\b(?:days?|dias?|jours?)\b/.test(n)) {
+    if (!spots.length) return listsDown(locale);
     const detail = spots.map((item) => `${item.name} (${item.location})`).join(", ");
     return say(locale,
       `Visit Maio lists ${beachCount} beaches, including ${detail}. I don't rank a single best one. With no car, a plan stays with the beaches that are walkable from Porto Inglês.`,
@@ -236,6 +255,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   }
   if (eat && !/\b(?:days?|dias?|jours?|vegetarian|vegetariano|vegetarien|cheapest|barato)\b/.test(n)) {
     const places = restaurantNames();
+    if (!places.length) return listsDown(locale);
     return say(locale,
       `Places to eat in the Visit Maio listings include ${places.join(", ")}. The listings have no menus and no prices, so you arrange the meal with the place.`,
       `Sítios para comer nas listas do Visit Maio incluem ${places.join(", ")}. As listas não têm menus nem preços, por isso combinam a refeição com o sítio.`,
@@ -246,6 +266,12 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
       `Without a car, a plan stays within about 3 km of Porto Inglês, on foot or by aluguer taxi. I don't have a bus timetable. Ferries and flights here are published timetables, not live status.`,
       `Sem carro, o plano fica a cerca de 3 km do Porto Inglês, a pé ou de táxi aluguer. Não tenho um horário de autocarro. Barcos e voos aqui são horários publicados, não estado ao vivo.`,
       `Sans voiture, le plan reste à environ 3 km de Porto Inglês, à pied ou en taxi aluguer. Je n'ai pas d'horaire de bus. Ferries et vols ici sont des horaires publiés, pas un statut en direct.`);
+  }
+  if (about && (!rotchaName || !morroName)) {
+    return say(locale,
+      "Maio is a small, quiet Cape Verdean island, with long beaches and an easy pace. Vila do Maio, also called Porto Inglês, is the harbour town. Around town you walk or take an aluguer taxi, and a car opens the rest of the island.",
+      "O Maio é uma ilha pequena e tranquila, com praias longas e um ritmo calmo. Vila do Maio, também chamada Porto Inglês, é a vila do porto. Na vila anda-se a pé ou de aluguer, e um carro abre o resto da ilha.",
+      "Maio est une petite île calme, avec de longues plages et un rythme tranquille. Vila do Maio, aussi appelée Porto Inglês, est le bourg du port. En ville on marche ou on prend un aluguer, et une voiture ouvre le reste de l'île.");
   }
   if (about) {
     return say(locale,

@@ -17,6 +17,7 @@ import { formatCapeVerdePhone } from "./phone.ts";
 import { freeStay, isStayDetailQuestion, isStayQuestion, matchStay, stayDetailReply, stayListReply, stayPhrase, staySavedReply, withStay } from "./plan-stay.ts";
 import { dailyForecastCached, forecastSourceName, loadDailyForecast, loadSunsets, maioClock, shareForecastCache, type DailySea } from "./agora.ts";
 import { budgetFetch } from "./fetch-budget.ts";
+import { syncLiveCatalog } from "./live-catalog.ts";
 import { EMERGENCY, EMERGENCY_VERIFIED_AT } from "./emergency.ts";
 import { verifiedDate } from "./essentials.ts";
 import { loadBoatSchedule, loadFlightSchedule } from "./essentials.ts";
@@ -387,7 +388,10 @@ function factsForReview(facts: string[]): string {
 export async function runPlanAgent(messages: ModelMessage[], current: TripPlan | null, deps: PlanDeps, taskInput?: Task | null): Promise<PlanAgentResult> {
   const toolFacts: string[] = [];
   const rootFetch = deps.fetchImpl;
-  const observed = observeFetch(budgetFetch(rootFetch), toolFacts);
+  const budgeted = budgetFetch(rootFetch);
+  // Suggestions come only from what api.maio.cv lists now. The read shares the reply's fetch budget.
+  await syncLiveCatalog(budgeted);
+  const observed = observeFetch(budgeted, toolFacts);
   shareForecastCache(observed, rootFetch);
   deps = { ...deps, fetchImpl: observed };
   const now = deps.now ?? new Date();

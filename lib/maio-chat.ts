@@ -3,6 +3,7 @@ import { generateText, stepCountIs, tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import { conversationContext, type FlagLocale, type TurnForFlags } from "./chat-flags.ts";
 import { scheduleTurnReview, type ReviewDeps } from "./chat-judge.ts";
+import { syncLiveCatalog } from "./live-catalog.ts";
 import {
   answerGrounded,
   askInstructions,
@@ -197,6 +198,8 @@ export async function handleMaioChat(request: Request, deps: ChatDeps = {}): Pro
   const locale = localeOf(body, question);
   const now = deps.now ?? new Date();
   const fetchImpl = chatFetch(deps.fetchImpl ?? fetch);
+  // The reply review checks names against the venues the API lists now. It runs after the reply, so do not wait here.
+  void syncLiveCatalog(deps.fetchImpl ?? fetch).catch(() => {});
   const kind = classifyAsk(question);
   const toolEvents: ToolEvent[] = [];
   const factParts: string[] = [];

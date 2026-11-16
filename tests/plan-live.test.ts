@@ -10,6 +10,12 @@ import { buildPlan } from "../lib/trip-planner.ts";
 import { distanceKm, place, type TripPlan } from "../lib/trip.ts";
 import { CAR_CHIPS, CAR_QUESTION, emptyTask, type Task } from "../lib/awareness/task.ts";
 import { scriptedModel } from "./plan/mock-model.ts";
+import { bundledListings, primeLiveCatalog } from "../lib/live-catalog.ts";
+
+// The API dropped Enzo Caffe Pizza (food-006) on Nov 16. List what it publishes now.
+const listing = bundledListings();
+listing.delete("maio-guide-food-006");
+primeLiveCatalog(listing, true);
 
 const TODAY = new Date("2026-11-15T12:00:00Z");
 const town = place("cidade-porto-ingles")!;
@@ -35,7 +41,8 @@ const LIST = {
   fr: { ask: "liste trois restaurants à Vila do Maio", first: "le premier", second: "le deuxième", that: "C'est" },
 } as const;
 
-const ORDER = ["Sete Sois Sete Luas", "Enzo Caffe Pizza", "Big Game Restaurant - Pizzeria"];
+// Listing order of the Vila tables the API lists. Enzo Caffe Pizza left the API on Nov 16.
+const ORDER = ["Sete Sois Sete Luas", "Big Game Restaurant - Pizzeria", "Nha Terra"];
 
 for (const locale of ["en", "pt", "fr"] as const) {
   test(`${locale}: a restaurant list replaces stale itinerary memory, and ordinals follow that list`, async () => {

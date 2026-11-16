@@ -64,9 +64,20 @@ export type Place = (typeof data.places)[number];
 /** Hard exclusions (Carlos, Oct 27): never planned, never offered by search. Kept in the lookup so old share links still open. */
 export const EXCLUDED_EXPERIENCE_IDS: ReadonlySet<string> = new Set(["blue-beach-volley-camp", "blue-maio-offroad"]);
 export const isExcludedExperience = (id: string) => EXCLUDED_EXPERIENCE_IDS.has(id);
-export const EXPERIENCES: Experience[] = data.experiences.filter((e) => !EXCLUDED_EXPERIENCE_IDS.has(e.id));
-export const FOOD: Food[] = data.food;
-export const PLACES: Place[] = data.places;
+/**
+ * Bundled rows from Visit Maio. They only enrich what api.maio.cv lists (images, descriptions,
+ * coordinates) and render old share links. They are never a list to suggest from.
+ */
+export const BUNDLED_EXPERIENCES: readonly Experience[] = data.experiences.filter((e) => !EXCLUDED_EXPERIENCE_IDS.has(e.id));
+export const BUNDLED_FOOD: readonly Food[] = data.food;
+export const BUNDLED_PLACES: readonly Place[] = data.places;
+/**
+ * What the planner may suggest. lib/live-catalog.ts rewrites these in place to the rows
+ * api.maio.cv lists right now, and empties them when the API has not answered recently.
+ */
+export const EXPERIENCES: Experience[] = [...BUNDLED_EXPERIENCES];
+export const FOOD: Food[] = [...BUNDLED_FOOD];
+export const PLACES: Place[] = [...BUNDLED_PLACES];
 export const DATA_SOURCE = data.source;
 
 const experienceById = new Map(data.experiences.map((item) => [item.id, item]));
