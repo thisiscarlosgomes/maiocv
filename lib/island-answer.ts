@@ -5,6 +5,7 @@ import { humanPlanDate } from "./plan-reply.ts";
 import { FOOD, PLACES, distanceKm, food, place } from "./trip.ts";
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
 import { isFourByFourQuestion, isPlaceListQuestion, normalizeUtterance } from "./awareness/classify.ts";
+import { formatCapeVerdePhone } from "./phone.ts";
 import { venueType } from "./plan-rules.ts";
 
 function say(locale: TaskLocale, en: string, pt: string, fr: string): string {
@@ -42,9 +43,9 @@ export function fourByFourReply(locale: TaskLocale, rentals: { name: string; pho
       "Les noms de location sont dans la liste des commerces de Maio. Je n'invente pas d'enseigne.")
     : rentals.length
       ? say(locale,
-        `Car rental from the Maio business list: ${rentals.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ")}.`,
-        `Aluguer na lista de negócios do Maio: ${rentals.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ")}.`,
-        `Location dans la liste des commerces de Maio : ${rentals.map((item) => item.phone ? `${item.name}, ${item.phone}` : item.name).join("; ")}.`)
+        `Car rental from the Maio business list: ${rentals.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ")}.`,
+        `Aluguer na lista de negócios do Maio: ${rentals.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ")}.`,
+        `Location dans la liste des commerces de Maio : ${rentals.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ")}.`)
       : say(locale,
         "The Maio business list has no car-rental name right now, so I won't invent a company.",
         "A lista de negócios do Maio não tem agora um aluguer de carros, por isso não invento uma empresa.",

@@ -1,5 +1,6 @@
 import type { TaskLocale } from "./awareness/task.ts";
 import type { Stay } from "./maio-catalog.ts";
+import { formatCapeVerdePhone } from "./phone.ts";
 import type { PlanItem, TripPlan } from "./trip.ts";
 
 function fold(text: string): string {
@@ -13,13 +14,55 @@ export function isStayQuestion(text: string): boolean {
   return /\b(?:where (?:can|do|should) (?:we|i) stay|where to stay|places? to stay|hotels?|accommodation|guesthouses?|guest houses?|onde ficar|onde (?:podemos|posso) ficar|alojamento|onde nos hosped|ou (?:dormir|loger|se loger)|hebergement)\b/.test(n);
 }
 
-/** The words after "staying at" / "ficamos em" / "on loge à". Null when this is not a stay claim. */
+const LOCALITIES: { re: RegExp; name: string }[] = [
+  { re: /\b(?:porto ingles|vila do maio|cidade do porto ingles)\b/, name: "Porto Inglês" },
+  { re: /\bcalheta\b/, name: "Calheta" },
+  { re: /\bmorro\b/, name: "Morro" },
+];
+
+/** The words after "staying at" / "ficamos em" / "on loge à", or "an Airbnb in Calheta". */
 export function stayPhrase(text: string): string | null {
   const n = fold(text);
-  const match = n.match(/\b(?:we(?:'re| are) staying at|staying at|stay at|ficamos (?:no|na|em)|estamos (?:no|na|em)|vamos ficar (?:no|na|em)|on loge a|nous logeons a|on est a)\s+(.+)$/);
+  const match = n.match(/\b(?:we(?:'re| are) staying at|staying at|stay at|ficamos (?:no|na|em|num|numa)|estamos (?:no|na|em|num|numa)|vamos ficar (?:no|na|em|num|numa)|on loge (?:a|dans)|nous logeons (?:a|dans)|on est (?:a|dans))\s+(.+)$/)
+    ?? n.match(/\b((?:an|a|um|uma|un|une)\s+airbnb(?:\s+(?:in|em|na|no|a|dans)\s+\S+)?|airbnb\s+(?:in|em|na|no|a|dans)\s+\S+)\b/);
   if (!match) return null;
   const name = match[1].replace(/\b(?:for|com|with|avec)\b[\s\S]*$/, "").replace(/[,.].*$/, "").trim();
   return name.length >= 3 ? name : null;
+}
+
+function knownArea(phrase: string): string | undefined {
+  const n = fold(phrase);
+  return LOCALITIES.find((place) => place.re.test(n))?.name;
+}
+
+function titleStay(raw: string): string {
+  return raw.split(/\s+/).filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+/** A guest-named stay. Area only when they named Calheta, Morro, or Porto Inglês. No phone or pin. */
+export function freeStay(phrase: string): Stay {
+  const area = knownArea(phrase);
+  const n = fold(phrase);
+  let name = n
+    .replace(/\b(?:in|em|na|no|a|dans|at|the)\s+(?:porto ingles|vila do maio|cidade do porto ingles|calheta|morro)\b/g, " ")
+    .replace(/^(?:an|a|um|uma|un|une|the)\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/\bairbnb\b/.test(n)) name = "Airbnb";
+  if (name.length < 3) name = area ? "Stay" : n;
+  const label = titleStay(name);
+  const slug = fold(label).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "stay";
+  return { id: `guest-${slug}`.slice(0, 80), name: label, area: area ?? "", phone: "", link: "" };
+}
+
+/** Phone, address, or contact for a lodging. Not the "where can we stay?" list. */
+export function isStayDetailQuestion(text: string, savedName?: string): boolean {
+  if (isStayQuestion(text) || stayPhrase(text)) return false;
+  const n = fold(text);
+  const asks = /\b(?:address|morada|adresse|phone|telefone|telephone|contacto|contato|contact)\b/.test(n);
+  if (!asks) return false;
+  if (/\b(?:stay|staying|hotel|airbnb|alojamento|estadia|hebergement|logement|pousada)\b/.test(n)) return true;
+  return Boolean(savedName && savedName.length >= 3 && n.includes(fold(savedName)));
 }
 
 /** Longest published stay named in the phrase. Never a stay that is not in the list. */
@@ -100,9 +143,21 @@ export function withStay(plan: TripPlan, stay: Stay, locale: TaskLocale): TripPl
   return { ...plan, days };
 }
 
+function linkHost(link: string): string | null {
+  try { return new URL(link).host.replace(/^www\./, ""); } catch { return null; }
+}
+
+function stayLabel(stay: Stay): string {
+  if (stay.phone) return `${stay.name} (${formatCapeVerdePhone(stay.phone)})`;
+  const host = stay.link ? linkHost(stay.link) : null;
+  return host ? `${stay.name} (${host})` : stay.name;
+}
+
+/** Every published stay, up to 8, grouped by area. Chips stay at three. */
 export function stayListReply(locale: TaskLocale, stays: Stay[]): { reply: string; chips: string[] } {
-  const chips = stays.slice(0, 3).map((stay) => stayChip(locale, stay.name));
-  if (!stays.length) {
+  const shown = stays.slice(0, 8);
+  const chips = shown.slice(0, 3).map((stay) => stayChip(locale, stay.name));
+  if (!shown.length) {
     const reply = locale === "pt"
       ? "Não tenho alojamento na lista do Maio, por isso não invento um sítio."
       : locale === "fr"
@@ -110,32 +165,49 @@ export function stayListReply(locale: TaskLocale, stays: Stay[]): { reply: strin
         : "I don't have stays in the Maio list, so I won't guess one.";
     return { reply, chips: [] };
   }
-  const lines = stays.map((stay) => {
-    const bits = [stay.name];
-    if (stay.area) bits.push(stay.area);
-    if (stay.phone) bits.push(stay.phone);
-    else if (stay.link) {
-      try { bits.push(new URL(stay.link).host.replace(/^www\./, "")); } catch { /* skip a bad link */ }
-    }
-    return bits.join(", ");
-  }).join("; ");
+  const groups = new Map<string, Stay[]>();
+  for (const stay of shown) {
+    const area = stay.area || "Maio";
+    groups.set(area, [...(groups.get(area) ?? []), stay]);
+  }
+  const lines = [...groups].map(([area, rows]) => `${area}: ${rows.map(stayLabel).join(", ")}`).join(". ");
   const reply = locale === "pt"
-    ? `Onde ficar: ${lines}. Disponibilidade e preços não estão ao vivo.`
+    ? `Onde ficar. ${lines}. Disponibilidade e preços não estão ao vivo.`
     : locale === "fr"
-      ? `Où loger : ${lines}. La disponibilité et les prix ne sont pas en direct.`
-      : `Places to stay: ${lines}. Availability and prices aren't live.`;
+      ? `Où loger. ${lines}. La disponibilité et les prix ne sont pas en direct.`
+      : `Places to stay. ${lines}. Availability and prices aren't live.`;
   return { reply, chips };
 }
 
-export function staySavedReply(locale: TaskLocale, stay: Stay): string {
+export function staySavedReply(locale: TaskLocale, stay: Stay, listed = true): string {
   const place = where(stay);
+  if (!listed) {
+    if (locale === "pt") return `Guardei a estadia como ${place}.`;
+    if (locale === "fr") return `Séjour enregistré : ${place}.`;
+    return `Saved your stay as ${place}.`;
+  }
   if (locale === "pt") return `Ficam em ${place}. O pequeno-almoço e o início e o fim do dia usam esse alojamento.`;
   if (locale === "fr") return `Vous logez à ${place}. Le petit-déjeuner, le début et la fin de la journée utilisent cet hébergement.`;
   return `You're staying at ${place}. Breakfast and the start and end of the day use that stay.`;
 }
 
-export function stayUnknownReply(locale: TaskLocale, phrase: string): string {
-  if (locale === "pt") return `Não tenho «${phrase}» na lista de alojamento, por isso não o acrescento.`;
-  if (locale === "fr") return `Je n'ai pas « ${phrase} » dans la liste des hébergements, donc je ne l'ajoute pas.`;
-  return `I don't have "${phrase}" in the stay list, so I won't add it.`;
+/** Published details, or a plain "not in the directory". Never an invented address or phone. */
+export function stayDetailReply(locale: TaskLocale, name: string, listed: Stay | null): string {
+  if (!listed) {
+    const who = name.trim() || (locale === "pt" ? "Esse alojamento" : locale === "fr" ? "Ce logement" : "That stay");
+    if (locale === "pt") return `${who} não está na lista de alojamento, por isso não tenho morada nem telefone.`;
+    if (locale === "fr") return `${who} n'est pas dans l'annuaire des hébergements, donc je n'ai ni adresse ni téléphone.`;
+    return `${who} isn't in the stay directory, so I don't have an address or a phone.`;
+  }
+  const bits = [listed.name];
+  if (listed.area) bits.push(listed.area);
+  if (listed.phone) bits.push(formatCapeVerdePhone(listed.phone));
+  else {
+    const host = listed.link ? linkHost(listed.link) : null;
+    if (host) bits.push(host);
+  }
+  const line = bits.join(", ");
+  if (locale === "pt") return `${line}. Disponibilidade e preços não estão ao vivo.`;
+  if (locale === "fr") return `${line}. La disponibilité et les prix ne sont pas en direct.`;
+  return `${line}. Availability and prices aren't live.`;
 }

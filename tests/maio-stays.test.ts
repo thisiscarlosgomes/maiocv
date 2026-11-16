@@ -121,9 +121,9 @@ test("offerings map API experiences onto fixture ids and fall back when the API 
 
 test("where to stay lists the API stays in EN, PT and FR and does not rebuild a plan", async () => {
   const asks = [
-    ["en", "where can we stay?", /Places to stay: .*Villa Azul, Cidade do Porto Inglês, 5974467/, /Availability and prices aren't live/, "We're staying at Villa Azul"],
-    ["pt", "onde ficar?", /Onde ficar: .*Casa do Mar, Calheta, airbnb.com/, /não estão ao vivo/, "Ficamos em Villa Azul"],
-    ["fr", "où loger ?", /Où loger:? .*Home in Morro, Morro, \+238 595 00 00/, /ne sont pas en direct/, "On loge à Villa Azul"],
+    ["en", "where can we stay?", /Cidade do Porto Inglês: Villa Azul \(\+238 597 44 67\)/, /Availability and prices aren't live/, "We're staying at Villa Azul"],
+    ["pt", "onde ficar?", /Calheta: Casa do Mar \(airbnb.com\)/, /não estão ao vivo/, "Ficamos em Villa Azul"],
+    ["fr", "où loger ?", /Morro: Home in Morro \(\+238 595 00 00\)/, /ne sont pas en direct/, "On loge à Villa Azul"],
     ["en", "hotels near the beach", /Villa Azul/, /aren't live/, "We're staying at Casa do Mar"],
   ] as const;
   for (const [locale, ask, list, caveat, chip] of asks) {
@@ -183,24 +183,94 @@ test("naming a listed stay updates breakfast and the day ends in EN, PT and FR",
   }
 });
 
-test("an unknown stay is not invented", async () => {
+test("an unlisted stay is saved as free text in EN, PT and FR", async () => {
+  const cases = [
+    ["en", "We're staying at Atlantis Resort", "Atlantis Resort", undefined, /Saved your stay as Atlantis Resort/],
+    ["pt", "ficamos em Atlantis Resort", "Atlantis Resort", undefined, /Guardei a estadia como Atlantis Resort/],
+    ["fr", "on loge à Atlantis Resort", "Atlantis Resort", undefined, /Séjour enregistré ?: Atlantis Resort/],
+    ["en", "an Airbnb in Calheta", "Airbnb", "Calheta", /Saved your stay as Airbnb, Calheta/],
+    ["pt", "um airbnb na Calheta", "Airbnb", "Calheta", /Guardei a estadia como Airbnb, Calheta/],
+    ["fr", "un airbnb à Calheta", "Airbnb", "Calheta", /Séjour enregistré ?: Airbnb, Calheta/],
+  ] as const;
+  for (const [locale, ask, name, area, saved] of cases) {
+    clearOfferingCache();
+    const plan = openPlan(locale);
+    const task = refreshTask({
+      ...emptyTask(locale),
+      objective: plan.title,
+      constraints: { dates: { start: "2026-11-18", days: 3 }, party: { adults: 2 }, car: true, pace: "slow" },
+      completed: ["itinerary"],
+    });
+    const result = await runPlanAgent(
+      [{ role: "user", content: ask }],
+      plan,
+      { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
+      task,
+    );
+    assert.match(result.reply, saved, result.reply);
+    assert.equal(result.task.constraints.stay?.name, name);
+    assert.equal(result.task.constraints.stay?.area, area);
+    assert.equal(result.task.constraints.stay?.lat, undefined);
+    assert.doesNotMatch(result.reply, /\+238|597|address|morada|adresse/i);
+    const breakfast = result.plan?.days[0]?.items.find((item) => item.refId === "breakfast-stay");
+    assert.match(breakfast?.note ?? "", new RegExp(name), result.reply);
+  }
+});
+
+test("asking for an unlisted stay's details does not invent a phone or address", async () => {
   clearOfferingCache();
   const plan = openPlan("en");
-  const task = refreshTask({
+  const saved = refreshTask({
     ...emptyTask("en"),
     objective: plan.title,
-    constraints: { dates: { start: "2026-11-18", days: 3 }, party: { adults: 2 }, car: true, pace: "slow" },
+    constraints: {
+      dates: { start: "2026-11-18", days: 3 },
+      party: { adults: 2 },
+      car: true,
+      pace: "slow",
+      stay: { id: "guest-atlantis-resort", name: "Atlantis Resort" },
+    },
     completed: ["itinerary"],
   });
   const result = await runPlanAgent(
-    [{ role: "user", content: "we're staying at Atlantis Resort" }],
+    [{ role: "user", content: "what's the address of our stay" }],
     plan,
     { model: bomb(), fetchImpl: worldFetch(), now: TODAY },
-    task,
+    saved,
   );
   assert.equal(result.plan, plan);
-  assert.equal(result.task.constraints.stay, undefined);
-  assert.match(result.reply, /don't have "atlantis resort"/i);
+  assert.match(result.reply, /isn't in the stay directory/);
+  assert.doesNotMatch(result.reply, /\+238|\d{7}/);
+});
+
+test("where to stay lists every published stay and keeps three chips", async () => {
+  clearOfferingCache();
+  const many = [
+    ...STAY_ROWS,
+    stayFeature("s4", "Wave Maze", "Cidade do Porto Inglês", "", "https://www.wavemaze.com"),
+    stayFeature("s5", "Hotel Big Game Maio", "Cidade do Porto Inglês", "002385977305"),
+    stayFeature("s6", "Casa Evora", "Cidade do Porto Inglês"),
+    stayFeature("s7", "Dacosta Apartamentos", "Cidade do Porto Inglês", "9756696"),
+    stayFeature("s8", "Villa Maris Eco Village", "Morro", "+2385957968"),
+  ];
+  const fetchImpl: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/accommodation")) return Response.json({ features: many });
+    return worldFetch()(input);
+  }) as typeof fetch;
+  const result = await runPlanAgent(
+    [{ role: "user", content: "where can we stay?" }],
+    null,
+    { model: bomb(), fetchImpl, now: TODAY },
+  );
+  for (const name of ["Villa Azul", "Casa do Mar", "Home in Morro", "Wave Maze", "Hotel Big Game Maio", "Casa Evora", "Dacosta Apartamentos", "Villa Maris Eco Village"]) {
+    assert.match(result.reply, new RegExp(name), result.reply);
+  }
+  assert.match(result.reply, /Porto Inglês:|Cidade do Porto Inglês:/);
+  assert.match(result.reply, /\+238 597 44 67/);
+  assert.match(result.reply, /\+238 975 66 96/);
+  assert.equal(result.chips.length, 3);
+  assert.equal(result.plan, null);
 });
 
 test("a boat plan uses the API fishing trip, and the catalog line is only on a real load", async () => {
