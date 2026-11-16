@@ -163,6 +163,17 @@ function mentionsParty(n: string): boolean {
   return /\b(?:adults?|adultos?|adultes?|kids?|children|child|criancas?|enfants?|filho|filha|baby|bebe|toddler|family of|familia de|famille de|year-old|years? old|anos|ans|couple|casal|no kids|sem criancas|sem filhos|sans enfants)\b/.test(n);
 }
 
+function namedActivity(n: string): string | null {
+  if (/\bsurf\w*/.test(n)) return "surf";
+  if (/\b(?:jet ?ski|jetski)\b/.test(n)) return "jetski";
+  if (/\bquads?\b/.test(n)) return "quad";
+  if (/\b(?:dolphins?|golfinhos?|dauphins?)\b/.test(n)) return "dolphin";
+  if (/\b(?:diving|mergulho|plongee)\b/.test(n)) return "diving";
+  if (/\b(?:nightlife|nightclub|vida noturna|boite)\b/.test(n)) return "nightlife";
+  if (/\b(?:boat trip|passeio de barco|sortie en bateau)\b/.test(n) || /\b(?:barco|bateau|boats?)\b/.test(n)) return "boat";
+  return null;
+}
+
 /**
  * Regex fallback for the same schema the model emits.
  * Date and length phrases are included so fixtures and the fast path agree;
@@ -179,8 +190,25 @@ export function parseEditIntent(text: string, plan: TripPlan | null, today: stri
   if (length?.kind === "set") return { kind: "set_dates", days: length.n };
   if (plan && (/\b(?:don'?t|do not|nao quero|without|ne veux pas)\b.{0,40}\b(?:boat|barco|bateau)\b/.test(n)
     || /\b(?:sem|sans|no)\s+(?:um\s+|uma\s+|o\s+|a\s+)?(?:passeio de\s+|saida de\s+|sortie en\s+)?(?:boat|barco|bateau)\b/.test(n)
-    || /\b(?:boat|barco|bateau)\b.{0,24}\b(?:off|out)\b/.test(n))) {
+    || /\b(?:boat|barco|bateau)\b.{0,24}\b(?:off|out)\b/.test(n)
+    || /\b(?:remove|drop|tira\w*|remov\w*|retir\w*|enlev\w*|supprim\w*)\b.{0,48}\b(?:boat|barco|bateau)\b/.test(n))) {
     return { kind: "remove_stop", stop: "boat" };
+  }
+  if (plan) {
+    const activity = namedActivity(n);
+    if (activity && activity !== "boat") {
+      const day = specificDay(n, plan, today);
+      const removing = /\b(?:remove|drop|tira\w*|remov\w*|retir\w*|enlev\w*|supprim\w*|sem|sans|without)\b/.test(n);
+      const adding = /\b(?:add|acrescent\w*|adicion\w*|inclu\w*|ajout\w*|mettre|mets\b|met\b|poe\w*|want|quero|je veux|fazer surf|faire du surf|go surfing)\b/.test(n);
+      const moving = /\b(?:move|passa|passe|deplac\w*)\b/.test(n);
+      if (/\bsurf/.test(activity) && moving && /\b(?:morning|manha|matin)\b/.test(n)) return { kind: "swap_stop", stop: "surf", swapWith: "morning" };
+      if (/\bsurf/.test(activity) && moving && /\b(?:afternoon|tarde|apres-midi)\b/.test(n)) return { kind: "swap_stop", stop: "surf", swapWith: "afternoon" };
+      if (removing && !adding) return { kind: "remove_stop", stop: activity, ...(day ? { day } : {}) };
+      if (adding || /\b(?:another|outra|autre)\b/.test(n)) {
+        const again = /\b(?:another|outra|autre)\b/.test(n);
+        return { kind: "add_activity", activity: again ? `${activity}-another` : activity, ...(day ? { day } : {}) };
+      }
+    }
   }
   if (plan && /\b(?:afternoon|tarde|apres-midi)\b/.test(n) && /\b(?:free|livre|libre)\b/.test(n)) {
     const named = specificDay(n, plan, today);
@@ -225,7 +253,7 @@ export function parseEditIntent(text: string, plan: TripPlan | null, today: stri
   return null;
 }
 
-const LOCAL_KINDS = new Set<EditIntent["kind"]>(["relax_day", "busier_day", "set_party", "add_activity", "remove_stop"]);
+const LOCAL_KINDS = new Set<EditIntent["kind"]>(["relax_day", "busier_day", "set_party", "add_activity", "remove_stop", "swap_stop"]);
 
 /** Kinds the regex applies itself when the gateway is absent. Dates stay on the date fast path. */
 export function localEditIntent(text: string, plan: TripPlan, today: string): EditIntent | null {

@@ -331,7 +331,7 @@ test("replace the beach on day 1 swaps that beach", async () => {
     const after = beachId(result.plan!, 0);
     assert.ok(after && after !== before, result.reply);
     assert.equal(beachId(result.plan!, 1), beachId(plan, 1));
-    assert.match(result.reply, locale === "fr" ? /Jour 1/ : locale === "pt" ? /Dia 1/ : /Day 1/);
+    assert.match(result.reply, locale === "fr" ? /jour 1/i : locale === "pt" ? /dia 1/i : /day 1/i);
     assert.doesNotMatch(result.reply, /Tap the card|Toque no cartão|Touchez la carte|Slow 3 days|Calmo, 3/);
     assert.equal(result.reply.includes("\n"), false);
   }

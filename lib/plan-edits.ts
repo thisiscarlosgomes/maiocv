@@ -1,8 +1,9 @@
 import type { LastPlace, TaskLocale } from "./awareness/task.ts";
-import { resolveOverlaps } from "./full-day.ts";
+import { anchoredCount, resolveOverlaps, toMin } from "./full-day.ts";
+import { editDiffReply } from "./plan-diff.ts";
 import { applyLength, MAX_TRIP_DAYS, planQuestionKind, type EndShiftProblem, type LengthEdit } from "./plan-router.ts";
 import { closeSentence, humanPlanDate, itemLabel } from "./plan-reply.ts";
-import { addDays, EXPERIENCES, FOOD, PLACES, distanceKm, food, isExcludedExperience, localizedPlaceName, place, type PlanItem, type TripPlan } from "./trip.ts";
+import { addDays, EXPERIENCES, FOOD, PLACES, distanceKm, experience, food, isExcludedExperience, localizedPlaceName, place, type Experience, type PlanItem, type TripPlan } from "./trip.ts";
 
 /** Meals and anchored places. Free rows and the arrival header are not stops. */
 export function visibleStops(items: PlanItem[]): number {
@@ -138,10 +139,11 @@ export function dropBoatTrip(plan: TripPlan, locale: TaskLocale = plan.locale): 
       reply: say(locale, "There isn't a boat trip on the plan.", "Não há um passeio de barco no plano.", "Il n'y a pas de sortie en bateau dans le plan."),
     };
   }
+  const next = { ...plan, days };
   return {
-    plan: { ...plan, days },
+    plan: next,
     removed: true,
-    reply: say(locale, "I took the boat trip off the plan.", "Tirei o passeio de barco do plano.", "J'ai retiré la sortie en bateau du plan."),
+    reply: editDiffReply(plan, next, locale) ?? say(locale, "I took the boat trip off the plan.", "Tirei o passeio de barco do plano.", "J'ai retiré la sortie en bateau du plan."),
   };
 }
 
@@ -199,10 +201,11 @@ export function addBoatTrip(plan: TripPlan, locale: TaskLocale = plan.locale): {
     if (!day.items.some((item) => item.kind === "experience")) return day;
     return { ...day, items: day.items.filter((item) => item.kind !== "experience") };
   });
+  const next = { ...plan, days };
   return {
-    plan: { ...plan, days },
+    plan: next,
     added: true,
-    reply: say(locale,
+    reply: editDiffReply(plan, next, locale) ?? say(locale,
       `I added ${boat.title} on day ${host.index + 1}. That's the boat trip in the listings.`,
       `Acrescentei ${boat.title} no dia ${host.index + 1}. É o passeio de barco que temos na lista.`,
       `J'ai ajouté ${boat.title} au jour ${host.index + 1}. C'est la sortie en bateau de nos listes.`),
@@ -356,10 +359,11 @@ export function swapDayBeach(plan: TripPlan, dayNumber: number, locale: TaskLoca
   const oldName = localizedPlaceName(current.name, locale);
   const newName = localizedPlaceName(next.name, locale);
   const items = day.items.map((item, itemIndex) => itemIndex === target.itemIndex ? { ...item, refId: next.id } : item);
+  const swapped = { ...plan, days: plan.days.map((item, itemIndex) => itemIndex === index ? { ...day, items } : item) };
   return {
     changed: true,
-    plan: { ...plan, days: plan.days.map((item, itemIndex) => itemIndex === index ? { ...day, items } : item) },
-    reply: say(locale,
+    plan: swapped,
+    reply: editDiffReply(plan, swapped, locale) ?? say(locale,
       `Day ${dayNumber}: ${oldName} is now ${newName}.`,
       `Dia ${dayNumber}: ${oldName} passa a ${newName}.`,
       `Jour ${dayNumber} : ${oldName} devient ${newName}.`),
@@ -406,13 +410,287 @@ export function addListedStop(plan: TripPlan, dayNumber: number, spot: LastPlace
       reply: say(locale, `Day ${dayNumber} already includes ${spot.name}.`, `O dia ${dayNumber} já inclui ${spot.name}.`, `Le jour ${dayNumber} comprend déjà ${spot.name}.`),
     };
   }
+  const next = { ...plan, days: plan.days.map((item, i) => i === index ? { ...day, items } : item) };
   return {
     changed: true,
-    plan: { ...plan, days: plan.days.map((item, i) => i === index ? { ...day, items } : item) },
-    reply: say(locale,
+    plan: next,
+    reply: editDiffReply(plan, next, locale) ?? say(locale,
       `Day ${dayNumber} now includes ${spot.name}.`,
       `O dia ${dayNumber} passa a incluir ${spot.name}.`,
       `Le jour ${dayNumber} comprend maintenant ${spot.name}.`),
+  };
+}
+
+const TOWN_ID = "cidade-porto-ingles";
+const WALK_KM = 3;
+
+function activityExperiences(activity: string): Experience[] {
+  const n = activity.toLowerCase();
+  if (/surf/.test(n)) return EXPERIENCES.filter((item) => /surf|ondaazul/i.test(`${item.id} ${item.title}`));
+  if (/jet/.test(n)) return EXPERIENCES.filter((item) => /jetski|jet-ski/i.test(item.id));
+  if (/quad/.test(n)) return EXPERIENCES.filter((item) => item.id.includes("quad") && !isExcludedExperience(item.id));
+  const named = experience(activity);
+  if (named && !isExcludedExperience(named.id)) return [named];
+  return [];
+}
+
+function activityLabel(activity: string, locale: TaskLocale): string {
+  if (/surf/.test(activity)) return "surf";
+  if (/dolphin|golfinho|dauphin/.test(activity)) return say(locale, "A dolphin cruise", "Um cruzeiro com golfinhos", "Une sortie dauphins");
+  if (/div/.test(activity) || /mergulho|plongee/.test(activity)) return say(locale, "Diving", "O mergulho", "La plongée");
+  if (/nightlife|noturna|boite/.test(activity)) return say(locale, "Nightlife", "A vida noturna", "La vie nocturne");
+  if (/jet/.test(activity)) return say(locale, "A jet ski", "O jet ski", "Le jet ski");
+  if (/quad/.test(activity)) return say(locale, "A quad", "O quad", "Le quad");
+  return say(locale, "That", "Isso", "Ça");
+}
+
+function reachableExperience(exp: Experience, hasCar: boolean): boolean {
+  if (hasCar || exp.example.pickup) return true;
+  const spot = place(exp.placeId);
+  const town = place(TOWN_ID);
+  if (!spot || !town) return false;
+  return distanceKm(spot, town) <= WALK_KM;
+}
+
+function beachName(plan: TripPlan, locale: TaskLocale): string {
+  const town = place(TOWN_ID);
+  const beaches = PLACES.filter((item) => item.category === "beach" && (plan.hasCar || !town || distanceKm(item, town) <= WALK_KM));
+  const used = new Set(plan.days.flatMap((day) => day.items.map((item) => item.refId)));
+  const pick = beaches.find((item) => !used.has(item.id)) ?? beaches[0];
+  return pick ? localizedPlaceName(pick.name, locale) : say(locale, "the beach in town", "a praia na vila", "la plage en ville");
+}
+
+function experiencePlaceName(exp: Experience, locale: TaskLocale): string {
+  const spot = place(exp.placeId);
+  return spot ? localizedPlaceName(spot.name, locale) : exp.location;
+}
+
+type Located = { day: number; item: PlanItem; exp: Experience };
+
+function locateExperiences(plan: TripPlan, list: Experience[]): Located | null {
+  const ids = new Set(list.map((item) => item.id));
+  for (let index = 0; index < plan.days.length; index += 1) {
+    const item = plan.days[index].items.find((stop) => stop.kind === "experience" && ids.has(stop.refId));
+    const exp = item ? experience(item.refId) : undefined;
+    if (item && exp) return { day: index + 1, item, exp };
+  }
+  return null;
+}
+
+function alreadySentence(located: Located, locale: TaskLocale, another: boolean): string {
+  const placeName = experiencePlaceName(located.exp, locale);
+  const time = located.item.start ?? say(locale, "the listed time", "a hora da lista", "l'heure de la liste");
+  const surf = /surf|ondaazul/i.test(`${located.exp.id} ${located.exp.title}`);
+  if (surf && another) {
+    return say(locale,
+      `A second surf session doesn't fit a slow day. Surf is already on day ${located.day} at ${placeName}, ${time}.`,
+      `Uma segunda sessão de surf não cabe num dia calmo. O surf já está no dia ${located.day} na ${placeName}, ${time}.`,
+      `Une deuxième session de surf ne tient pas dans une journée calme. Le surf est déjà au jour ${located.day} à ${placeName}, ${time}.`);
+  }
+  if (surf) {
+    return say(locale,
+      `Surf is already on day ${located.day} at ${placeName}, ${time}. Want another session?`,
+      `O surf já está no dia ${located.day} na ${placeName}, ${time}. Quer outra sessão?`,
+      `Le surf est déjà au jour ${located.day} à ${placeName}, ${time}. Vous voulez une autre session ?`);
+  }
+  return say(locale,
+    `${located.exp.title} is already on day ${located.day} at ${time}.`,
+    `${located.exp.title} já está no dia ${located.day}, às ${time}.`,
+    `${located.exp.title} est déjà au jour ${located.day}, à ${time}.`);
+}
+
+function blockedSentence(plan: TripPlan, activity: string, locale: TaskLocale, why: "missing" | "age" | "rough" | "car" | "pace" | "day", exp?: Experience): string {
+  const label = activityLabel(activity, locale);
+  const beach = beachName(plan, locale);
+  if (why === "missing") {
+    return say(locale,
+      `${label} isn't in the listings. The closest is a morning at ${beach}.`,
+      `${label} não está nas listas. O mais próximo é uma manhã na ${beach}.`,
+      `${label} n'est pas dans les listes. Le plus proche est une matinée à ${beach}.`);
+  }
+  if (why === "age" && exp) {
+    return say(locale,
+      `${label === "surf" ? "Surf" : exp.title} is listed from age ${exp.example.minAge}, so it stays off this trip. The closest is a morning at ${beach}.`,
+      `${label === "surf" ? "O surf" : exp.title} é a partir dos ${exp.example.minAge} anos, por isso fica de fora. O mais próximo é uma manhã na ${beach}.`,
+      `${label === "surf" ? "Le surf" : exp.title} est indiqué à partir de ${exp.example.minAge} ans, donc il reste en dehors. Le plus proche est une matinée à ${beach}.`);
+  }
+  if (why === "rough") {
+    return say(locale,
+      `The sea is rough on the open days, so ${label === "surf" ? "surf" : label.toLowerCase()} stays off this plan. The closest is an afternoon at ${beach}.`,
+      `O mar está agitado nos dias livres, por isso ${label === "surf" ? "o surf" : label.toLowerCase()} fica de fora. O mais próximo é uma tarde na ${beach}.`,
+      `La mer est agitée les jours libres, donc ${label === "surf" ? "le surf" : label.toLowerCase()} reste en dehors. Le plus proche est une après-midi à ${beach}.`);
+  }
+  if (why === "car" && exp) {
+    const where = experiencePlaceName(exp, locale);
+    return say(locale,
+      `${where} isn't reachable without a car. The closest is a morning at ${beach}.`,
+      `${where} não fica ao alcance sem carro. O mais próximo é uma manhã na ${beach}.`,
+      `${where} n'est pas accessible sans voiture. Le plus proche est une matinée à ${beach}.`);
+  }
+  if (why === "day") {
+    return say(locale, "That day isn't on the plan.", "Esse dia não está no plano.", "Ce jour n'est pas dans le plan.");
+  }
+  return say(locale,
+    `${label === "surf" ? "Surf" : label} doesn't fit this slow day. The closest is keeping the morning at ${beach}.`,
+    `${label === "surf" ? "O surf" : label} não cabe neste dia calmo. O mais próximo é manter a manhã na ${beach}.`,
+    `${label === "surf" ? "Le surf" : label} ne tient pas dans cette journée calme. Le plus proche est de garder le matin à ${beach}.`);
+}
+
+function seaAllows(day: TripPlan["days"][number], exp: Experience): boolean {
+  if (!exp.seaDependent) return true;
+  return day.sea?.status !== "rough";
+}
+
+function pickActivityDay(plan: TripPlan, exp: Experience, dayNumber?: number): number | "rough" | "missing" {
+  if (dayNumber) {
+    const day = plan.days[dayNumber - 1];
+    if (!day) return "missing";
+    if (seaAllows(day, exp)) return dayNumber - 1;
+  }
+  const open = plan.days.map((day, index) => ({ day, index })).filter(({ day }) => seaAllows(day, exp));
+  const middle = open.find((item) => item.index > 0 && item.index < plan.days.length - 1);
+  if (middle) return middle.index;
+  if (open[0]) return open[0].index;
+  return exp.seaDependent ? "rough" : "missing";
+}
+
+function placeActivity(plan: TripPlan, index: number, exp: Experience): TripPlan | null {
+  const afternoon = exp.example.slots.find((slot) => toMin(slot) >= 12 * 60);
+  const start = afternoon ?? exp.example.slots[0] ?? "15:00";
+  const added: PlanItem = {
+    id: `d${index}-added-exp`,
+    kind: "experience",
+    refId: exp.id,
+    slot: toMin(start) < 12 * 60 ? "morning" : "activity",
+    start,
+    durationMin: Math.min(exp.example.durationMin || 90, 150),
+  };
+  const days = plan.days.map((day, dayIndex) => {
+    let items = day.items.filter((item) => item.kind !== "experience" || item.refId === exp.id);
+    if (dayIndex !== index) return items.length === day.items.length ? day : { ...day, items };
+    let dropped = false;
+    items = items.filter((item) => {
+      if (!dropped && item.kind === "free" && (item.refId === "free-time" || item.slot === "rest") && item.durationMin >= 60) {
+        dropped = true;
+        return false;
+      }
+      return true;
+    });
+    items = [...items, added];
+    if ((plan.pace ?? "slow") !== "normal") {
+      while (anchoredCount(items) > 4) {
+        const dropAt = items.findIndex((item) => item.kind === "place" && item.slot !== "sunset");
+        if (dropAt < 0) break;
+        items = items.filter((_, itemIndex) => itemIndex !== dropAt);
+      }
+    }
+    return { ...day, items: resolveOverlaps(items).slice(0, 9) };
+  });
+  const next = { ...plan, days };
+  return next.days[index]?.items.some((item) => item.refId === exp.id) ? next : null;
+}
+
+/** Put a listed activity on the open plan, or say why it cannot go on. The same plan object comes back when nothing changes. */
+export function addListedActivity(plan: TripPlan, activity: string, locale: TaskLocale = plan.locale, dayNumber?: number, fixture?: Experience): { plan: TripPlan; reply: string; changed: boolean } {
+  const another = /another|outra|autre/.test(activity.toLowerCase());
+  const list = fixture ? [fixture] : activityExperiences(activity);
+  if (!list.length) {
+    return { plan, changed: false, reply: blockedSentence(plan, activity, locale, "missing") };
+  }
+  const exp = list[0];
+  const found = locateExperiences(plan, list);
+  if (found) return { plan, changed: false, reply: alreadySentence(found, locale, another) };
+  if (plan.party.kids > 0 && exp.example.minAge > (plan.party.youngestAge ?? 3)) {
+    return { plan, changed: false, reply: blockedSentence(plan, activity, locale, "age", exp) };
+  }
+  if (!reachableExperience(exp, plan.hasCar)) {
+    return { plan, changed: false, reply: blockedSentence(plan, activity, locale, "car", exp) };
+  }
+  const host = pickActivityDay(plan, exp, dayNumber);
+  if (host === "missing") return { plan, changed: false, reply: blockedSentence(plan, activity, locale, "day", exp) };
+  if (host === "rough") return { plan, changed: false, reply: blockedSentence(plan, activity, locale, "rough", exp) };
+  const next = placeActivity(plan, host, exp);
+  if (!next) return { plan, changed: false, reply: blockedSentence(plan, activity, locale, "pace", exp) };
+  return {
+    plan: next,
+    changed: true,
+    reply: editDiffReply(plan, next, locale, activity) ?? blockedSentence(plan, activity, locale, "pace", exp),
+  };
+}
+
+/** Move a listed activity that is already on the plan to the morning or the afternoon. */
+export function moveListedActivity(plan: TripPlan, activity: string, when: "morning" | "afternoon", locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; changed: boolean } {
+  const list = activityExperiences(activity);
+  const found = list.length ? locateExperiences(plan, list) : null;
+  if (!found) {
+    return {
+      plan,
+      changed: false,
+      reply: say(locale, "Surf isn't on the plan.", "Não há surf no plano.", "Il n'y a pas de surf dans le plan."),
+    };
+  }
+  const start = found.item.start ?? "15:00";
+  const morningNow = toMin(start) < 12 * 60;
+  if ((when === "morning" && morningNow) || (when === "afternoon" && !morningNow)) {
+    const placeName = experiencePlaceName(found.exp, locale);
+    return {
+      plan,
+      changed: false,
+      reply: say(locale,
+        `Surf is already ${when === "morning" ? "in the morning" : "in the afternoon"} on day ${found.day} at ${placeName}, ${start}.`,
+        `O surf já está no dia ${found.day} ${when === "morning" ? "de manhã" : "à tarde"}, na ${placeName}, ${start}.`,
+        `Le surf est déjà au jour ${found.day} ${when === "morning" ? "le matin" : "l'après-midi"}, à ${placeName}, ${start}.`),
+    };
+  }
+  const slot = found.exp.example.slots.find((item) => (when === "morning" ? toMin(item) < 12 * 60 : toMin(item) >= 12 * 60))
+    ?? (when === "morning" ? "09:00" : "15:00");
+  const days = plan.days.map((day, index) => {
+    if (index !== found.day - 1) return day;
+    const items = resolveOverlaps(day.items.map((item) => item.refId === found.item.refId ? { ...item, start: slot, slot: when === "morning" ? "morning" as const : "activity" as const } : item));
+    return { ...day, items };
+  });
+  const next = { ...plan, days };
+  return {
+    plan: next,
+    changed: true,
+    reply: editDiffReply(plan, next, locale, activity) ?? say(locale,
+      `Moved surf on day ${found.day} to the ${when}, ${slot}.`,
+      `Passei o surf do dia ${found.day} para ${when === "morning" ? "a manhã" : "a tarde"}, ${slot}.`,
+      `J'ai déplacé le surf du jour ${found.day} ${when === "morning" ? "au matin" : "à l'après-midi"}, ${slot}.`),
+  };
+}
+
+/** Take a listed activity off every day. */
+export function removeListedActivity(plan: TripPlan, activity: string, locale: TaskLocale = plan.locale): { plan: TripPlan; reply: string; changed: boolean } {
+  const list = activityExperiences(activity);
+  const ids = new Set(list.map((item) => item.id));
+  let removed = false;
+  const days = plan.days.map((day) => {
+    const items = day.items.filter((item) => {
+      if (item.kind === "experience" && ids.has(item.refId)) {
+        removed = true;
+        return false;
+      }
+      return true;
+    });
+    return items.length === day.items.length ? day : { ...day, items };
+  });
+  if (!removed) {
+    const label = activityLabel(activity, locale);
+    return {
+      plan,
+      changed: false,
+      reply: say(locale,
+        `${label === "surf" ? "Surf" : label} isn't on the plan.`,
+        `${label === "surf" ? "Não há surf" : `${label} não está`} no plano.`,
+        `${label === "surf" ? "Il n'y a pas de surf" : `${label} n'est pas`} dans le plan.`),
+    };
+  }
+  const next = { ...plan, days };
+  return {
+    plan: next,
+    changed: true,
+    reply: editDiffReply(plan, next, locale, activity) ?? say(locale, "I took that off the plan.", "Tirei isso do plano.", "Je l'ai retiré du plan."),
   };
 }
 
