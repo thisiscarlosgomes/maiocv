@@ -385,6 +385,8 @@ function factsForReview(facts: string[]): string {
   return [...contacts, ...rest].join("\n").slice(0, 8000);
 }
 
+const LANDING_MID_AFTERNOON = /\b(?:mid-afternoon|mid afternoon|meio da tarde|milieu de l'apres-midi|milieu d'apres-midi)\b/;
+
 export async function runPlanAgent(messages: ModelMessage[], current: TripPlan | null, deps: PlanDeps, taskInput?: Task | null): Promise<PlanAgentResult> {
   const toolFacts: string[] = [];
   const rootFetch = deps.fetchImpl;
@@ -1116,7 +1118,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   if (current && typeof task.constraints.car === "boolean" && !dateShift && !lengthEdit) {
     let intent: EditIntent | null = dayEdit;
-    if (!intent && gatewayReady() && /\b(?:day|dia|jour|pack|relax|easier|quiet|slow|calm|cheio|calmo|calme)\b/i.test(lastUser)) {
+    // Landing and ferry-time edits have their own deterministic handlers below. With a live model the
+    // classifier read "I land mid-afternoon on the first day" as a one-day trip or a lighter day 1.
+    const timedTravel = isTravelChoice(lastUser) || LANDING_MID_AFTERNOON.test(spoken);
+    if (!intent && !timedTravel && gatewayReady() && /\b(?:day|dia|jour|pack|relax|easier|quiet|slow|calm|cheio|calmo|calme)\b/i.test(lastUser)) {
       try {
         const fromModel = await intentFromModel(lastUser, current, today);
         if (fromModel && fromModel.kind !== "other" && fromModel.kind !== "greeting" && fromModel.kind !== "question") intent = fromModel;
@@ -1176,7 +1181,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     }
   }
 
-  if (current && typeof task.constraints.car === "boolean" && task.constraints.arrival?.time === "15:00" && /\b(?:mid-afternoon|mid afternoon|meio da tarde|milieu de l'apres-midi|milieu d'apres-midi)\b/.test(spoken)) {
+  if (current && typeof task.constraints.car === "boolean" && task.constraints.arrival?.time === "15:00" && LANDING_MID_AFTERNOON.test(spoken)) {
     appliedEdit = "set_arrival";
     const rebuilt = await rebuildPlan(task);
     if (rebuilt) {
