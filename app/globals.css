@@ -1699,8 +1699,9 @@ body:has(.chat-screen) { overflow: hidden; }
 .plan-back { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
 .plan-trip { display: flex; flex-direction: column; min-width: 0; }
 .plan-cover { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-card); margin-top: 8px; }
-/* Title and Share / Export PDF stay at the top of the scrolling plan. */
-.plan-trip-head { position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 12px 0; background: var(--background); border-bottom: 1px solid var(--line); }
+/* Title and Share / Export PDF stay at the top of the scrolling plan. The shadow paints over the
+   scroller's top padding (10-24px) so stops never show through above the stuck header. */
+.plan-trip-head { position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 12px 0; background: var(--background); border-bottom: 1px solid var(--line); box-shadow: 0 -24px 0 var(--background); }
 .plan-trip-head .plan-sub { margin-top: 6px; }
 /* Back to chat (primary) and Start over (secondary), centred just above the input on every screen. */
 .plan-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; padding-bottom: 10px; }
