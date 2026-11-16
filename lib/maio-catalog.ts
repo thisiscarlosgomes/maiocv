@@ -65,7 +65,15 @@ async function fetchPage(fetchImpl: typeof fetch, offset: number): Promise<unkno
   return features;
 }
 
-/** Businesses from api.maio.cv, cached for 10 minutes per fetch. A failed read lists nothing, never bundled rows. */
+/** The last complete business read. Kept across fetches, so a per-request wrapper still finds it. */
+let lastBusinesses: { epoch: number; at: number; value: BusinessCatalog } | null = null;
+/** A failed read reuses the last complete one this long, then lists nothing. */
+export const BUSINESS_STALE_MS = 15 * 60 * 1000;
+
+/**
+ * Businesses from api.maio.cv, cached for 10 minutes per fetch. Only a read of every page is cached.
+ * A failed or slow read reuses the last complete read for up to 15 minutes, never bundled rows.
+ */
 export async function loadBusinesses(fetchImpl: typeof fetch = fetch): Promise<BusinessCatalog> {
   const hit = businessCaches.get(fetchImpl);
   if (hit && hit.epoch === businessEpoch && Date.now() - hit.at < TTL_MS) return hit.value;
@@ -83,8 +91,11 @@ export async function loadBusinesses(fetchImpl: typeof fetch = fetch): Promise<B
     if (!records.length) throw new Error("Maio API returned no businesses");
     const value: BusinessCatalog = { records, source: "api" };
     businessCaches.set(fetchImpl, { epoch: businessEpoch, at: Date.now(), value });
+    lastBusinesses = { epoch: businessEpoch, at: Date.now(), value };
     return value;
   } catch {
+    const copy = lastBusinesses;
+    if (copy && copy.epoch === businessEpoch && Date.now() - copy.at < BUSINESS_STALE_MS) return copy.value;
     return { records: [], source: "fallback" };
   }
 }

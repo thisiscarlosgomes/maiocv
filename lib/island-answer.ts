@@ -193,7 +193,7 @@ export function answerIslandQuestion(text: string, locale: TaskLocale): string |
   const safe = (/\b(?:safe|safety|seguro|segura|seguranca|surete|securite)\b/.test(n) || /\b(?:c'est|est-ce|est ce)\s+sur\b/.test(n)) && !/\b(?:beach|praia|plage)\b/.test(n);
   const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(n);
   const atm = /\b(?:atm|atms|multibanco|caixas? automatic[oa]s?|distributeurs?)\b/.test(n);
-  const eat = /\b(?:eat|food|lunch|dinner|restaurant|comer|almoco|jantar|manger|dejeuner|diner)\b/.test(n)
+  const eat = /\b(?:eat|food|breakfast|brunch|lunch|dinner|restaurant|comer|almoco|jantar|manger|dejeuner|diner)\b/.test(n)
     && !/\b(?:around there|por ali|la-bas|la bas|pres de la)\b/.test(n);
   const around = /\b(?:get around|getting around|desloc\w*|deplac\w*|aluguer|without a car|sem carro|sans voiture|bus|autocarro)\b/.test(n);
 

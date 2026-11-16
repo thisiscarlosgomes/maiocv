@@ -58,6 +58,7 @@ test("a place missing from the API is never suggested, in EN, PT and FR", async 
     ["en", "where to eat?"],
     ["en", "list three restaurants in Vila do Maio"],
     ["en", "list three restaurants"],
+    ["en", "where can we have breakfast?"],
     ["pt", "onde tomar um café?"],
     ["pt", "onde comer?"],
     ["pt", "lista três restaurantes na Vila do Maio"],
@@ -124,4 +125,14 @@ test("a failed read keeps the last listing for 15 minutes, then empties it", asy
   assert.equal(FOOD.length, 0);
   assert.equal(PLACES.length, 0);
   assert.ok(BUNDLED_PLACES.length > 0);
+});
+
+test("breakfast is answered from the listings, not the model", async () => {
+  primeLiveCatalog(null);
+  const fetchImpl = apiFetch();
+  for (const [locale, content, lead] of [["en", "where can we have breakfast?", /^Places to eat/], ["pt", "onde tomar o pequeno-almoço?", /^Sítios para comer/], ["fr", "où prendre le petit-déjeuner ?", /^Les adresses pour manger/]] as const) {
+    const result = await ask(content, locale, fetchImpl);
+    assert.match(result.reply, lead, result.reply);
+    assert.ok([...listedFoodNames()].some((name) => result.reply.includes(name)), result.reply);
+  }
 });

@@ -44,6 +44,10 @@ const parents = new WeakMap<object, object>();
 const fetchIds = new WeakMap<object, number>();
 let nextFetchId = 1;
 const responseCache = new Map<string, { at: number; value: unknown }>();
+/** The last complete read of each URL. A failed or slow read reuses it for up to STALE_MS. */
+const lastGood = new Map<string, { at: number; value: unknown }>();
+/** After this with no good read, a list is not reused, so a dropped listing cannot come back. */
+export const STALE_MS = 15 * 60 * 1000;
 
 /** Point a budget-wrapped fetch at the fetch whose successes are already cached. */
 export function shareChatCache(child: object, parent: object): void {
@@ -52,6 +56,7 @@ export function shareChatCache(child: object, parent: object): void {
 
 export function clearMaioChatCache(): void {
   responseCache.clear();
+  lastGood.clear();
 }
 
 function say(locale: AskLocale, en: string, pt: string, fr: string): string {
@@ -90,18 +95,37 @@ function fetchKey(fetchImpl: object): number {
   return id;
 }
 
-async function cachedJson(fetchImpl: typeof fetch, url: string): Promise<unknown> {
+/** A feature collection is complete only when it carries a features array. */
+function completeCollection(value: unknown): boolean {
+  return Array.isArray(asRecord(value).features);
+}
+
+/**
+ * One Maio API read. Only a complete read is cached. A failed, slow or incomplete read reuses the
+ * last complete copy for up to 15 minutes, and throws only when there is no copy to reuse.
+ */
+async function cachedJson(fetchImpl: typeof fetch, url: string, complete: (value: unknown) => boolean = () => true): Promise<unknown> {
   const key = `${fetchKey(fetchImpl)} ${url}`;
   const hit = responseCache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
-  const response = await fetchImpl(url, {
-    headers: { accept: "application/geo+json, application/json" },
-    signal: AbortSignal.timeout(3_000),
-  });
-  if (!response.ok) throw new Error(`Maio API HTTP ${response.status}`);
-  const value = await response.json();
-  responseCache.set(key, { at: Date.now(), value });
-  return value;
+  try {
+    const response = await fetchImpl(url, {
+      headers: { accept: "application/geo+json, application/json" },
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) throw new Error(`Maio API HTTP ${response.status}`);
+    const value = await response.json();
+    if (!complete(value)) throw new Error("Maio API returned an incomplete list");
+    const entry = { at: Date.now(), value };
+    responseCache.set(key, entry);
+    lastGood.set(key, entry);
+    return value;
+  } catch (error) {
+    const copy = lastGood.get(key);
+    if (copy && Date.now() - copy.at < STALE_MS) return copy.value;
+    if (copy) lastGood.delete(key);
+    throw error;
+  }
 }
 
 function published(feature: unknown): boolean {
@@ -359,7 +383,7 @@ function stayFrom(feature: unknown): StayListing | null {
 
 export async function readStays(fetchImpl: typeof fetch): Promise<StayResult> {
   try {
-    const payload = await cachedJson(fetchImpl, STAYS_URL);
+    const payload = await cachedJson(fetchImpl, STAYS_URL, completeCollection);
     const stays = featuresOf(payload).flatMap((feature) => {
       const stay = stayFrom(feature);
       return stay ? [stay] : [];
@@ -438,7 +462,7 @@ function experienceFrom(feature: unknown): ExperienceListing | null {
 
 export async function readExperiences(fetchImpl: typeof fetch): Promise<ExperienceResult> {
   try {
-    const payload = await cachedJson(fetchImpl, EXPERIENCES_URL);
+    const payload = await cachedJson(fetchImpl, EXPERIENCES_URL, completeCollection);
     const experiences = featuresOf(payload).flatMap((feature) => {
       const item = experienceFrom(feature);
       return item ? [item] : [];
@@ -681,11 +705,12 @@ function event(name: string, args: Record<string, unknown>, ok: boolean): ToolEv
   return { name, arguments: args, ok };
 }
 
-function unavailable(locale: AskLocale, subject: string): string {
+/** No copy of the list at all. Say we could not open it, never that it does not exist. */
+function unavailable(locale: AskLocale, en: string, pt: string, fr: string): string {
   return say(locale,
-    `${subject} is not available right now, so I won't guess a listing, a contact, or a price.`,
-    `${subject} não está disponível agora, por isso não vou inventar uma entrada, um contacto ou um preço.`,
-    `${subject} n'est pas disponible, donc je n'invente ni fiche, ni contact, ni prix.`);
+    `I couldn't open ${en} just now, so I won't guess a listing, a contact, or a price. Try again in a moment.`,
+    `Não consegui abrir ${pt} agora, por isso não vou inventar uma entrada, um contacto ou um preço. Tenta outra vez daqui a pouco.`,
+    `Je n'arrive pas à ouvrir ${fr} pour l'instant, donc je n'invente ni fiche, ni contact, ni prix. Réessaie dans un moment.`);
 }
 
 export function askInstructions(locale: AskLocale): string {
@@ -722,7 +747,7 @@ async function answerFerry(locale: AskLocale, fetchImpl: typeof fetch, now: Date
   const facts = JSON.stringify(result);
   const citations = result.available ? [cite(result.sourceName, result.source, "timetable")] : [];
   const toolEvents = [event("get_boat_schedules", {}, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The ferry timetable", "O horário do ferry", "L'horaire du ferry")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the ferry timetable", "o horário do ferry", "l'horaire du ferry"), toolEvents, citations, facts };
   const next = result.nextSantiagoToMaio;
   const stale = result.stale
     ? say(locale, " The snapshot is stale.", " A fotografia está desatualizada.", " L'instantané est périmé.")
@@ -744,7 +769,7 @@ async function answerFlight(locale: AskLocale, fetchImpl: typeof fetch, now: Dat
   const facts = JSON.stringify(result);
   const citations = result.available ? [cite(result.sourceName, "https://booking.cvsky.cv/", "timetable")] : [];
   const toolEvents = [event("get_flight_schedules", {}, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The flight timetable", "O horário de voos", "L'horaire des vols")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the flight timetable", "o horário de voos", "l'horaire des vols"), toolEvents, citations, facts };
   const next = result.nextPraiaToMaio;
   const stale = result.stale
     ? say(locale, " The snapshot is stale.", " A fotografia está desatualizada.", " L'instantané est périmé.")
@@ -773,7 +798,7 @@ async function answerStays(kind: "stays" | "stay_contact", question: string, loc
   const facts = JSON.stringify({ ...result, shown: picked });
   const citations = result.available ? [cite("Maio accommodation directory", STAYS_URL, "directory")] : [];
   const toolEvents = [event("get_maio_accommodation", {}, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The accommodation directory", "O diretório de alojamento", "L'annuaire d'hébergement")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the accommodation list", "a lista de alojamento", "la liste d'hébergement"), toolEvents, citations, facts };
   if (kind === "stay_contact") {
     const stay = bestStay(result.stays, question);
     if (!stay) {
@@ -825,7 +850,7 @@ async function answerActivities(question: string, locale: AskLocale, fetchImpl: 
   const facts = JSON.stringify({ ...result, shown: picked.map(({ text, ...item }) => item) });
   const citations = result.available ? [cite("Maio experience directory", EXPERIENCES_URL, "directory")] : [];
   const toolEvents = [event("get_maio_experiences", {}, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The experience directory", "O diretório de experiências", "L'annuaire des expériences")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the experience list", "a lista de experiências", "la liste des expériences"), toolEvents, citations, facts };
   const lines = picked.slice(0, 8).map((item) => experienceLine(item));
   const message = lines.length
     ? say(locale,
@@ -855,7 +880,7 @@ async function answerBoatTrip(locale: AskLocale, fetchImpl: typeof fetch): Promi
   });
   const citations = result.available ? [cite("Maio experience directory", EXPERIENCES_URL, "directory")] : [];
   const toolEvents = [event("get_maio_experiences", { kind: "boat trip" }, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The experience directory", "O diretório de experiências", "L'annuaire des expériences")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the experience list", "a lista de experiências", "la liste des expériences"), toolEvents, citations, facts };
   if (!picked.length) {
     return {
       message: say(locale,
@@ -889,7 +914,7 @@ async function answerBusiness(question: string, locale: AskLocale, fetchImpl: ty
   const facts = JSON.stringify(result);
   const citations = result.available ? [cite("Maio business directory", result.source, "directory")] : [];
   const toolEvents = [event("get_business", { query }, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The business directory", "O diretório de negócios", "L'annuaire des commerces")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the business list", "a lista de negócios", "la liste des commerces"), toolEvents, citations, facts };
   if (!result.matches.length) {
     return {
       message: say(locale,
@@ -920,7 +945,7 @@ async function answerWeather(locale: AskLocale, fetchImpl: typeof fetch, now: Da
   const facts = JSON.stringify(result);
   const citations = result.available ? [cite("Open-Meteo", result.source, "observation")] : [];
   const toolEvents = [event("get_maio_weather", {}, result.available)];
-  if (!result.available) return { message: unavailable(locale, say(locale, "The weather reading", "A leitura do tempo", "Le relevé météo")), toolEvents, citations, facts };
+  if (!result.available) return { message: unavailable(locale, "the weather reading", "a leitura do tempo", "le relevé météo"), toolEvents, citations, facts };
   const bits: string[] = [];
   if (result.temperatureC != null) bits.push(`${Math.round(result.temperatureC)}°C`);
   if (result.waveHeightM != null) bits.push(say(locale, `waves ${result.waveHeightM} m`, `ondas ${result.waveHeightM} m`, `vagues ${result.waveHeightM} m`));

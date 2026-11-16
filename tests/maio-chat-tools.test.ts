@@ -189,11 +189,11 @@ test("an unavailable directory does not fall back to invented listings", async (
   clearBusinessCache();
   const down = (async () => { throw new Error("offline"); }) as typeof fetch;
   const stays = await answerGrounded("stays", "where can I stay", "pt", down, NOW);
-  assert.match(stays.message, /não está disponível/);
+  assert.match(stays.message, /Não consegui abrir a lista de alojamento/);
   assert.equal(stays.message.includes("Villa"), false);
-  const business = await answerGrounded("business", "phone for Enzo Caffe Pizza", "en", down, NOW);
-  assert.match(business.message, /not available/);
-  assert.equal(business.message.includes("Enzo"), false);
+  const business = await answerGrounded("business", "phone for Praça Restaurante", "en", down, NOW);
+  assert.match(business.message, /couldn't open the business list/);
+  assert.equal(business.message.includes("Praça"), false);
 });
 
 test("directory phones in the tool facts are not invented contacts", async () => {
@@ -271,4 +271,62 @@ test("the route no longer proxies to the portal", async () => {
   assert.match(route, /maio-chat"/);
   assert.equal(route.includes("maio-chat-proxy"), false);
   assert.equal(route.includes("portal.maio.cv"), false);
+});
+
+type Mode = "ok" | "down" | "timeout" | "incomplete";
+
+/** One fetch identity whose answers change, like the shared fetch behind every Ask Maio request. */
+function flakyWorld(state: { mode: Mode }): typeof fetch {
+  const ok = world([]);
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (state.mode === "down") throw new Error("offline");
+    if (state.mode === "timeout") throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    if (state.mode === "incomplete") return Response.json({ type: "FeatureCollection" });
+    return ok(input, init);
+  }) as typeof fetch;
+}
+
+test("a failed, slow or incomplete read reuses the last complete list", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: NOW.getTime() });
+  clearMaioChatCache();
+  clearBusinessCache();
+  const state: { mode: Mode } = { mode: "ok" };
+  const fetchImpl = flakyWorld(state);
+  const first = await answerGrounded("stays", "where can I stay", "en", fetchImpl, NOW);
+  assert.match(first.message, /Villa Azul/, first.message);
+  assert.match((await answerGrounded("boat_trip", "excursions en bateau", "fr", fetchImpl, NOW)).message, /Big Game Sport Fishing/);
+  assert.match((await answerGrounded("business", "phone for Praça Restaurante", "en", fetchImpl, NOW)).message, /Praça Restaurante/);
+
+  // Past the 10 minute cache, so every read below goes to the API and fails.
+  t.mock.timers.tick(10 * 60 * 1000 + 1_000);
+  for (const mode of ["down", "timeout", "incomplete"] as const) {
+    state.mode = mode;
+    t.mock.timers.tick(60 * 1000);
+    const stays = await answerGrounded("stays", "where can I stay", "en", fetchImpl, NOW);
+    assert.match(stays.message, /Villa Azul/, `${mode}: ${stays.message}`);
+    const boats = await answerGrounded("boat_trip", "excursions en bateau", "fr", fetchImpl, NOW);
+    assert.match(boats.message, /Big Game Sport Fishing/, `${mode}: ${boats.message}`);
+    const business = await answerGrounded("business", "phone for Praça Restaurante", "en", fetchImpl, NOW);
+    assert.match(business.message, /Praça Restaurante/, `${mode}: ${business.message}`);
+  }
+
+  state.mode = "down";
+  t.mock.timers.tick(15 * 60 * 1000);
+  const gone = await answerGrounded("stays", "where can I stay", "en", fetchImpl, NOW);
+  assert.match(gone.message, /couldn't open the accommodation list/, gone.message);
+  assert.equal(gone.message.includes("Villa"), false);
+  const goneBoats = await answerGrounded("boat_trip", "excursions en bateau", "fr", fetchImpl, NOW);
+  assert.match(goneBoats.message, /Je n'arrive pas à ouvrir la liste des expériences/, goneBoats.message);
+  assert.doesNotMatch(goneBoats.message, /n'est pas disponible/);
+});
+
+test("an incomplete read is not cached", async () => {
+  clearMaioChatCache();
+  const state: { mode: Mode } = { mode: "incomplete" };
+  const fetchImpl = flakyWorld(state);
+  const empty = await answerGrounded("stays", "onde ficar", "pt", fetchImpl, NOW);
+  assert.match(empty.message, /Não consegui abrir a lista de alojamento/, empty.message);
+  state.mode = "ok";
+  const listed = await answerGrounded("stays", "onde ficar", "pt", fetchImpl, NOW);
+  assert.match(listed.message, /Villa Azul/, listed.message);
 });

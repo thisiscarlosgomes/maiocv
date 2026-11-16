@@ -17,7 +17,7 @@ const copy = {
     hi: "hi",
     first: "the first one",
     hospital: "what's the hospital number",
-    phone: "phone number for Enzo Caffe Pizza",
+    phone: "phone number for Sete Sois Sete Luas",
     sea: /sea forecast/i,
     ferry: /ferries and flights|ferry times/i,
     understand: /Understanding your trip/i,
@@ -32,7 +32,7 @@ const copy = {
     hi: "olá",
     first: "o primeiro",
     hospital: "qual é o número do hospital",
-    phone: "número de telefone do Enzo Caffe Pizza",
+    phone: "número de telefone do Sete Sois Sete Luas",
     sea: /previsão do mar/i,
     ferry: /barcos e voos|horários do barco/i,
     understand: /A perceber o pedido/i,
@@ -47,7 +47,7 @@ const copy = {
     hi: "bonjour",
     first: "le premier",
     hospital: "quel est le numéro de l'hôpital",
-    phone: "numéro de téléphone de Enzo Caffe Pizza",
+    phone: "numéro de téléphone de Sete Sois Sete Luas",
     sea: /prévision de la mer/i,
     ferry: /ferries et des vols|horaires du ferry/i,
     understand: /Je lis votre demande/i,
@@ -98,12 +98,8 @@ for (const locale of ["en", "pt", "fr"] as const) {
       await expect(page.getByTestId("assistant-reply").last()).not.toContainText(/Tap the card|Toque no cartão|Touchez la carte/);
 
       const food = before.days.flatMap((day) => day.items.filter((item) => item.kind === "food").map((item) => item.refId));
-      const secondEnzo = food.indexOf("food-006", food.indexOf("food-006") + 1);
-      const bons = food.indexOf("food-004");
-      if (secondEnzo >= 0) {
-        expect(bons).toBeGreaterThanOrEqual(0);
-        expect(bons).toBeLessThan(secondEnzo);
-      }
+      // Enzo Caffe Pizza (food-006) left the Maio API on Nov 16, so a plan never uses it.
+      expect(food).not.toContain("food-006");
 
       const afterRelax = await page.getByTestId("assistant-reply").count();
       await page.getByRole("button", { name: text.boat, exact: true }).click();
