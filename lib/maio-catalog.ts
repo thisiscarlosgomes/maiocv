@@ -1,6 +1,6 @@
 import { EXPERIENCES, FOOD, experience, isExcludedExperience, type Experience } from "./trip.ts";
 
-/** Public Maio Open API. The same host the portal chat tools call. No key. */
+/** Public Maio Open API. No key. */
 export const MAIO_API = "https://api.maio.cv/api/v1";
 const TTL_MS = 10 * 60 * 1000;
 

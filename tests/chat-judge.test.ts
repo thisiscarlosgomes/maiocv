@@ -4,7 +4,8 @@ import { JUDGE_BACKOFF_MS, JUDGE_FREE_TIER_RATE, JUDGE_INTERVAL_MS, attemptJudge
 import { handleFlagHealth } from "../lib/chat-flags-http.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { memoryFlagStore } from "../lib/chat-flags-store.ts";
-import { handleMaioChat } from "../lib/maio-chat-proxy.ts";
+import { handleMaioChat } from "../lib/maio-chat.ts";
+import { scriptedModel } from "./plan/mock-model.ts";
 import type { TurnForFlags } from "../lib/chat-flags.ts";
 
 function clean(): TurnForFlags {
@@ -143,10 +144,7 @@ test("Ask Maio returns the reply before a slow judge finishes", async () => {
       await gate;
       return { ok: false, confidence: "high", reasons: ["the reply did not answer the hospital question"], severity: "med" };
     },
-    fetchImpl: async () => new Response(JSON.stringify({ message: "The hospital is on the main street." }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
+    model: scriptedModel([], "The hospital is on the main street."),
   });
   assert.equal(response.status, 200);
   assert.equal(store.rows.length, 0);
@@ -170,7 +168,7 @@ test("Ask Maio returns the reply before a slow judge finishes", async () => {
     gate: createJudgeGate(),
     after: (task) => { void task(); },
     judge: async () => { ran = true; return { ok: true, confidence: "low" as const, reasons: [], severity: "low" as const }; },
-    fetchImpl: async () => new Response(JSON.stringify({ message: "L'hôpital est dans la rue principale." }), { status: 200 }),
+    model: scriptedModel([], "L'hôpital est dans la rue principale."),
   });
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(ran, true);

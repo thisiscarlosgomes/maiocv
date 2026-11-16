@@ -11,11 +11,11 @@ export const legalContent: Record<Locale, LegalCopy> = {
     privacy: {
       title: "Política de privacidade",
       description: "Como o MaioCV trata perguntas, voz, preferências de idioma e dados técnicos.",
-      updated: "Atualizada em 27 de outubro de 2026",
+      updated: "Atualizada em 16 de novembro de 2026",
       intro: "O MaioCV é mantido pela MaioAzul. Esta página explica, em linguagem simples, que informação é usada quando visita o site ou utiliza o chat.",
       sections: [
         { title: "Perguntas e respostas", paragraphs: [
-          "Quando envia uma pergunta no chat por texto, o texto e até 12 mensagens recentes da conversa são enviados para o serviço de chat em portal.maio.cv. Esse serviço pode consultar fontes de dados do Maio e enviar o conteúdo necessário à OpenAI para gerar a resposta.",
+          "Quando envia uma pergunta no chat por texto, o texto e até 12 mensagens recentes da conversa são processados nesta aplicação. Ela consulta dados públicos em api.maio.cv e pode enviar o conteúdo necessário ao Vercel AI Gateway e à OpenAI para redigir a resposta.",
           "Não precisa de criar uma conta. Nesta aplicação, a conversa fica na memória da página aberta: limpar o chat, recarregar ou fechar a página remove a cópia local. Evite incluir dados pessoais sensíveis nas perguntas.",
         ] },
         { title: "Perguntas por voz", paragraphs: [
@@ -29,11 +29,10 @@ export const legalContent: Record<Locale, LegalCopy> = {
         { title: "Preferências e utilização", paragraphs: [
           "Recolhemos contagens agregadas de páginas visitadas, idioma e utilização do chat, voz e planeador, conservadas por 90 dias, sem identificar visitantes ou guardar o conteúdo das conversas. Usamos também Vercel Web Analytics para estatísticas de tráfego sem cookies de análise. Respeitamos os sinais Do Not Track e Global Privacy Control.",
           "Usamos um cookie de idioma, com duração máxima de um ano, para apresentar o site no idioma escolhido. A rotação das sugestões de perguntas usa o armazenamento da sessão do navegador. O serviço offline guarda apenas ficheiros da interface, não conversas ou respostas da API.",
-          "O serviço de chat regista contagens de pedidos e, quando a base de dados está disponível, um identificador derivado por hash do endereço de rede ou de dados técnicos do navegador, com datas da primeira e última utilização. Essas contagens não incluem o texto das perguntas.",
         ] },
         { title: "Serviços e conservação", paragraphs: [
-          "A aplicação é alojada na Vercel; o chat por texto é processado pelo portal.maio.cv e pela OpenAI. A conversa por voz usa a ElevenLabs e o modelo GPT-4.1 disponibilizado através desse serviço. Os prestadores podem tratar dados noutros países e manter registos técnicos segundo as suas próprias políticas.",
-          "A conversa local dura apenas enquanto a página permanece aberta. O cookie de idioma dura até um ano. As contagens de utilização do serviço de chat não têm atualmente um prazo de eliminação automática configurado.",
+          "A aplicação é alojada na Vercel. O chat por texto é processado nesta aplicação, com dados de api.maio.cv e, quando é precisa uma redação, pelo Vercel AI Gateway e pela OpenAI. A conversa por voz usa a ElevenLabs e o modelo GPT-4.1 disponibilizado através desse serviço. Os prestadores podem tratar dados noutros países e manter registos técnicos segundo as suas próprias políticas.",
+          "A conversa local dura apenas enquanto a página permanece aberta. O cookie de idioma dura até um ano.",
         ] },
         { title: "As suas escolhas e direitos", paragraphs: [
           "Pode limpar a conversa no chat e mudar de idioma a qualquer momento. Para pedir informação, acesso, correção ou eliminação de dados pessoais que possamos identificar, contacte a MaioAzul. Pode também consultar a Comissão Nacional de Proteção de Dados de Cabo Verde.",
@@ -75,12 +74,12 @@ export const legalContent: Record<Locale, LegalCopy> = {
     privacy: {
       title: "Privacy policy",
       description: "How MaioCV handles questions, voice, language preferences, and technical data.",
-      updated: "Updated 27 October 2026",
+      updated: "Updated 16 November 2026",
       intro: "MaioCV is maintained by MaioAzul. This page explains, in plain language, what information is used when you visit the site or use the chat.",
       sections: [
         { title: "Analytics", paragraphs: ["We collect aggregate page, language and chat, voice and planner usage counts, retained for 90 days, without identifying visitors or storing conversation content. We also use Vercel Web Analytics for traffic statistics without analytics cookies. We respect Do Not Track and Global Privacy Control."] },
         { title: "Questions and answers", paragraphs: [
-          "When you send a question in text chat, its text and up to 12 recent conversation messages go to the chat service at portal.maio.cv. That service may consult Maio data sources and send the content needed to OpenAI to generate an answer.",
+          "When you send a question in text chat, its text and up to 12 recent conversation messages are processed in this app. The app reads public data from api.maio.cv and may send the content needed to Vercel AI Gateway and OpenAI to draft an answer.",
           "You do not need an account. In this app, the conversation stays in the open page's memory: clearing the chat, reloading, or closing the page removes the local copy. Please avoid entering sensitive personal information.",
         ] },
         { title: "Voice questions", paragraphs: [
@@ -93,11 +92,10 @@ export const legalContent: Record<Locale, LegalCopy> = {
         ] },
         { title: "Preferences and usage", paragraphs: [
           "A language cookie, lasting up to one year, keeps the site in your chosen language. Rotating question suggestions use browser session storage. The offline service caches interface files only, not conversations or API answers.",
-          "The chat service records request counts and, when its database is available, a hashed identifier derived from a network address or browser details, plus first and last use dates. Those counters do not contain question text.",
         ] },
         { title: "Service providers and retention", paragraphs: [
-          "Vercel hosts the app; portal.maio.cv and OpenAI process text chat requests. Live voice conversation uses ElevenLabs and the GPT-4.1 model provided through that service. Providers may process data in other countries and keep technical logs under their own policies.",
-          "The local conversation lasts only while the page is open. The language cookie lasts up to one year. The chat service's usage counters currently have no automatic deletion period configured.",
+          "Vercel hosts the app. This app processes text chat, using data from api.maio.cv and, when a draft is needed, Vercel AI Gateway and OpenAI. Live voice conversation uses ElevenLabs and the GPT-4.1 model provided through that service. Providers may process data in other countries and keep technical logs under their own policies.",
+          "The local conversation lasts only while the page is open. The language cookie lasts up to one year.",
         ] },
         { title: "Your choices and rights", paragraphs: [
           "You can clear the chat and change language at any time. To request information, access, correction, or deletion of personal data we can identify, contact MaioAzul. You can also consult Cabo Verde's National Data Protection Commission.",
@@ -139,12 +137,12 @@ export const legalContent: Record<Locale, LegalCopy> = {
     privacy: {
       title: "Politique de confidentialité",
       description: "Comment MaioCV traite les questions, la voix, les préférences de langue et les données techniques.",
-      updated: "Mise à jour le 27 octobre 2026",
+      updated: "Mise à jour le 16 novembre 2026",
       intro: "MaioCV est géré par MaioAzul. Cette page explique simplement quelles informations sont utilisées lorsque vous visitez le site ou utilisez le chat.",
       sections: [
         { title: "Analytics", paragraphs: ["Nous recueillons des compteurs agrégés de pages, de langues et d’utilisation du chat, de la voix et du planificateur, conservés pendant 90 jours, sans identifier les visiteurs ni enregistrer les conversations. Vercel Web Analytics fournit aussi des statistiques de trafic sans cookies d’analyse. Nous respectons Do Not Track et Global Privacy Control."] },
         { title: "Questions et réponses", paragraphs: [
-          "Lorsque vous envoyez une question dans le chat écrit, son texte et jusqu'à 12 messages récents de la conversation sont transmis au service de chat de portal.maio.cv. Ce service peut consulter des sources de données sur Maio et transmettre à OpenAI le contenu nécessaire pour produire une réponse.",
+          "Lorsque vous envoyez une question dans le chat écrit, son texte et jusqu'à 12 messages récents de la conversation sont traités dans cette application. Elle consulte des données publiques sur api.maio.cv et peut transmettre à Vercel AI Gateway et à OpenAI le contenu nécessaire pour rédiger une réponse.",
           "Aucun compte n'est nécessaire. Dans cette application, la conversation reste dans la mémoire de la page ouverte : effacer le chat, recharger ou fermer la page supprime la copie locale. Évitez de saisir des données personnelles sensibles.",
         ] },
         { title: "Questions vocales", paragraphs: [
@@ -157,11 +155,10 @@ export const legalContent: Record<Locale, LegalCopy> = {
         ] },
         { title: "Préférences et utilisation", paragraphs: [
           "Un cookie de langue, conservé jusqu'à un an, garde le site dans la langue choisie. La rotation des suggestions utilise le stockage de session du navigateur. Le service hors ligne ne met en cache que des fichiers d'interface, jamais les conversations ou les réponses de l'API.",
-          "Le service de chat enregistre le nombre de requêtes et, si sa base de données est disponible, un identifiant haché dérivé de l'adresse réseau ou de données techniques du navigateur, ainsi que les dates de première et de dernière utilisation. Ces compteurs ne contiennent pas le texte des questions.",
         ] },
         { title: "Prestataires et conservation", paragraphs: [
-          "Vercel héberge l'application ; portal.maio.cv et OpenAI traitent les demandes du chat écrit. La conversation vocale en direct utilise ElevenLabs et le modèle GPT-4.1 proposé via ce service. Les prestataires peuvent traiter des données dans d'autres pays et conserver des journaux techniques selon leurs propres politiques.",
-          "La conversation locale ne dure que tant que la page reste ouverte. Le cookie de langue dure jusqu'à un an. Aucun délai de suppression automatique n'est actuellement configuré pour les compteurs d'utilisation du service de chat.",
+          "Vercel héberge l'application. Cette application traite le chat écrit, avec les données d'api.maio.cv et, lorsqu'une rédaction est nécessaire, Vercel AI Gateway et OpenAI. La conversation vocale en direct utilise ElevenLabs et le modèle GPT-4.1 proposé via ce service. Les prestataires peuvent traiter des données dans d'autres pays et conserver des journaux techniques selon leurs propres politiques.",
+          "La conversation locale ne dure que tant que la page reste ouverte. Le cookie de langue dure jusqu'à un an.",
         ] },
         { title: "Vos choix et vos droits", paragraphs: [
           "Vous pouvez effacer le chat et changer de langue à tout moment. Pour demander des informations, l'accès, la rectification ou la suppression de données personnelles que nous pouvons identifier, contactez MaioAzul. Vous pouvez aussi consulter la Commission nationale de protection des données du Cabo Verde.",

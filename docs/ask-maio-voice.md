@@ -1,6 +1,6 @@
 # Ask Maio voice prototype
 
-Ask Maio uses ElevenLabs for a live voice conversation and queries `https://portal.maio.cv/api/mcp` directly for public island data. The existing text chat continues to use the Maio chat backend. Voice has its own reviewed instructions and tool permissions; it does not automatically inherit the text backend's prompt, citation logic or rate limits.
+Ask Maio uses ElevenLabs for a live voice conversation and queries `https://portal.maio.cv/api/mcp` directly for public island data. Text chat is separate: `/api/maio-chat` reads `https://api.maio.cv/api/v1` in this app. Voice has its own reviewed instructions and tool permissions; it does not automatically inherit the text backend's prompt, citation logic or rate limits.
 
 The browser starts a conversation only after the visitor chooses to speak and grants microphone access. `/api/voice/session` checks that the request comes from the app's own origin, applies the issuance cooldown, and obtains a short-lived ElevenLabs WebRTC conversation token on the server. The ElevenLabs API key is never sent to the browser. The agent can query approved MCP tools and call the `show_sources` client tool to display links below the call status.
 

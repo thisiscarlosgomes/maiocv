@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { handleMaioChat } from "../../../lib/maio-chat-proxy";
+import { handleMaioChat } from "../../../lib/maio-chat";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
