@@ -45,6 +45,25 @@ function reviewPlan(turn: PlanReplyTurn, messages: { role: string; content: stri
   }, deps);
 }
 
+function ndjson(work: (send: (event: unknown) => void) => Promise<void>): Response {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctrl) { controller = ctrl; },
+  });
+  const send = (event: unknown) => {
+    try { controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)); } catch { /* the client went away */ }
+  };
+  void work(send).finally(() => { try { controller.close(); } catch { /* already closed */ } });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   if (!planEnabled()) return Response.json({ error: "Not found" }, { status: 404 });
   const body = BodySchema.safeParse(await request.json().catch(() => null));
@@ -55,55 +74,61 @@ export async function POST(request: Request) {
   const locale = body.data.locale ?? current?.locale ?? "en";
   const task = body.data.task ? readTask(body.data.task, process.env, locale) : current ? null : emptyTask(locale);
   const deps = flagDeps();
-  try {
-    let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
-    let sideModel: LanguageModel = gateway(process.env.PLAN_SIDE_MODEL ?? "openai/gpt-5-nano");
-    // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.
-    if (process.env.PLAN_MOCK === "1") {
-      const { mockModel, mockScript } = await import("../../../lib/plan-mock");
-      model = mockModel(mockScript(messages, current, maioClock(new Date()).date));
-      sideModel = model;
-    }
-    const result = await runPlanAgent(messages, current, {
-      model,
-      sideModel,
-      fetchImpl: fetch,
-      onReply: (turn) => reviewPlan(turn, body.data.messages, deps),
-    }, task);
-    const signed = signTask(result.task);
-    return Response.json({ reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status });
-  } catch {
+  const fallbackLocale: TaskLocale = locale === "pt" || locale === "fr" ? locale : "en";
+  // The stream is returned immediately. Status lines are enqueued as each step starts; nothing here is awaited before the work.
+  return ndjson(async (send) => {
     try {
-      const context = conversationContext(body.data.messages);
-      scheduleTurnReview({
-        surface: "plan",
-        locale,
-        userMessage: context.userMessage,
-        previousTurns: context.previousTurns,
-        botReply: "",
-        planBefore: current,
-        planAfter: current,
+      let model: LanguageModel = gateway(process.env.PLAN_MODEL ?? "openai/gpt-5-mini");
+      let sideModel: LanguageModel = gateway(process.env.PLAN_SIDE_MODEL ?? "openai/gpt-5-nano");
+      // PLAN_MOCK=1: scripted test model for local runs and previews without a Gateway key.
+      if (process.env.PLAN_MOCK === "1") {
+        const { mockModel, mockScript } = await import("../../../lib/plan-mock");
+        model = mockModel(mockScript(messages, current, maioClock(new Date()).date));
+        sideModel = model;
+      }
+      const result = await runPlanAgent(messages, current, {
+        model,
+        sideModel,
+        fetchImpl: fetch,
+        onReply: (turn) => reviewPlan(turn, body.data.messages, deps),
+        onStatus: (text) => send({ type: "status", text }),
+      }, task);
+      const signed = signTask(result.task);
+      send({ type: "result", reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps });
+    } catch {
+      try {
+        const context = conversationContext(body.data.messages);
+        scheduleTurnReview({
+          surface: "plan",
+          locale,
+          userMessage: context.userMessage,
+          previousTurns: context.previousTurns,
+          botReply: "",
+          planBefore: current,
+          planAfter: current,
+          chips: [],
+          planTurn: false,
+          toolFacts: "",
+          previousReply: context.previousReply,
+          failure: "model_error",
+        }, deps);
+      } catch { /* the error response still returns */ }
+      let signed: string | undefined;
+      if (typeof body.data.task === "string") signed = body.data.task;
+      else if (task) {
+        try { signed = signTask(task); } catch { signed = undefined; }
+      }
+      send({
+        type: "result",
+        reply: sideQuestionFallback(fallbackLocale),
+        plan: current,
+        toolEvents: [],
+        ...(signed ? { task: signed } : {}),
         chips: [],
-        planTurn: false,
-        toolFacts: "",
-        previousReply: context.previousReply,
-        failure: "model_error",
-      }, deps);
-    } catch { /* the error response still returns */ }
-    const fallbackLocale: TaskLocale = locale === "pt" || locale === "fr" ? locale : "en";
-    let signed: string | undefined;
-    if (typeof body.data.task === "string") signed = body.data.task;
-    else if (task) {
-      try { signed = signTask(task); } catch { signed = undefined; }
+        intent: "side_question",
+        status: "ready",
+        steps: [],
+      });
     }
-    return Response.json({
-      reply: sideQuestionFallback(fallbackLocale),
-      plan: current,
-      toolEvents: [],
-      ...(signed ? { task: signed } : {}),
-      chips: [],
-      intent: "side_question",
-      status: "ready",
-    });
-  }
+  });
 }

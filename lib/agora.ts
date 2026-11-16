@@ -240,12 +240,34 @@ export type DailySea = { date: string; waveHeightM: number | null; windKmh: numb
 
 const FORECAST_TTL_MS = 10 * 60 * 1000;
 const forecastCache = new WeakMap<object, Map<string, { at: number; rows: DailySea[] }>>();
+/** A logging wrapper shares the inner fetch's bucket, so a hit is still a hit. */
+const forecastAlias = new WeakMap<object, object>();
+
+export function shareForecastCache(wrapper: object, inner: object): void {
+  forecastAlias.set(wrapper, forecastAlias.get(inner) ?? inner);
+}
+
+function forecastRoot(fetchImpl: object): object {
+  return forecastAlias.get(fetchImpl) ?? fetchImpl;
+}
+
+function forecastBucket(fetchImpl: object): Map<string, { at: number; rows: DailySea[] }> {
+  const root = forecastRoot(fetchImpl);
+  const bucket = forecastCache.get(root) ?? new Map<string, { at: number; rows: DailySea[] }>();
+  if (!forecastCache.has(root)) forecastCache.set(root, bucket);
+  return bucket;
+}
+
+/** True when this start and length are already in the 10-minute forecast cache. A map lookup, not a fetch. */
+export function dailyForecastCached(fetchImpl: typeof fetch, startDate: string, days: number, now = Date.now()): boolean {
+  const hit = forecastBucket(fetchImpl).get(`${startDate}:${days}`);
+  return Boolean(hit && now - hit.at < FORECAST_TTL_MS && hit.rows.length);
+}
 
 /** Daily marine and wind forecast for trip planning (Open-Meteo, up to 7 days). Cached 10 minutes per fetch. */
 export async function loadDailyForecast(fetchImpl: typeof fetch, startDate: string, days: number): Promise<DailySea[]> {
   const key = `${startDate}:${days}`;
-  const bucket = forecastCache.get(fetchImpl) ?? new Map<string, { at: number; rows: DailySea[] }>();
-  if (!forecastCache.has(fetchImpl)) forecastCache.set(fetchImpl, bucket);
+  const bucket = forecastBucket(fetchImpl);
   const hit = bucket.get(key);
   if (hit && Date.now() - hit.at < FORECAST_TTL_MS && hit.rows.length) return hit.rows;
   const rows = await fetchDailyForecast(fetchImpl, startDate, days);
