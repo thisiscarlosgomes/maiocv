@@ -377,6 +377,13 @@ function rememberContacts(sink: string[], rows: { name: string; phone?: string }
   if (!sink.includes(line)) sink.push(line);
 }
 
+/** Contact lines go first so raw API bodies cannot push them past the cut. */
+function factsForReview(facts: string[]): string {
+  const contacts = facts.filter((line) => line.startsWith("contacts: "));
+  const rest = facts.filter((line) => !line.startsWith("contacts: "));
+  return [...contacts, ...rest].join("\n").slice(0, 8000);
+}
+
 export async function runPlanAgent(messages: ModelMessage[], current: TripPlan | null, deps: PlanDeps, taskInput?: Task | null): Promise<PlanAgentResult> {
   const toolFacts: string[] = [];
   const rootFetch = deps.fetchImpl;
@@ -497,7 +504,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       intent: out.intent,
       locale: out.task.locale,
       planTurn: (classification.planShaping === true && classification.intent !== "side_question" && !classification.smallTalk) || changed,
-      toolFacts: toolFacts.join("\n").slice(0, 8000),
+      toolFacts: factsForReview(toolFacts),
       appliedEdit,
     });
     return out;
