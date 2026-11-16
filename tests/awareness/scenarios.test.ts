@@ -433,7 +433,7 @@ test("chips do not offer a boat trip that is already chosen", async () => {
   });
   assert.ok(result.task.completed.includes("boat"));
   assert.ok(result.chips.length <= 3);
-  assert.ok(result.chips.every((chip) => !/boat trip|saída de barco|sortie en bateau/i.test(chip)));
+  assert.ok(result.chips.every((chip) => !/^(?:add a boat trip|acrescenta um passeio de barco|ajoute une sortie en bateau)$/i.test(chip)));
   assert.ok(result.chips.every((chip) => !/leave|partem|partez/i.test(chip)));
 });
 

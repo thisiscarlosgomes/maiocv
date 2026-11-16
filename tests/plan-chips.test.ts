@@ -97,7 +97,8 @@ for (const locale of ["en", "pt", "fr"] as const) {
     assert.ok(boat, result.reply);
     assert.match(result.reply, /Sport Fishing/);
     assert.doesNotMatch(result.reply, /Tap the card|Toque no cartão|Touchez la carte/);
-    assert.ok(result.chips.every((chip) => !/boat trip|passeio de barco|sortie en bateau/i.test(chip)), result.chips.join(" | "));
+    assert.ok(result.chips.every((chip) => !/^(?:add a boat trip|acrescenta um passeio de barco|ajoute une sortie en bateau)$/i.test(chip)), result.chips.join(" | "));
+    assert.ok(result.chips.some((chip) => /remove the boat trip|tira o passeio de barco|enlève la sortie en bateau/i.test(chip)), result.chips.join(" | "));
     assert.ok(visibleStopCount(result.plan) >= visibleStopCount(plan) - 1);
   });
 
