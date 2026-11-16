@@ -12,7 +12,7 @@ export function mockScript(messages: ModelMessage[], plan: TripPlan | null, toda
   if (!plan) {
     const start = new Date(`${today}T12:00:00Z`); start.setUTCDate(start.getUTCDate() + 1);
     return { calls: [[{ tool: "propose_itinerary", input: { startDate: start.toISOString().slice(0, 10), days: 3, locale: "en", boatTrips: 0, interests: ["beach"], hasCar: false, adults: 2, pace: "slow" } }]],
-      reply: "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Enzo (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18" };
+      reply: "Overview - Length: 3 days - Pace: slow Day 1 — 2026-11-16 - 08:10 — Breakfast: Sete Sois Sete Luas (food listing) - 09:00 — Experience: Rental Quad (id blue-rental-quad-big-game) we list that by id: blue-rental-quad-big-game 2026-11-16 → 2026-11-18" };
   }
   // A change rebuilds the plan from the trip we already have. Questions stay read-only.
   if (/laz|sunset|swap|move|remove|change|add|replace|calm|tranq|mud|troc|chang|ajout|car|carro|voiture|friday|saturday|sexta|sabado|vendredi|samedi|adult|dias|jours|days|pace|slow|calmo/.test(last))

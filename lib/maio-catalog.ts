@@ -1,4 +1,4 @@
-import { EXPERIENCES, FOOD, experience, isExcludedExperience, type Experience } from "./trip.ts";
+import { EXPERIENCES, experience, isExcludedExperience, type Experience } from "./trip.ts";
 
 /** Public Maio Open API. No key. */
 export const MAIO_API = "https://api.maio.cv/api/v1";
@@ -37,13 +37,6 @@ function textOf(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/** Trip fixture, used only when api.maio.cv cannot be read. Phones live on the API, not here. */
-export function fallbackBusinesses(): BusinessRecord[] {
-  const food = FOOD.map((item) => ({ id: item.id, name: item.title, phone: "", location: item.location, category: "food" }));
-  const experiences = EXPERIENCES.map((item) => ({ id: item.id, name: item.title, phone: "", location: item.location, category: item.kind }));
-  return [...food, ...experiences];
-}
-
 function fromFeature(feature: unknown): BusinessRecord | null {
   const row = asRecord(feature);
   const props = asRecord(row.properties);
@@ -72,7 +65,7 @@ async function fetchPage(fetchImpl: typeof fetch, offset: number): Promise<unkno
   return features;
 }
 
-/** Businesses from api.maio.cv, cached for 10 minutes per fetch. Falls back to the trip fixture. */
+/** Businesses from api.maio.cv, cached for 10 minutes per fetch. A failed read lists nothing, never bundled rows. */
 export async function loadBusinesses(fetchImpl: typeof fetch = fetch): Promise<BusinessCatalog> {
   const hit = businessCaches.get(fetchImpl);
   if (hit && hit.epoch === businessEpoch && Date.now() - hit.at < TTL_MS) return hit.value;
@@ -92,7 +85,7 @@ export async function loadBusinesses(fetchImpl: typeof fetch = fetch): Promise<B
     businessCaches.set(fetchImpl, { epoch: businessEpoch, at: Date.now(), value });
     return value;
   } catch {
-    return { records: fallbackBusinesses(), source: "fallback" };
+    return { records: [], source: "fallback" };
   }
 }
 

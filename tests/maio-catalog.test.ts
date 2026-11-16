@@ -23,7 +23,7 @@ function downFetch(): typeof fetch {
   return (async () => { throw new Error("offline"); }) as typeof fetch;
 }
 
-test("business catalog reads the Maio API and falls back when it is down", async () => {
+test("business catalog reads the Maio API and lists nothing when it is down", async () => {
   clearBusinessCache();
   const live = await loadBusinesses(apiFetch([
     feature("maio-guide-food-006", "Enzo Caffe Pizza"),
@@ -35,8 +35,8 @@ test("business catalog reads the Maio API and falls back when it is down", async
   clearBusinessCache();
   const offline = await loadBusinesses(downFetch());
   assert.equal(offline.source, "fallback");
-  assert.ok(offline.records.some((item) => item.name === "Enzo Caffe Pizza"));
-  assert.equal(offline.records.find((item) => item.name === "Enzo Caffe Pizza")?.phone, "");
+  // No bundled fallback: a venue the API dropped must not come back when the API is down.
+  assert.deepEqual(offline.records, []);
 });
 
 test("phone and pharmacy questions use the Maio API in EN, PT and FR", async () => {

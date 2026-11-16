@@ -242,7 +242,7 @@ export type NearbyFood = { id: string; name: string; area: string };
 
 /**
  * Food whose listing area matches the anchor. No silent substitute from another town.
- * Calheta resolves to the Calheta row (Vasuza), not a Porto Inglês restaurant.
+ * Calheta resolves to the Calheta row (Vanuza), not a Porto Inglês restaurant.
  */
 export function foodNear(anchor: LastPlace): NearbyFood[] {
   const area = norm(`${anchor.area ?? ""} ${anchor.name} ${anchor.id}`);
