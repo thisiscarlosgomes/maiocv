@@ -2,18 +2,22 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { inspectTurn } from "../lib/chat-flags.ts";
+import { judgeShouldFlag } from "../lib/chat-judge.ts";
+import { memoryFlagStore } from "../lib/chat-flags-store.ts";
 import { handleMaioChat } from "../lib/maio-chat.ts";
 import { clearBusinessCache } from "../lib/maio-catalog.ts";
 import {
   askInstructions,
   answerGrounded,
   boatTripExperiences,
+  boatTripMatches,
+  directoryContacts,
   classifyAsk,
   clearMaioChatCache,
   contactDigits,
   readExperiences,
   replyUsesListedFacts,
-  type ExperienceListing,
 } from "../lib/maio-chat-tools.ts";
 
 const NOW = new Date("2026-11-16T15:00:00Z");
@@ -152,14 +156,23 @@ test("tools read the Maio API and never the portal", async () => {
   assert.ok(urls.some((url) => url.includes("api.maio.cv/api/v1/boats")));
 });
 
-test("a boat trip listing is an experience, and a fishing charter is not the ferry", async () => {
+test("a fishing charter matches its description and a boat word matches the name", async () => {
   clearMaioChatCache();
   const experiences = await readExperiences(world([]));
-  const trips = boatTripExperiences(experiences.experiences);
-  assert.deepEqual(trips.map((item) => item.name), ["Salt pan boat"]);
-  const fishing = experiences.experiences.find((item) => item.name.includes("Fishing")) as ExperienceListing;
-  assert.equal(boatTripExperiences([fishing]).length, 0);
-  assert.equal(fishing.price?.amount, 700);
+  const matches = boatTripMatches(experiences.experiences);
+  assert.deepEqual(matches.map((match) => match.experience.name), ["Big Game Sport Fishing", "Salt pan boat"]);
+  const fishing = matches.find((match) => match.experience.name.includes("Fishing"));
+  assert.ok(fishing);
+  assert.deepEqual(fishing?.matched, [{ field: "description", terms: ["deep-sea", "charter"] }]);
+  const named = matches.find((match) => match.experience.name === "Salt pan boat");
+  assert.ok(named?.matched.some((field) => field.field === "description" && field.terms.includes("boat")));
+  assert.equal(boatTripExperiences(experiences.experiences.filter((item) => item.name === "Jet Ski")).length, 0);
+  const reply = await answerGrounded("boat_trip", "boat trips", "pt", world([]), NOW);
+  assert.match(reply.message, /Big Game Sport Fishing/);
+  assert.match(reply.message, /\+238 971 05 93/);
+  assert.match(reply.message, /700 EUR/);
+  assert.equal(/\b\d{2}:\d{2}\b/.test(reply.message), false);
+  assert.equal(reply.message.includes("07:00"), false);
 });
 
 test("an unavailable directory does not fall back to invented listings", async () => {
@@ -172,6 +185,38 @@ test("an unavailable directory does not fall back to invented listings", async (
   const business = await answerGrounded("business", "phone for Enzo Caffe Pizza", "en", down, NOW);
   assert.match(business.message, /not available/);
   assert.equal(business.message.includes("Enzo"), false);
+});
+
+test("directory phones in the tool facts are not invented contacts", async () => {
+  clearMaioChatCache();
+  clearBusinessCache();
+  const store = memoryFlagStore();
+  const response = await handleMaioChat(request("phone for Hotel Big Game Maio"), {
+    fetchImpl: world([]),
+    model: bomb(),
+    now: NOW,
+    store,
+  });
+  const body = await response.json() as { message: string };
+  assert.match(body.message, /\+238 597 73 05/);
+  assert.equal(store.rows.some((row) => row.reasons.includes("invented_contact")), false);
+  const facts = directoryContacts([JSON.stringify({ stays: [{ name: "Hotel Big Game Maio", phone: "+238 597 73 05" }] })]);
+  const turn = {
+    surface: "ask" as const,
+    locale: "en" as const,
+    userMessage: "where can I stay",
+    previousTurns: [],
+    botReply: "Hotel Big Game Maio: +238 597 73 05.",
+    planBefore: null,
+    planAfter: null,
+    chips: [],
+    planTurn: false,
+    toolFacts: facts,
+  };
+  assert.equal(inspectTurn(turn).includes("invented_contact"), false);
+  assert.equal(judgeShouldFlag(turn), null);
+  const invented = inspectTurn({ ...turn, botReply: "Call +238 991 00 00." });
+  assert.ok(invented.includes("invented_contact"));
 });
 
 test("a reply that adds a phone or a price the tools did not return is rejected", () => {

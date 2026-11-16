@@ -105,6 +105,7 @@ export function judgePrompt(turn: TurnForFlags): string {
     "Grade this single Maio reply. A reply that matches the applied edit and the day diff is correct. Do not flag it.",
     "Adding or removing a day is correct when the day diff shows that span change. 'un jour de plus', 'add another day', and 'mais um dia' that turn a 2-day plan into 3 days, with a new card, are a successful edit. Do not say the plan should have stayed the old length.",
     "Set ok=false and confidence=high only when you can name one specific failure, such as a claimed change with an empty day diff, an invented business or phone, or a date the guest named that the plan does not use.",
+    "A phone in the reply is not invented when its digits appear in tool facts. Ignore spaces, plus signs, and a leading 238 or 00238. Directory contacts listed there are real.",
     "Otherwise set ok=true and confidence=low. Vague reasons such as 'bad' or 'too long' are not failures.",
     "reasons are one concrete sentence. Leave reasons empty when ok is true.",
     `surface: ${turn.surface}`,
