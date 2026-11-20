@@ -14,7 +14,7 @@ import { decodeTrip, encodeTrip } from "../../lib/trip-share";
 import { SafeImg } from "../stop-photo";
 import { DayStops, PlaceDetail, RoughAlert, SeaText } from "./cards";
 import { ChatShell } from "../chat/shell";
-import { PlaceCards, type ChatPlaceCard } from "./place-cards";
+import { PlaceCards, type ChatPlaceCard, ReplySources, readSources, type ChatSource } from "./place-cards";
 import { PlaceMap, type MapHere } from "./place-map";
 import { emptyTask, parseGuestChip, refreshTask } from "../../lib/awareness/task";
 import { keepAssistantReply } from "../../lib/plan-edits";
@@ -22,7 +22,7 @@ import { paceLines, planTurn, pushStatusPlay, readPlanEvents, startStatusPlay, t
 
 // The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
 const TASK_KEY = "maio.plan.task";
-type Msg = { role: "user" | "assistant"; content: string; trip?: boolean; cards?: ChatPlaceCard[]; here?: MapHere | null; flag?: { planBefore: ReturnType<typeof summarizePlan>; planAfter: ReturnType<typeof summarizePlan>; chips: string[] } };
+type Msg = { role: "user" | "assistant"; content: string; trip?: boolean; cards?: ChatPlaceCard[]; here?: MapHere | null; sources?: ChatSource[]; flag?: { planBefore: ReturnType<typeof summarizePlan>; planAfter: ReturnType<typeof summarizePlan>; chips: string[] } };
 type Screen = "chat" | "trip";
 
 const cover = (plan: TripPlan) => coverImage(plan.days.flatMap((day) => day.items));
@@ -172,7 +172,8 @@ export function Planner({ locale, sharedPlan }: { locale: Locale; sharedPlan?: T
         const planAfter = cleared ? null : changed && next ? next : plan;
         const cards = Array.isArray(data.cards) ? (data.cards as ChatPlaceCard[]).filter((card) => card && typeof card.name === "string").slice(0, 4) : [];
         const here = readHere(data.here);
-        setMessages([...conversation, { role: "assistant", content: reply, trip: changed, ...(cards.length ? { cards, here } : {}), flag: { planBefore: summarizePlan(plan), planAfter: summarizePlan(planAfter), chips: nextChips } }]);
+        const sources = readSources(data.sources);
+        setMessages([...conversation, { role: "assistant", content: reply, trip: changed, ...(cards.length ? { cards, here } : {}), ...(sources.length ? { sources } : {}), flag: { planBefore: summarizePlan(plan), planAfter: summarizePlan(planAfter), chips: nextChips } }]);
       }
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
@@ -268,7 +269,7 @@ export function Planner({ locale, sharedPlan }: { locale: Locale; sharedPlan?: T
       messages={messages.map((m) => ({
         role: m.role,
         content: m.content,
-        lead: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : m.cards?.length ? <><PlaceCards cards={m.cards} locale={locale} /><PlaceMap cards={m.cards} here={m.here} locale={locale} /></> : undefined,
+        lead: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : m.cards?.length || m.sources?.length ? <>{m.cards?.length ? <><PlaceCards cards={m.cards} locale={locale} /><PlaceMap cards={m.cards} here={m.here} locale={locale} /></> : null}<ReplySources sources={m.sources ?? []} locale={locale} /></> : undefined,
         flag: m.flag,
       }))}
       draft={draft}
