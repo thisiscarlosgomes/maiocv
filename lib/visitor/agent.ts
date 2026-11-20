@@ -7,6 +7,7 @@ import { loadTimetable } from "../timetable.ts";
 import { scrubReply } from "./scrub.ts";
 import { MAIO_BACKGROUND } from "./background.ts";
 import { fold, zoneFromText, ZONES } from "./geo.ts";
+import { dropUnknownNames, knownText } from "./names.ts";
 import { fallbackConfig, searchBeyondListings, type FallbackEnv, type FallbackHit } from "./fallback.ts";
 import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor, type NearbyRow, type Place, type PlaceKind } from "./places.ts";
 
@@ -134,7 +135,8 @@ export function directoryBlock(records: { name: string; category: string }[], pl
     byCategory.set(record.category.replace(/_/g, " "), [...(byCategory.get(record.category.replace(/_/g, " ")) ?? []), record.name]);
   }
   const lines = [...byCategory.entries()].map(([category, names]) => `${category}: ${names.join("; ")}`);
-  return `Business directory services (name them when asked; find_business has phones): ${lines.join(" | ")}.\nAny other service (dentist, gym, yoga, laundry, bank branch…) is NOT listed: say so, never make up a clinic, shop or person.`;
+  const noCarHire = carRentalRecords(records as never).length === 0 ? "\nNo car hire company is listed (a quad rental is not car hire)." : "";
+  return `Business directory services (name them when asked; find_business has phones): ${lines.join(" | ")}.${noCarHire}\nAny other service (dentist, gym, yoga, laundry, bank branch…) is NOT listed: say so, never make up a clinic, shop or person.`;
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -335,6 +337,8 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   const facts: string[] = [];
   const offered = new Map<string, PlaceCard>();
   const outside: FallbackHit[] = [];
+  /** Reviewed secondary names (enrichment) the guard also accepts. */
+  const extraKnownNames: string[] = [];
   const locale = context.locale === "pt" ? "pt" : "en";
   const note = <T,>(name: string, args: unknown, ok: boolean, payload: T): T => {
     events.push({ name, ok, arguments: args });
@@ -467,6 +471,18 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       if (!again.away.some((item) => fold(again.reply).includes(fold(item.name)))) local = again;
     }
   }
+  // Names not in the Maio data or this turn's outside results are dropped (sentence by sentence).
+  const known = knownText([
+    ...places.flatMap((place) => [place.name, place.namePt]),
+    ...(directory?.records ?? []).map((record) => record.name),
+    ...ZONES.flatMap((zone) => [zone.name, ...zone.aliases]),
+    ...outside.map((hit) => hit.name),
+    ...extraKnownNames,
+    MAIO_BACKGROUND,
+  ]);
+  const guarded = dropUnknownNames(local.reply, known, context.locale);
+  if (guarded.dropped.length) events.push({ name: "name_guard", ok: false, arguments: { dropped: guarded.dropped } });
+  local = { ...local, reply: guarded.reply };
   const labelled = labelOutsideSources(local.reply, outside, places);
   const cards = [...local.cards, ...labelled.cards].slice(0, 4);
   return { reply: withNoCarAccess(labelled.reply, cards, context), cards, sources: labelled.sources, toolEvents: events, facts, anchor };
