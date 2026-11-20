@@ -19,6 +19,8 @@ const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? a
 const base = flag("--base");
 const local = args.includes("--local");
 const only = flag("--only")?.split(",");
+/** --grep <regex>: run only the cases whose id matches (e.g. ^state-). */
+const grep = flag("--grep") ? new RegExp(flag("--grep")!) : null;
 const concurrency = Number(flag("--concurrency") ?? 4);
 const out = flag("--out");
 const bypass = process.env.VERCEL_BYPASS_SECRET;
@@ -174,7 +176,7 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
 
 const places = await loadPlaces(fetch);
 if (!places.length) throw new Error("Maio API places did not load");
-const cases = VISITOR_CASES.filter((c) => !only || only.includes(c.id));
+const cases = VISITOR_CASES.filter((c) => (!only || only.includes(c.id)) && (!grep || grep.test(c.id)));
 const rows: Row[] = [];
 let next = 0;
 await Promise.all(Array.from({ length: Math.max(1, concurrency) }, async () => {

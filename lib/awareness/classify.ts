@@ -401,7 +401,7 @@ export function isFourByFourQuestion(text: string): boolean {
 }
 
 const HOW_AROUND = /\b(?:how|como|comment)\b.*\b(?:around|desloc|deplacer|car|carro|voiture)\b/;
-const CAR_NO = /\b(?:no rental car|without (?:a )?rental car|won'?t rent (?:a )?car|will not rent (?:a )?car|not renting (?:a )?car|sem carro(?: alugado)?|sans voiture(?: de location)?|no car|without a car)\b/;
+const CAR_NO = /\b(?:(?:won'?t|will not|don'?t|do not|didn'?t|did not|not going to|aren'?t going to|decided not to|not)\s+(?:be\s+)?(?:have|having|rent|renting|hire|hiring|get|getting|need|take|taking)\s+(?:a\s+)?(?:rental\s+)?car|nao (?:vamos |vou |iremos )?(?:ter|alugar|temos|alugamos)(?: um)? carro|pas de voiture|no rental car|without (?:a )?rental car|won'?t rent (?:a )?car|will not rent (?:a )?car|not renting (?:a )?car|sem carro(?: alugado)?|sans voiture(?: de location)?|no car|without a car)\b/;
 const CAR_YES = /\b(?:with a (?:rental )?car|rental car|have a car|has a car|rent(?:ing|ed)?(?: a)? car|we(?:'ll| will) rent|yes we rent|com carro(?: alugado)?|carro alugado|de carro|vamos alugar|alug(?:ar|amos|uei)|temos carro|lou(?:er|ons|e)(?: une)? voiture|avec (?:une )?voiture(?: de location)?|voiture de location|en voiture|on a loue|on loue)\b/;
 const CAR_UNSURE = /\b(?:not sure(?: yet)?|unsure|ainda nao sei|nao sei|pas encore sur|pas sur|je ne sais pas)\b/;
 
@@ -537,12 +537,23 @@ export function applyClassification(task: Task, result: Classification): Task {
     const next = emptyTask(result.locale ?? task.locale);
     next.objective = result.objective ?? null;
     next.scope = result.scope ?? next.scope;
-    next.constraints = result.patch;
+    // A new trip idea does not move the guest: where they sleep still holds.
+    next.constraints = {
+      ...(task.constraints.stay ? { stay: task.constraints.stay } : {}),
+      ...(task.constraints.base ? { base: task.constraints.base } : {}),
+      ...result.patch,
+    };
     next.pendingQuestion = null;
     return refreshTask(next);
   }
   if (result.intent === "side_question") {
-    const next = { ...task, locale: result.locale ?? task.locale };
+    // A fact said inside a question ("we have kids, which beach?") is still a fact about the trip.
+    const facts: TaskConstraints = {
+      ...(result.patch.car !== undefined ? { car: result.patch.car } : {}),
+      ...(result.patch.party ? { party: result.patch.party } : {}),
+      ...(result.patch.dates ? { dates: result.patch.dates } : {}),
+    };
+    const next = { ...task, locale: result.locale ?? task.locale, constraints: mergeConstraints(task.constraints, facts) };
     // An ordinal reads the list. Moving that place to the end would make "the second one" miss.
     if (result.reference.kind === "ordinal" || result.reference.kind === "that-one") return next;
     return result.reference.place ? rememberPlace(next, result.reference.place) : next;
