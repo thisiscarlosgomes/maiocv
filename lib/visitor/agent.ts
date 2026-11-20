@@ -46,6 +46,7 @@ How to answer:
 - Transport times only from get_transport. Weather and sea only from get_maio_weather.
 - When the guest says where they are or are staying, use it as the location for distances for the rest of the chat.
 - "This conversation" below holds what the guest already told you (location, car, party, dates, places shown). Use it; never ask for something already there. Season questions ("will we see turtles?") are answered for their dates.
+- When Car is NO and you recommend a place beyond walking distance, say in the same reply how to get there without a car (aluguer, taxi or a guided tour).
 - Nearby recommendations stay in the guest's village. Do not add options in another village unless nothing fitting is listed in theirs; then name only the single nearest one with its distance.
 - Reply in the guest's language (English, Portuguese or French). Use the place names as the tools return them.
 - Never mention tools, ids, "the API", "the data", "listings data" or the background document. Say "I don't have that" naturally.
@@ -223,6 +224,21 @@ export function keepToVillage(reply: string, cards: PlaceCard[], anchor: Anchor 
   return { reply: kept.join(" ").trim() || reply, cards: cards.filter((item) => !away.includes(item)), away };
 }
 
+const NO_CAR_WAYS = /\b(?:taxi|aluguer|guided|guide|tour|transfer|driver|on foot|walk|walking|a pe|a pied|excurs)/i;
+const NO_CAR_LINE = {
+  en: "Without a car, take an aluguer or a taxi, or join a guided tour.",
+  pt: "Sem carro, apanhe um aluguer ou um táxi, ou faça uma visita guiada.",
+  fr: "Sans voiture, prenez un aluguer ou un taxi, ou une visite guidée.",
+} as const;
+
+/** The guest said no car: a recommended place beyond walking distance must come with a way to get there. */
+export function withNoCarAccess(reply: string, cards: PlaceCard[], context: Pick<VisitorContext, "car" | "locale">): string {
+  if (context.car !== false || !reply || NO_CAR_WAYS.test(fold(reply))) return reply;
+  const far = cards.some((item) => (item.walkMin !== null ? item.walkMin > 30 : Boolean(item.area) && fold(item.area!) !== "vila do maio"));
+  if (!far) return reply;
+  return `${reply} ${NO_CAR_LINE[context.locale === "pt" || context.locale === "fr" ? context.locale : "en"]}`;
+}
+
 export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorContext, deps: VisitorDeps): Promise<VisitorResult> {
   const now = deps.now ?? new Date();
   const today = maioClock(now).date;
@@ -337,5 +353,5 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       if (!again.away.some((item) => fold(again.reply).includes(fold(item.name)))) local = again;
     }
   }
-  return { reply: local.reply, cards: local.cards, toolEvents: events, facts, anchor };
+  return { reply: withNoCarAccess(local.reply, local.cards, context), cards: local.cards, toolEvents: events, facts, anchor };
 }

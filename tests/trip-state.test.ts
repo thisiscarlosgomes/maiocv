@@ -75,3 +75,13 @@ test("moving village in the chat beats the older one", () => {
   ], { locale: "en", car: null });
   assert.equal(anchor?.zoneId, "calheta");
 });
+
+import { withNoCarAccess } from "../lib/visitor/agent.ts";
+
+test("no car: a far recommendation gets a way to get there, a walkable one does not", () => {
+  const far = [card("Praia Real", "Cascabulho", "beach")].map((item) => ({ ...item, walkMin: null, km: null }));
+  assert.match(withNoCarAccess("Praia Real is worth it.", far, { car: false, locale: "en" }), /aluguer or a taxi/);
+  assert.equal(withNoCarAccess("Praia Real is worth it; take an aluguer.", far, { car: false, locale: "en" }), "Praia Real is worth it; take an aluguer.");
+  assert.equal(withNoCarAccess("Praia Real is worth it.", far, { car: true, locale: "en" }), "Praia Real is worth it.");
+  assert.equal(withNoCarAccess("Anita is close.", [card("Restaurante Bar Anita", "Calheta")], { car: false, locale: "en" }), "Anita is close.");
+});
