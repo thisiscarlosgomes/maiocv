@@ -176,6 +176,9 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "fb-listed-hairdresser", q: "Is there a hairdresser on Maio?", mention: /barbearia dad/i, forbid: /google maps/i },
   // Step 4: the directory has no location for Barbearia DAD; the reviewed web enrichment does, with its source.
   { id: "enrich-barber-village", q: "Where is Barbearia DAD?", mention: /calheta/i, forbid: /google maps/i },
+  // Empty Maio fields filled from the reviewed web enrichment, always with the site named.
+  { id: "enrich-phone", q: "Phone number for Nha Terra?", mention: /928 ?60 ?85/, forbid: /^(?![\s\S]*facebook)/i },
+  { id: "enrich-hours", q: "What time does Nha Terra open?", mention: /8[:h.]?30|08:30/, forbid: /^(?![\s\S]*mapquest)/i },
   // Step 4 fixes: an English question on a Portuguese page is answered in English.
   { id: "en-on-pt-page", q: "Where can we eat in Vila do Maio tonight?", locale: "pt", replyLang: "en", area: "vila", notArea: ["calheta", "morro"] },
   { id: "en-on-pt-page-beach", q: "Which beach is best for swimming with kids?", locale: "pt", replyLang: "en" },
