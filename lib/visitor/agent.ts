@@ -451,7 +451,18 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     }) } : baseTools;
 
   const directory = await loadBusinesses(deps.placesFetch ?? deps.fetchImpl).catch(() => null);
-  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n${directoryBlock(directory?.source === "api" ? directory.records : [], places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}`;
+  // Hours, phone or website asked for a named listed place: give its reviewed web facts up front (no tool call needed).
+  const asked = fold(turns.filter((turn) => turn.role === "user").at(-1)?.content ?? "");
+  const askedWeb = /\b(?:hours?|open|opens|opening|close|closes|phone|number|call|website|site|horario|abre|fecha|telefone|numero|heures|ouvert|ouvre|ferme|telephone)\b/.test(asked)
+    ? places.filter((place) => fold(place.name).length >= 5 && asked.includes(fold(place.name))).slice(0, 2) : [];
+  const askedLines = askedWeb.flatMap((place) => {
+    const facts = webFacts(place.name, { phone: place.phone, website: place.website, description: place.description, village: place.zone });
+    if (!facts) return [];
+    webShown.set(place.name, facts); webAsked.add(place.name);
+    return [`${place.name}: ${Object.entries(facts).filter(([field]) => field !== "description").map(([field, fact]) => `${field} ${fact!.value} (per ${fact!.source})`).join("; ")}`];
+  });
+  const webBlock = askedLines.length ? `\n\n# Web facts for the place asked about (NOT Maio listing data; give each with its source, may be out of date)\n${askedLines.join("\n")}` : "";
+  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n${directoryBlock(directory?.source === "api" ? directory.records : [], places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}${webBlock}`;
   const started = Date.now();
   const budget = deps.timeoutMs ?? 14_000;
   const ask = (extra: string, timeoutMs: number) => generateText({
