@@ -110,7 +110,7 @@ const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
   const name = raw.replace(/[\u2010-\u2015]/g, "-").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
+  if (/centro de sa[uú]de|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
   const n = fold(name);
@@ -138,7 +138,7 @@ type Row = { id: string; q: string; reply: string; ms: number; pass: boolean; fa
 
 /** Outside answers must say where they came from; empty-handed ones must say so honestly. */
 const LABELLED = /google maps|\bsource:|\(source|fonte:|\(fonte/i;
-const HONEST = /\b(?:there isn['’]t|there is no|there['’]s no|isn['’]t an? (?:listed|registered)|don['’]t have|do not have|don['’]t know|couldn['’]t find|could not find|not listed|isn['’]t listed|no .{0,30} listed|none listed|ask (?:your|the) (?:stay|host|hotel|guesthouse)|ask locals|ask a local|n[aã]o tenho|n[aã]o encontrei|n[aã]o h[aá] .{0,40}listad|pergunt\w* (?:na|no|ao|à|a) (?:sua |seu )?(?:alojamento|anfitri|estadia|acomoda)|je n['’]ai pas|n['’]y a pas|pas trouv[ée]|demandez)/i;
+const HONEST = /\b(?:there isn['’]t|there is no|there['’]s no|isn['’]t an? (?:listed|registered)|don['’]t have|do not have|don['’]t know|couldn['’]t find|could not find|not listed|isn['’]t listed|no .{0,30} listed|none listed|ask (?:your|the) (?:stay|host|hotel|guesthouse)|ask locals|ask a local|n[aã]o tenho|n[aã]o encontrei|n[aã]o h[aá] .{0,40}listad|pergunt\w* (?:na|no|ao|à|a) (?:sua |seu )?(?:alojamento|anfitri|estadia|acomoda)|je n['’]ai pas|je n['’]ai aucun|aucun\w* .{0,30}list|n['’]y a pas|pas trouv[ée]|demandez)/i;
 
 async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   const locale = c.locale ?? "en";
