@@ -119,6 +119,8 @@ const OFFER = /^(?:if you(?:'|’)?d like|if you want|would you like|want me to|
 export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {
   const flat = text.replace(/\*\*|__|^#+\s*/gm, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim();
   const sentences = flat.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
+  // "Windy day? Head into…": a short echo of the question is not an answer.
+  if (sentences.length > 1 && /\?$/.test(sentences[0]) && sentences[0].split(/\s+/).length <= 4) sentences.shift();
   const kept: string[] = [];
   let words = 0;
   for (const sentence of sentences) {
