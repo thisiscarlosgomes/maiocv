@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       onStatus,
     }, task);
     const signed = signTask(result.task);
-    return { reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps };
+    return { reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps, cards: result.cards ?? [] };
   }
 
   function failureBody() {

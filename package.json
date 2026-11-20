@@ -12,7 +12,9 @@
     "eval:plan": "node --import ./tests/setup-live-catalog.ts --test --test-reporter=spec tests/plan-evals.test.ts",
     "eval:plan:live": "PLAN_EVAL_LIVE=1 node --import ./tests/setup-live-catalog.ts --test --test-reporter=spec tests/plan-evals.test.ts",
     "check:plan-layout": "node scripts/check-plan-layout.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "eval:visitor": "node scripts/visitor-evals.ts --local",
+    "eval:visitor:url": "node scripts/visitor-evals.ts --base"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.122",

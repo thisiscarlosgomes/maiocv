@@ -14,13 +14,14 @@ import { decodeTrip, encodeTrip } from "../../lib/trip-share";
 import { SafeImg } from "../stop-photo";
 import { DayStops, PlaceDetail, RoughAlert, SeaText } from "./cards";
 import { ChatShell } from "../chat/shell";
+import { PlaceCards, type ChatPlaceCard } from "./place-cards";
 import { emptyTask, parseGuestChip, refreshTask } from "../../lib/awareness/task";
 import { keepAssistantReply } from "../../lib/plan-edits";
 import { paceLines, planTurn, pushStatusPlay, readPlanEvents, startStatusPlay, tickStatusPlay, type StatusPlay } from "../../lib/plan-status";
 
 // The signed task lives in this tab. Corrections replace the plan; the share link stays ?trip=.
 const TASK_KEY = "maio.plan.task";
-type Msg = { role: "user" | "assistant"; content: string; trip?: boolean; flag?: { planBefore: ReturnType<typeof summarizePlan>; planAfter: ReturnType<typeof summarizePlan>; chips: string[] } };
+type Msg = { role: "user" | "assistant"; content: string; trip?: boolean; cards?: ChatPlaceCard[]; flag?: { planBefore: ReturnType<typeof summarizePlan>; planAfter: ReturnType<typeof summarizePlan>; chips: string[] } };
 type Screen = "chat" | "trip";
 
 const cover = (plan: TripPlan) => coverImage(plan.days.flatMap((day) => day.items));
@@ -168,7 +169,8 @@ export function Planner({ locale, sharedPlan }: { locale: Locale; sharedPlan?: T
       const previous = [...messages].reverse().find((message) => message.role === "assistant")?.content ?? null;
       if (keepAssistantReply(previous, reply, changed)) {
         const planAfter = cleared ? null : changed && next ? next : plan;
-        setMessages([...conversation, { role: "assistant", content: reply, trip: changed, flag: { planBefore: summarizePlan(plan), planAfter: summarizePlan(planAfter), chips: nextChips } }]);
+        const cards = Array.isArray(data.cards) ? (data.cards as ChatPlaceCard[]).filter((card) => card && typeof card.name === "string").slice(0, 4) : [];
+        setMessages([...conversation, { role: "assistant", content: reply, trip: changed, ...(cards.length ? { cards } : {}), flag: { planBefore: summarizePlan(plan), planAfter: summarizePlan(planAfter), chips: nextChips } }]);
       }
     } catch {
       setError(s.error); setMessages(messages); setDraft(content);
@@ -264,7 +266,7 @@ export function Planner({ locale, sharedPlan }: { locale: Locale; sharedPlan?: T
       messages={messages.map((m) => ({
         role: m.role,
         content: m.content,
-        lead: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : undefined,
+        lead: m.trip && plan ? <TripCard plan={plan} locale={locale} s={s} onOpen={() => setScreen("trip")} /> : m.cards?.length ? <PlaceCards cards={m.cards} locale={locale} /> : undefined,
         flag: m.flag,
       }))}
       draft={draft}
