@@ -7,6 +7,7 @@ import { driveMinutes, haversineKm, nearestZone, walkMinutes, zoneFromText } fro
 import { buildIndex, findPlace, nearby, resolveAnchor, setPlaceIndex } from "../lib/visitor/places.ts";
 import { cardsForReply, clampReply, locationFromConversation, runVisitorAgent } from "../lib/visitor/agent.ts";
 import { isVisitorQuestion } from "../lib/visitor/route.ts";
+import { scrubReply } from "../lib/visitor/scrub.ts";
 import { MAIO_BACKGROUND } from "../lib/visitor/background.ts";
 
 const feature = (id: string, lon: number | null, lat: number | null, attributes: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
@@ -134,4 +135,14 @@ test("replies are clamped to chat size and drop trailing offers", () => {
   assert.equal(clampReply("Windy day? Head into Vila for the fort."), "Head into Vila for the fort.");
   assert.equal(clampReply("Is it safe?"), "Is it safe?");
   assert.ok(clampReply("**Best:** Baxona Beach.\n- calm water").startsWith("Best: Baxona Beach."));
+});
+
+test("scrub drops a made-up tourist office, raw listing wording and borrowed superlatives", () => {
+  assert.equal(scrubReply("J&Tour (listed) offers island excursions; ask your hotel or the Tourist Office in Vila to book."), "J&Tour offers island excursions; ask your hotel to book.");
+  assert.equal(scrubReply('Big Game Sport Fishing (listed as a "location not listed" experience) runs trips.'), "Big Game Sport Fishing runs trips.");
+  assert.equal(scrubReply("Most visitors call Praia Real the most beautiful: long white sand."), "I'd call Praia Real the most beautiful: long white sand.");
+  assert.equal(scrubReply("Praia Real is widely considered the best beach."), "Praia Real is arguably the best beach.");
+  assert.equal(scrubReply("Visit the tourist office. Bitche Rotcha is by the pier."), "Bitche Rotcha is by the pier.");
+  assert.equal(scrubReply("Ask at the tourist office."), "");
+  assert.equal(scrubReply("Baxona Beach in Calheta has very calm water."), "Baxona Beach in Calheta has very calm water.");
 });

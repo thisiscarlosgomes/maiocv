@@ -14,6 +14,8 @@ export type VisitorCase = {
   mention?: RegExp;
   /** Open questions: must not start a plan or ask for trip details first. */
   open?: boolean;
+  /** The reply must not match this (on top of the leak checks every case gets). */
+  forbid?: RegExp;
 };
 
 const near = (id: string, q: string, area: string, notArea: string[], extra: Partial<VisitorCase> = {}): VisitorCase => ({ id, q, area, notArea, ...extra });
@@ -88,7 +90,8 @@ export const VISITOR_CASES: VisitorCase[] = [
   near("beach-ctx-vila", "And a beach close by?", "vila", ["calheta", "cascabulho"], { history: ["We're staying at Hotel Big Game Maio."] }),
   { id: "calm-beach", q: "Which beaches are calm for swimming?", mention: /calm|swim/i },
   { id: "wild-beach", q: "Which beaches are dangerous for swimming?", mention: /current|rough|not/i },
-  { id: "best-beach", q: "What's the most beautiful beach on Maio?", open: true },
+  { id: "best-beach", q: "What's the most beautiful beach on Maio?", open: true, forbid: /most (?:visitors|people)|widely considered/i },
+  { id: "best-restaurant", q: "What is the best restaurant on the island?", open: true, forbid: /most (?:visitors|people|locals)|widely considered|everyone says/i },
   { id: "praia-real", q: "How do I get to Praia Real?", mention: /cascabulho|north|4|track|car/i },
   { id: "pt-praia-vila", q: "Que praia posso ir a pé na Vila?", locale: "pt", area: "vila", notArea: ["calheta"] },
   { id: "fr-plage-calheta", q: "Quelle plage près de Calheta ?", locale: "fr", area: "calheta", notArea: ["vila"] },
@@ -109,8 +112,10 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "cheese", q: "Where can I try goat cheese?", mention: /ribeira d|cheese/i },
   { id: "grogue", q: "Where is grogue made on Maio?", mention: /figueira|trapiche/i },
   { id: "pottery", q: "Where can I buy local crafts?", mention: /morro|calheta|artisan|pottery/i },
-  { id: "tours", q: "Are there any guided tours?", open: true },
-  { id: "boat-trip", q: "Can we do a boat trip or fishing?", open: true },
+  { id: "tours", q: "Are there any guided tours?", open: true, forbid: /tourist office|tourist information/i },
+  { id: "tours-book", q: "Where do I book an island tour, is there a tourist office?", open: true, forbid: /\b(?:the|a) tourist office (?:in|at|on|by)\b/i },
+  { id: "boat-trip", q: "Can we do a boat trip or fishing?", open: true, forbid: /not listed|\(listed\)/i },
+  { id: "fishing-where", q: "Where does the sport fishing boat leave from?", open: true, forbid: /location not listed|listed as/i },
   { id: "jetski", q: "Is there jet ski?", open: true },
   { id: "fort", q: "Tell me about the Fort of São José", mention: /fort|harbour|porto|vila/i },
   { id: "church", q: "Is there a church in Vila?", mention: /nossa senhora da luz|church/i },

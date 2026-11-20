@@ -4,6 +4,7 @@ import { maioClock } from "../agora.ts";
 import { carRentalRecords, loadBusinesses, searchBusinesses } from "../maio-catalog.ts";
 import { readWeather } from "../maio-chat-tools.ts";
 import { loadTimetable } from "../timetable.ts";
+import { scrubReply } from "./scrub.ts";
 import { MAIO_BACKGROUND } from "./background.ts";
 import { fold, zoneFromText } from "./geo.ts";
 import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor, type NearbyRow, type Place, type PlaceKind } from "./places.ts";
@@ -34,6 +35,9 @@ How to answer:
 - Nearby means the same village or area. Use places_nearby for anything "near", "close", "around", "in <village>", "where to eat/swim/stay". Recommend the nearest results first and give the distance as walking minutes (no car / in town) or driving minutes (car). If nothing is listed close by, say so plainly and name the nearest with its distance. Never present a place in another village (e.g. Vila do Maio for someone in Calheta) as "nearby".
 - Name only places, restaurants, stays, operators and businesses from "Listed places" below, a tool result, or the background. If a name is not there, it does not exist for you. For open questions without a location, pick from the background highlights and the listed places. Never invent a venue, phone number, price, opening hour, menu or timetable. If a detail is not in the data, say it is not listed and suggest asking the place or locals.
 - Describe a place only with what its summary or the background says (do not call a beach calm, a restaurant cheap, good for breakfast, or a view stunning unless that is in the data).
+- Never mention a tourist office or tourist information point: none is listed. To book tours, name the listed operator or say to ask the stay.
+- Never quote listing wording or labels ("location not listed", "listed as", "(listed)"). If a place's village is not given, just do not say where it is.
+- No superlatives you cannot back: do not say "most visitors", "everyone says", "widely considered" or "the best/most beautiful" as a fact. Give your own pick as an opinion ("I'd pick …") with the reason from its summary.
 - Listings have no opening hours, menus, prices or diet flags.
 - Transport times only from get_transport. Weather and sea only from get_maio_weather.
 - When the guest says where they are or are staying, use it as the location for distances for the rest of the chat.
@@ -87,7 +91,7 @@ export function catalogBlock(places: Place[]): string {
   if (!places.length) return "Listed places: unavailable right now. Name no restaurant, stay, shop or operator.";
   const byZone = new Map<string, Map<PlaceKind, string[]>>();
   for (const place of places) {
-    const zone = place.zone ?? "location not listed";
+    const zone = place.zone ?? "Elsewhere on the island";
     const kinds = byZone.get(zone) ?? new Map<PlaceKind, string[]>();
     kinds.set(place.kind, [...(kinds.get(place.kind) ?? []), place.name]);
     byZone.set(zone, kinds);
@@ -255,7 +259,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     maxRetries: 0,
     abortSignal: AbortSignal.timeout(deps.timeoutMs ?? 14_000),
   });
-  const reply = clampReply(generated.text);
+  const reply = clampReply(scrubReply(generated.text));
   // The guest's own location is context, not a suggestion.
   const cards = cardsForReply(reply, offered, places, anchor, locale).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
   return { reply, cards, toolEvents: events, facts, anchor };

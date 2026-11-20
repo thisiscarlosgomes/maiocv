@@ -15,6 +15,8 @@ import { parseTripPlan } from "../../../lib/trip";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+/** Past this the turn answers with the short fallback (the guide itself is capped near 9s). */
+const PLAN_TURN_MS = Number(process.env.PLAN_TURN_MS) || 25_000;
 
 const BodySchema = z.object({
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(30),
@@ -90,13 +92,18 @@ export async function POST(request: Request) {
       model = mockModel(mockScript(messages, current, maioClock(new Date()).date));
       sideModel = model;
     }
-    const result = await runPlanAgent(messages, current, {
+    // Whole-turn cap, well inside maxDuration: a stuck step answers with the honest fallback instead of hanging.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const capped = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("plan turn timeout")), PLAN_TURN_MS); });
+    const result = await Promise.race([runPlanAgent(messages, current, {
       model,
       sideModel,
       fetchImpl: fetch,
       onReply: (turn) => reviewPlan(turn, data.messages, deps),
       onStatus,
-    }, task);
+    }, task), capped]).finally(() => clearTimeout(timer));
+    // Never send an empty bubble.
+    if (!result.reply.trim()) result.reply = sideQuestionFallback(fallbackLocale);
     const signed = signTask(result.task);
     return { reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps, cards: result.cards ?? [] };
   }

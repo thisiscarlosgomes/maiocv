@@ -50,10 +50,17 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
   const payload = JSON.stringify({ messages, locale, ...(typeof task === "string" ? { task } : {}) });
   if (vercelScope) {
     const { execFile } = await import("node:child_process");
-    const text = await new Promise<string>((resolve, reject) => execFile("vercel", ["curl", `${base}/api/plan`, "--scope", vercelScope, "--", "--silent", "--max-time", "60", "--request", "POST", "--header", "Content-Type: application/json", "--data", payload], { maxBuffer: 4_000_000, timeout: 90_000 }, (error, stdout) => (error && !stdout ? reject(error) : resolve(stdout))));
+    // The CLI can hit Deployment Protection with a stale token (a 401 with no body): retry those, and say so if they persist.
     let body: Record<string, unknown> = {};
-    try { body = JSON.parse(text.slice(text.indexOf("{"))); } catch { /* not JSON */ }
-    return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: body.reply ? 200 : 502 };
+    let code = 0;
+    for (let attempt = 0; attempt < 3 && !body.reply; attempt++) {
+      const text = await new Promise<string>((resolve, reject) => execFile("vercel", ["curl", `${base}/api/plan`, "--scope", vercelScope, "--", "--silent", "--max-time", "60", "--write-out", "\n%{http_code}", "--request", "POST", "--header", "Content-Type: application/json", "--data", payload], { maxBuffer: 4_000_000, timeout: 90_000 }, (error, stdout) => (error && !stdout ? reject(error) : resolve(stdout))));
+      const cut = text.lastIndexOf("\n");
+      code = Number(text.slice(cut + 1).trim()) || 0;
+      try { body = JSON.parse(text.slice(text.indexOf("{"), cut)); } catch { body = {}; }
+      if (code === 200) break;
+    }
+    return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: code || 502 };
   }
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (bypass) { headers["x-vercel-protection-bypass"] = bypass; headers["x-vercel-set-bypass-cookie"] = "true"; }
@@ -64,6 +71,13 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
 
 /** Island and travel geography that is not a listed venue. */
 const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|west coast|south coast|mercado|market|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
+
+/** Never in a reply: a made-up office, raw listing wording, superlatives pinned on "most visitors". Kept in step with lib/visitor/scrub.ts. */
+const LEAKS: [string, RegExp][] = [
+  ["tourist-office", /\btourist (?:office|information)|tourism office|posto de turismo|office de tourisme/i],
+  ["raw-listing", /location not listed|\(listed\)|listed as an? ["“]|"[^"]*not listed[^"]*"|\blisting(?:s)? (?:say|says|show|shows|data)\b/i],
+  ["unsupported-superlative", /\b(?:most|many|all) (?:visitors|people|travell?ers|tourists|guests|locals) (?:call|consider|say|rate|agree|think)|widely (?:considered|regarded)|everyone (?:says|calls|agrees)/i],
+];
 
 let judge: LanguageModel | null = null;
 async function grade(c: VisitorCase, reply: string): Promise<{ answered: boolean; reason: string; places: string[] }> {
@@ -133,7 +147,8 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   try { answer = await ask(messages, locale, task); } catch (error) { return { id: c.id, q: c.q, reply: `ERROR ${(error as Error).message}`, ms: 0, pass: false, fails: ["error"], places: [], cards: [] }; }
   const fails: string[] = [];
   const reply = answer.reply.trim();
-  if (answer.status !== 200 || !reply) fails.push("no-reply");
+  if (answer.status !== 200) fails.push(`http-${answer.status}`);
+  else if (!reply) fails.push("no-reply");
   if (/can't reach the model|não chego ao modelo|n'atteins pas le modèle|could not be reached/i.test(reply)) fails.push("fallback");
   const lead = firstSentence(reply);
   if (lead.endsWith("?")) fails.push("leads-with-question");
@@ -146,10 +161,13 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   for (const name of graded.places) {
     const hit = locate(places, name);
     if (!hit.place && !hit.geography) fails.push(`invented:${name}`);
-    // Two listings can share a name (Cadjetinha Beach in Vila and Morrinho); any in-area twin is fine.
-    const twinOk = hit.place && c.notArea?.length && places.some((other) => other !== hit.place && fold(other.name) === fold(hit.place!.name) && areaOk(other, c.notArea!));
-    if (hit.place && !twinOk && c.notArea?.length && !areaOk(hit.place, c.notArea) && ["food", "bar", "beach", "stay", "shop", "sight"].includes(hit.place.kind)) fails.push(`wrong-area:${name}@${hit.place.zone}`);
+    // Two listings can share a name ("Cadjetinha Beach" in Vila and in Morrinho): any matching listing in the right area is fine.
+    const candidates = hit.place ? places.filter((item) => item === hit.place || findPlace([item], name.replace(/\([^)]*\)/g, " ").trim())) : [];
+    const inArea = !c.notArea?.length || candidates.some((item) => areaOk(item, c.notArea!) || !["food", "bar", "beach", "stay", "shop", "sight"].includes(item.kind));
+    if (hit.place && !inArea) fails.push(`wrong-area:${name}@${hit.place.zone}`);
   }
+  for (const [kind, pattern] of LEAKS) if (pattern.test(reply)) fails.push(`leak:${kind}`);
+  if (c.forbid && c.forbid.test(reply)) fails.push(`forbidden:${c.forbid.source}`);
   return { id: c.id, q: c.q, reply, ms: answer.ms, pass: fails.length === 0, fails, places: graded.places, cards: answer.cards.map((card) => `${card.name}${card.area ? ` (${card.area})` : ""}`) };
 }
 
