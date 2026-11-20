@@ -168,7 +168,13 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   if (CAR.test(lead) && lead.includes("?")) fails.push("car-question-first");
   if (answer.plan) fails.push("started-plan");
   if (c.open && /\b(how many days|quantos dias|combien de jours|which dates|que datas|quelles dates|when do you arrive)\b/i.test(reply)) fails.push("asks-trip-details");
-  if (c.mention && !c.mention.test(fold(reply)) && !c.mention.test(reply)) fails.push(`missing:${c.mention.source}`);
+  if (c.replyLang) {
+    const words = (re: RegExp) => new Set(fold(reply).match(re) ?? []).size;
+    const en = words(/\b(the|and|you|is|are|with|for|to|of|in|it|can|there)\b/g);
+    const pt = words(/\b(o|os|as|e|um|uma|com|para|de|do|da|em|no|na|pode|tem|voce)\b/g);
+    if ((c.replyLang === "en" ? en <= pt : pt <= en)) fails.push(`wrong-language(${c.replyLang})`);
+  }
+    if (c.mention && !c.mention.test(fold(reply)) && !c.mention.test(reply)) fails.push(`missing:${c.mention.source}`);
   const graded = reply ? await grade(c, reply) : { answered: false, reason: "empty", places: [] };
   if (!graded.answered) fails.push(`not-answered(${graded.reason})`);
   const outsideNames = answer.cards.filter((card) => card.source === "google").map((card) => fold(card.name));

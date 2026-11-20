@@ -18,6 +18,8 @@ export type VisitorCase = {
   fallback?: boolean;
   /** The reply must not match this (on top of the leak checks every case gets). */
   forbid?: RegExp;
+  /** The reply must be in this language (an English question on a Portuguese page gets English). */
+  replyLang?: "en" | "pt";
 };
 
 const near = (id: string, q: string, area: string, notArea: string[], extra: Partial<VisitorCase> = {}): VisitorCase => ({ id, q, area, notArea, ...extra });
@@ -171,6 +173,13 @@ export const VISITOR_CASES: VisitorCase[] = [
   // No car hire is in the Maio directory: the guide answers (not a canned line), labelled if it found one outside.
   { id: "fb-car-rental", q: "Where can I rent a car?", fallback: true, mention: /rent|car|hire|aluguer|4x4/i, forbid: /business list has no car-rental listing/i },
   // The Maio API lists a barber (category hairdresser): it must be found, not sent to Google.
-  { id: "fb-listed-hairdresser", q: "Is there a hairdresser on Maio?", mention: /barbearia dad/i, forbid: /google maps|\bsource:/i },
+  { id: "fb-listed-hairdresser", q: "Is there a hairdresser on Maio?", mention: /barbearia dad/i, forbid: /google maps/i },
+  // Step 4: the directory has no location for Barbearia DAD; the reviewed web enrichment does, with its source.
+  { id: "enrich-barber-village", q: "Where is Barbearia DAD?", mention: /calheta/i, forbid: /google maps/i },
+  // Step 4 fixes: an English question on a Portuguese page is answered in English.
+  { id: "en-on-pt-page", q: "Where can we eat in Vila do Maio tonight?", locale: "pt", replyLang: "en", area: "vila", notArea: ["calheta", "morro"] },
+  { id: "en-on-pt-page-beach", q: "Which beach is best for swimming with kids?", locale: "pt", replyLang: "en" },
+  // A named clinic that is not in the Maio data must not be offered as if it were.
+  { id: "guard-clinic", q: "Is there a dental clinic in Vila do Maio?", fallback: true, forbid: /cl[ií]nica dent[aá]ria do maio/i },
   { id: "fb-listed-fish", q: "Where can we eat fish in Calheta?", area: "calheta", mention: /vanuza|anita|belorizonte|cala grande/i, forbid: /google maps|\bsource:/i },
 ];
