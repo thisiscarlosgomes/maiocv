@@ -598,6 +598,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
 
   // Visitor questions (what to do, where to eat near X, how to get here, beaches, no-car days) go to one
   // agent with the Maio background and distance-ranked listings. Plan building and plan edits stay below.
+  // Where the guest is based persists: a named village ("we're staying in Morro", "we moved to Calheta") or a booked listed stay.
+  task = await rememberBase(task, lastUser, offerings);
   const p = classification.patch;
   // An interest or a car answer inside a question ("can I surf?", "no car, where to eat?") is not a plan request.
   const asking = lastUser.includes("?") || /^(?:what|whats|where|which|how|is|are|can|could|should|do|does|any|o que|onde|qual|quais|como|ha|tem|pode|que|ou|quel|quelle|comment|est ce)\b/.test(spoken);
@@ -606,7 +608,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     planShaping: planRequest,
     intent: classification.intent,
     research: classification.research,
-    carPending: isCarPending(task.pendingQuestion) || isCarPending(seeded.pendingQuestion),
+    // A real question while the car question waits is still a question; only a car answer resolves it.
+    carPending: (isCarPending(task.pendingQuestion) || isCarPending(seeded.pendingQuestion)) && !(asking && classification.carStance === null),
     hasPlan: Boolean(current),
     planEdit: Boolean(current && looksLikePlanEdit(lastUser)),
     businessLookup: isBusinessLookup(lastUser),
@@ -640,13 +643,21 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         locale: task.locale,
         car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
         stay: task.constraints.stay ?? null,
-        lastPlaces: [...task.lastPlaces].reverse().map((item) => item.name),
+        lastPlaces: [...task.lastPlaces].reverse().map((item) => (item.area ? `${item.name} (${item.area})` : item.name)),
+        base: task.constraints.base ?? null,
+        party: task.constraints.party ?? null,
+        dates: task.constraints.dates ?? null,
       }, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
       modelMs += Date.now() - v0;
       if (visitor.reply) {
         toolFacts.push(...visitor.facts);
-        const shown = visitor.cards.map((item) => ({ id: item.id.replace(/^visit-maio-|^maio-guide-/, "").slice(0, 80), name: item.name.slice(0, 120), ...(item.area ? { area: item.area } : {}) }));
-        const next = shown.length ? refreshTask({ ...task, lastPlaces: shown }) : task;
+        const shown = visitor.cards.map((item) => ({
+          id: item.id.replace(/^visit-maio-|^maio-guide-/, "").slice(0, 80), name: item.name.slice(0, 120),
+          ...(item.area ? { area: item.area.slice(0, 120) } : {}),
+          ...(item.lat !== null && item.lon !== null ? { lat: item.lat, lon: item.lon } : {}),
+        }));
+        // Newest last, so "the first one" still reads this turn's list; older shown places stay for "those" and the map.
+        const next = shown.length ? refreshTask({ ...task, lastPlaces: [...task.lastPlaces.filter((item) => !shown.some((row) => row.id === item.id)), ...shown].slice(-8) }) : task;
         guideTurn = true;
         const out = finish(visitor.reply, current, visitor.toolEvents.map(({ name, ok }) => ({ name, ok })), next, undefined, shown.length > 0);
         return { ...out, cards: visitor.cards };
@@ -1540,4 +1551,33 @@ function summarize(plan: TripPlan) {
       }),
     })),
   };
+}
+
+/** "We're staying in Morro", "we moved to Calheta", "we booked Casa do Mar": the guest's base for the rest of the chat. */
+async function rememberBase(task: Task, text: string, offerings: () => Promise<{ stays: Stay[] }>): Promise<Task> {
+  const n = normalizeUtterance(text);
+  const booked = n.match(/\b(?:we(?: ve| have)? booked|booked|reservamos|reservei|on a reserve|nous avons reserve)\s+(.{3,80})$/)?.[1]?.replace(/\b(?:for|com|with|avec|para|pour)\b[\s\S]*$/, "").replace(/[,.].*$/, "").trim();
+  if (booked && !task.constraints.stay) {
+    try {
+      const published = matchStay(booked, (await offerings()).stays);
+      if (published) {
+        return refreshTask({ ...task, constraints: { ...task.constraints, stay: {
+          id: published.id, name: published.name,
+          ...(published.area ? { area: published.area } : {}),
+          ...(published.lat !== undefined && published.lon !== undefined ? { lat: published.lat, lon: published.lon } : {}),
+        } } });
+      }
+    } catch { /* no stay saved; the words still anchor this turn */ }
+  }
+  const phrase = n.match(/\b(?:moved|moving|switched|mudamos|mudamo nos|on a demenage|nous avons demenage)\s+(?:\S+\s+)?(?:to|para|pra|a|au|dans)\s+(.{3,60})$/)?.[1]
+    ?? n.match(/\b(?:staying|we re based|we are based|based|sleeping|ficamos|vamos ficar|estamos hospedad\w*|hospedad\w*|on loge|nous logeons|logeons)\b(?:\s+\S+){0,2}?\s+(?:in|at|em|no|na|a|au|dans)\s+(.{3,60})$/)?.[1]
+    ?? n.match(/^(?:we re|we are|i m|i am|estamos|estou|nous sommes|je suis)\s+(?:now\s+|agora\s+)?(?:in|em|no|na|a|au|dans)\s+(.{3,40})$/)?.[1];
+  if (!phrase) return task;
+  const zone = zoneFromText(phrase);
+  if (!zone || zone.id === "airport") return task;
+  const constraints = { ...task.constraints, base: { zoneId: zone.id, name: zone.name, lat: zone.lat, lon: zone.lon } };
+  // A stay in another village no longer says where they are.
+  const stayZone = task.constraints.stay ? zoneFromText(`${task.constraints.stay.area ?? ""} ${task.constraints.stay.name}`) : null;
+  if (task.constraints.stay && stayZone && stayZone.id !== zone.id) delete constraints.stay;
+  return refreshTask({ ...task, constraints });
 }

@@ -11,7 +11,7 @@ import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor,
 
 export type VisitorLocale = "en" | "pt" | "fr";
 export type VisitorTurn = { role: "user" | "assistant"; content: string };
-export type PlaceCard = { id: string; name: string; kind: PlaceKind; area: string | null; km: number | null; walkMin: number | null; driveMin: number | null; image: string | null; approxLocation: boolean };
+export type PlaceCard = { id: string; name: string; kind: PlaceKind; area: string | null; km: number | null; walkMin: number | null; driveMin: number | null; image: string | null; approxLocation: boolean; lat: number | null; lon: number | null };
 export type VisitorContext = {
   locale: VisitorLocale;
   /** Known car answer from the task; null when the guest has not said. */
@@ -20,6 +20,10 @@ export type VisitorContext = {
   stay?: { name: string; area?: string; lat?: number; lon?: number } | null;
   /** Place names last shown to the guest, newest first. */
   lastPlaces?: string[];
+  /** The village the guest is based in, when they named a village rather than a listed stay. */
+  base?: { zoneId: string; name: string; lat: number; lon: number } | null;
+  party?: { adults?: number; kids?: number; youngestAge?: number } | null;
+  dates?: { start?: string; days?: number } | null;
 };
 export type VisitorResult = { reply: string; cards: PlaceCard[]; toolEvents: { name: string; ok: boolean; arguments?: unknown }[]; facts: string[]; anchor: Anchor | null };
 export type VisitorDeps = { model: LanguageModel; fetchImpl: typeof fetch; /** Unbudgeted fetch for the cached place list. */ placesFetch?: typeof fetch; now?: Date; timeoutMs?: number };
@@ -41,6 +45,8 @@ How to answer:
 - Listings have no opening hours, menus, prices or diet flags.
 - Transport times only from get_transport. Weather and sea only from get_maio_weather.
 - When the guest says where they are or are staying, use it as the location for distances for the rest of the chat.
+- "This conversation" below holds what the guest already told you (location, car, party, dates, places shown). Use it; never ask for something already there. Season questions ("will we see turtles?") are answered for their dates.
+- Nearby recommendations stay in the guest's village. Do not add options in another village unless nothing fitting is listed in theirs; then name only the single nearest one with its distance.
 - Reply in the guest's language (English, Portuguese or French). Use the place names as the tools return them.
 - Never mention tools, ids, "the API", "the data", "listings data" or the background document. Say "I don't have that" naturally.
 `.trim();
@@ -67,7 +73,8 @@ export function locationFromConversation(places: Place[], turns: VisitorTurn[], 
   for (const text of users) {
     const n = fold(text);
     // Destinations ("how far is Morro", "go to Calheta") are not where the guest is.
-    const here = n.match(/\b(?:staying|stay|we re|i m|im|we are|i am|based|sleeping|ficamos|ficar|estamos|estou|hospedad\w*|on loge|nous sommes|je suis|logeons)\b(?:\s+\S+){0,2}?\s+(?:in|at|on|near|em|no|na|a|au|dans|pres de|perto de|perto do|perto da)\s+(.{3,60})$/)
+    const here = n.match(/\b(?:moved|moving|switched|mudamos|mudamo nos|nous avons demenage|on a demenage)\s+(?:\S+\s+)?(?:to|para|a|au|dans)\s+(.{3,60})$/)
+      ?? n.match(/\b(?:staying|stay|booked|we re|i m|im|we are|i am|based|sleeping|ficamos|ficar|estamos|estou|hospedad\w*|on loge|nous sommes|je suis|logeons)\b(?:\s+\S+){0,2}?\s+(?:in|at|on|near|em|no|na|a|au|dans|pres de|perto de|perto do|perto da)\s+(.{3,60})$/)
       ?? n.match(/\b(?:near|close to|around|in|perto de|perto do|perto da|em|no|na|pres de|autour de|a cote de)\s+(.{3,40})$/);
     const phrase = here?.[1] ?? null;
     if (phrase) {
@@ -83,6 +90,7 @@ export function locationFromConversation(places: Place[], turns: VisitorTurn[], 
     const anchor = resolveAnchor(places, context.stay.name) ?? resolveAnchor(places, context.stay.area ?? "");
     if (anchor) return { ...anchor, source: "context" };
   }
+  if (context.base) return { name: context.base.name, lat: context.base.lat, lon: context.base.lon, zone: context.base.name, zoneId: context.base.zoneId, source: "context" };
   return null;
 }
 
@@ -101,23 +109,42 @@ export function catalogBlock(places: Place[]): string {
   return `Listed places by nearest village (use places_nearby for distances):\n${lines.join("\n")}`;
 }
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function partyLine(party: VisitorContext["party"]): string {
+  if (!party || (party.adults === undefined && party.kids === undefined)) return "not said";
+  const parts = [party.adults !== undefined ? `${party.adults} adult${party.adults === 1 ? "" : "s"}` : "", party.kids ? `${party.kids} child${party.kids === 1 ? "" : "ren"}${party.youngestAge !== undefined ? ` (youngest ${party.youngestAge})` : ""}` : ""].filter(Boolean);
+  return `${parts.join(", ")}${party.kids ? " — favour calm, shallow, easy places" : ""}`;
+}
+
+function datesLine(dates: VisitorContext["dates"]): string {
+  if (!dates?.start) return dates?.days ? `${dates.days} days, start not said` : "not said";
+  const month = MONTHS[Number(dates.start.slice(5, 7)) - 1];
+  return `arriving ${dates.start}${dates.days ? ` for ${dates.days} days` : ""} (${month}; use this month for season questions)`;
+}
+
 function contextBlock(today: string, context: VisitorContext, anchor: Anchor | null): string {
   const where = anchor ? `${anchor.name}${anchor.zone && anchor.zone !== anchor.name ? ` (${anchor.zone})` : ""}` : "unknown";
   return [
     `Today in Cabo Verde: ${today}.`,
     `Guest language: ${context.locale}.`,
     `Guest location for distances: ${where}.`,
-    `Car: ${context.car === true ? "yes" : context.car === false ? "no car" : "not said"}.`,
-    context.lastPlaces?.length ? `Places shown to the guest last: ${context.lastPlaces.slice(0, 6).join(", ")}.` : "",
+    `Car: ${context.car === true ? "yes" : context.car === false ? "NO car (never suggest driving; give walking, aluguer, taxi or guided-tour options)" : "not said"}.`,
+    `Party: ${partyLine(context.party)}.`,
+    `Dates: ${datesLine(context.dates)}.`,
+    context.lastPlaces?.length ? `Places already shown to the guest, newest first ("those", "the first one" mean these): ${context.lastPlaces.slice(0, 8).join(", ")}.` : "",
   ].filter(Boolean).join("\n");
 }
 
 function card(place: Place | undefined, row: NearbyRow): PlaceCard {
-  return { id: row.id, name: row.name, kind: row.kind, area: row.area, km: row.km, walkMin: row.walkMin, driveMin: row.driveMin, image: place?.image ?? null, approxLocation: row.approxLocation };
+  return { id: row.id, name: row.name, kind: row.kind, area: row.area, km: row.km, walkMin: row.walkMin, driveMin: row.driveMin, image: place?.image ?? null, approxLocation: row.approxLocation, lat: place?.lat ?? null, lon: place?.lon ?? null };
 }
 
 /** Cards for the places the reply actually names, in the order it names them. */
-const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like (?:me|to know)|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|si vous voulez,? je|voulez-vous que)/i;
+const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like (?:me|to know)|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
+
+/** An offer to go and do more, anywhere in a later sentence ("…I can check for monitoring programs, should I look?"). */
+const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|voulez-vous que je|je peux v[ée]rifier)\b/i;
 
 /** Chat-sized: at most three sentences and about 60 words, no trailing offers. The first sentence always stays. */
 export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {
@@ -128,7 +155,7 @@ export function clampReply(text: string, maxWords = 60, maxSentences = 3): strin
   const kept: string[] = [];
   let words = 0;
   for (const sentence of sentences) {
-    if (kept.length && OFFER.test(sentence)) continue;
+    if (kept.length && (OFFER.test(sentence) || OFFER_ANYWHERE.test(sentence))) continue;
     const count = sentence.split(/\s+/).length;
     if (kept.length && (kept.length >= maxSentences || words + count > maxWords)) break;
     kept.push(sentence);
@@ -173,6 +200,27 @@ export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, pl
   kept.sort((a, b) => a.at - b.at);
   const seen = new Set<string>();
   return kept.filter((hit) => !seen.has(hit.card.id) && seen.add(hit.card.id)).slice(0, 4).map((hit) => hit.card);
+}
+
+const NEAR_KINDS = new Set<PlaceKind>(["food", "bar", "beach", "shop"]);
+
+/**
+ * Nearby means the guest's village. When the reply already names a fitting place there, a same-kind place in
+ * another village is dropped from the text (its clause) and from the cards.
+ */
+export function keepToVillage(reply: string, cards: PlaceCard[], anchor: Anchor | null): { reply: string; cards: PlaceCard[]; away: PlaceCard[] } {
+  if (!anchor?.zone) return { reply, cards, away: [] };
+  const home = fold(anchor.zone);
+  const local = (item: PlaceCard) => !item.area || fold(item.area) === home;
+  const inZone = cards.filter((item) => NEAR_KINDS.has(item.kind) && local(item));
+  const sameKind = (a: PlaceKind, b: PlaceKind) => a === b || (a === "bar" && b === "food") || (a === "food" && b === "bar");
+  const away = cards.filter((item) => NEAR_KINDS.has(item.kind) && !local(item) && inZone.some((other) => sameKind(other.kind, item.kind)));
+  if (!inZone.length || !away.length) return { reply, cards, away: [] };
+  const awayNames = away.map((item) => fold(item.name));
+  // Whole sentences only: a sentence that names the other village's place goes, unless it is the opening answer.
+  const sentences = reply.split(/(?<=[.!?])\s+/);
+  const kept = sentences.filter((sentence, index) => index === 0 || !awayNames.some((name) => fold(sentence).includes(name)));
+  return { reply: kept.join(" ").trim() || reply, cards: cards.filter((item) => !away.includes(item)), away };
 }
 
 export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorContext, deps: VisitorDeps): Promise<VisitorResult> {
@@ -277,6 +325,17 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     if (second && !onlyQuestions(second)) reply = second;
   }
   // The guest's own location is context, not a suggestion.
-  const cards = cardsForReply(reply, offered, places, anchor, locale).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
-  return { reply, cards, toolEvents: events, facts, anchor };
+  const cardsFor = (text: string) => cardsForReply(text, offered, places, anchor, locale).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
+  let local = keepToVillage(reply, cardsFor(reply), anchor);
+  // The opening sentence itself sent the guest to another village while theirs has a fitting place: one rewrite if there is time.
+  const left = budget - (Date.now() - started);
+  if (local.away.length && anchor && local.away.some((item) => fold(local.reply).includes(fold(item.name))) && left > 3_000) {
+    const retry = await ask(`\n\n# Correction\nThe guest is in ${anchor.zone}. Your draft also sent them to ${local.away.map((item) => `${item.name} (${item.area})`).join(", ")}. Rewrite naming only places in ${anchor.zone}.`, left - 500).catch(() => null);
+    const second = retry ? clampReply(scrubReply(retry.text)) : "";
+    if (second && !onlyQuestions(second)) {
+      const again = keepToVillage(second, cardsFor(second), anchor);
+      if (!again.away.some((item) => fold(again.reply).includes(fold(item.name)))) local = again;
+    }
+  }
+  return { reply: local.reply, cards: local.cards, toolEvents: events, facts, anchor };
 }

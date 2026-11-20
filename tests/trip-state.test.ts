@@ -42,3 +42,36 @@ test("a new trip idea keeps where the guest sleeps", () => {
   const next = say(base, "Forget the trip, start over.");
   assert.equal(next.constraints.base?.zoneId, "morro");
 });
+
+import { keepToVillage, locationFromConversation, type PlaceCard } from "../lib/visitor/agent.ts";
+
+const card = (name: string, area: string, kind: PlaceCard["kind"] = "food"): PlaceCard => ({ id: name, name, kind, area, km: 1, walkMin: 10, driveMin: 3, image: null, approxLocation: false, lat: 15.2, lon: -23.1 });
+const CALHETA = { name: "Calheta", lat: 15.19, lon: -23.22, zone: "Calheta", zoneId: "calheta", source: "context" as const };
+
+test("nearby stays in the guest's village: a later sentence about another village goes", () => {
+  const reply = "I'd pick Restaurante Bar Anita in Calheta. In Vila, Praça Restaurante has more choice.";
+  const out = keepToVillage(reply, [card("Restaurante Bar Anita", "Calheta"), card("Praça Restaurante", "Vila do Maio")], CALHETA);
+  assert.equal(out.reply, "I'd pick Restaurante Bar Anita in Calheta.");
+  assert.deepEqual(out.cards.map((item) => item.name), ["Restaurante Bar Anita"]);
+});
+
+test("another village is fine when the guest's village has nothing of that kind", () => {
+  const reply = "Calheta has no listed pizza; Big Game Restaurant - Pizzeria in Vila is the nearest.";
+  const out = keepToVillage(reply, [card("Baxona Beach", "Calheta", "beach"), card("Big Game Restaurant - Pizzeria", "Vila do Maio")], CALHETA);
+  assert.equal(out.reply, reply);
+  assert.equal(out.cards.length, 2);
+});
+
+test("the remembered base village anchors distances when the chat no longer mentions it", () => {
+  const anchor = locationFromConversation([], [{ role: "user", content: "Where should we have dinner?" }], { locale: "en", car: null, base: { zoneId: "morro", name: "Morro", lat: 15.18, lon: -23.2 } });
+  assert.equal(anchor?.zoneId, "morro");
+});
+
+test("moving village in the chat beats the older one", () => {
+  const anchor = locationFromConversation([], [
+    { role: "user", content: "We're staying in Vila do Maio." },
+    { role: "user", content: "Actually we moved to Calheta today." },
+    { role: "user", content: "Where can we get dinner close by?" },
+  ], { locale: "en", car: null });
+  assert.equal(anchor?.zoneId, "calheta");
+});

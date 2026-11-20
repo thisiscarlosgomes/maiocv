@@ -132,6 +132,7 @@ test("replies are clamped to chat size and drop trailing offers", () => {
   assert.equal(clampReply("One. Two is 2.5 km away. Three? Four."), "One. Two is 2.5 km away. Three?");
   const long = Array.from({ length: 5 }, (_, i) => `Sentence ${i} has exactly some twenty words in it to push the total count well past the sixty word limit ok.`).join(" ");
   assert.ok(clampReply(long).split(/\s+/).length <= 60);
+  assert.equal(clampReply("December is outside the season. If you want turtle visits I can check for monitoring programs, should I look?"), "December is outside the season.");
   assert.equal(clampReply("Windy day? Head into Vila for the fort."), "Head into Vila for the fort.");
   assert.equal(clampReply("Is it safe?"), "Is it safe?");
   assert.ok(clampReply("**Best:** Baxona Beach.\n- calm water").startsWith("Best: Baxona Beach."));
