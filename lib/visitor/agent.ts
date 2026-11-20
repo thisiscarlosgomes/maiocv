@@ -121,7 +121,17 @@ function partyLine(party: VisitorContext["party"]): string {
 function datesLine(dates: VisitorContext["dates"]): string {
   if (!dates?.start) return dates?.days ? `${dates.days} days, start not said` : "not said";
   const month = MONTHS[Number(dates.start.slice(5, 7)) - 1];
-  return `arriving ${dates.start}${dates.days ? ` for ${dates.days} days` : ""} (${month}; use this month for season questions)`;
+  return `arriving ${dates.start}${dates.days ? ` for ${dates.days} days` : ""} (${month}). ${seasonCheck(dates.start)}`;
+}
+
+/** Season facts from the background, decided in code for the guest's month so the model cannot flip them. */
+export function seasonCheck(start: string): string {
+  const m = Number(start.slice(5, 7));
+  const month = MONTHS[m - 1];
+  const turtles = m >= 6 && m <= 10 ? `${month} IS in turtle nesting season (June–October)` : `${month} is OUTSIDE turtle nesting season (June–October); nesting turtles are unlikely`;
+  const whales = m === 4 || m === 5 ? `${month} is peak humpback whale time (April–May)` : m === 3 || m === 6 ? `${month} is at the edge of humpback whale time (best April–May)` : `${month} is outside the usual humpback whale months (April–May)`;
+  const wind = m === 12 || m <= 4 ? `${month} is in the windy season (about December–April; good for kite, rougher exposed coasts)` : `${month} is outside the strongest trade-wind months (about December–April)`;
+  return `Season check for their dates: ${turtles}; ${whales}; ${wind}.`;
 }
 
 function contextBlock(today: string, context: VisitorContext, anchor: Anchor | null): string {

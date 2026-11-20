@@ -100,3 +100,12 @@ test("a fifth place in another village is still caught, and 'Morro's' is the vil
   assert.ok(!/Caminhada/.test(out.reply), out.reply);
   assert.deepEqual(out.cards.map((item) => item.name), ["Belorizonte", "Bar restaurante Vanuza", "Cala Grande, Lda"]);
 });
+
+import { seasonCheck } from "../lib/visitor/agent.ts";
+
+test("season facts for the guest's month are decided in code", () => {
+  assert.match(seasonCheck("2026-12-12"), /December is OUTSIDE turtle nesting season/);
+  assert.match(seasonCheck("2027-08-01"), /August IS in turtle nesting season/);
+  assert.match(seasonCheck("2027-04-10"), /April is peak humpback whale time/);
+  assert.match(seasonCheck("2027-03-10"), /March is at the edge of humpback whale time/);
+});
