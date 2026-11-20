@@ -181,7 +181,8 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   const graded = reply ? await grade(c, reply) : { answered: false, reason: "empty", places: [] };
   if (!graded.answered) fails.push(`not-answered(${graded.reason})`);
   const outsideNames = answer.cards.filter((card) => card.source === "google").map((card) => fold(card.name));
-  const labelled = LABELLED.test(reply) || answer.sources.some((item) => fold(reply).includes(fold(item.label)));
+  // "per MapQuest" names the source mapquest.com.
+  const labelled = LABELLED.test(reply) || answer.sources.some((item) => fold(reply).includes(fold(item.label)) || (fold(item.label.split(".")[0]).length >= 4 && fold(reply).includes(fold(item.label.split(".")[0]))));
   const cited = answer.sources.length > 0 && labelled;
   if (c.fallback && !labelled && !HONEST.test(reply)) fails.push("fallback-unlabelled");
   if (answer.sources.length && !labelled) fails.push("source-not-in-reply");
