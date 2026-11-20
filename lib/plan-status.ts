@@ -321,6 +321,8 @@ export type PlanResultBody = {
   cards?: unknown;
   /** Where distances on the cards are measured from (the guest's stay or village). */
   here?: unknown;
+  /** Outside sources the reply used (Google Maps, web pages). */
+  sources?: unknown;
   error?: unknown;
 };
 

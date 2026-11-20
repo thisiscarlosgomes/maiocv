@@ -7,11 +7,14 @@ import { loadTimetable } from "../timetable.ts";
 import { scrubReply } from "./scrub.ts";
 import { MAIO_BACKGROUND } from "./background.ts";
 import { fold, zoneFromText, ZONES } from "./geo.ts";
+import { fallbackConfig, searchBeyondListings, type FallbackEnv, type FallbackHit } from "./fallback.ts";
 import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor, type NearbyRow, type Place, type PlaceKind } from "./places.ts";
 
 export type VisitorLocale = "en" | "pt" | "fr";
 export type VisitorTurn = { role: "user" | "assistant"; content: string };
-export type PlaceCard = { id: string; name: string; kind: PlaceKind; area: string | null; km: number | null; walkMin: number | null; driveMin: number | null; image: string | null; approxLocation: boolean; lat: number | null; lon: number | null };
+export type PlaceCard = { id: string; name: string; kind: PlaceKind; area: string | null; km: number | null; walkMin: number | null; driveMin: number | null; image: string | null; approxLocation: boolean; lat: number | null; lon: number | null; /** Absent = Maio listings. */ source?: "google"; url?: string | null };
+/** Outside sources the reply used, shown under it. */
+export type ReplySource = { label: string; url: string | null; kind: "google" | "web" };
 export type VisitorContext = {
   locale: VisitorLocale;
   /** Known car answer from the task; null when the guest has not said. */
@@ -25,8 +28,8 @@ export type VisitorContext = {
   party?: { adults?: number; kids?: number; youngestAge?: number } | null;
   dates?: { start?: string; days?: number } | null;
 };
-export type VisitorResult = { reply: string; cards: PlaceCard[]; toolEvents: { name: string; ok: boolean; arguments?: unknown }[]; facts: string[]; anchor: Anchor | null };
-export type VisitorDeps = { model: LanguageModel; fetchImpl: typeof fetch; /** Unbudgeted fetch for the cached place list. */ placesFetch?: typeof fetch; now?: Date; timeoutMs?: number };
+export type VisitorResult = { reply: string; cards: PlaceCard[]; sources: ReplySource[]; toolEvents: { name: string; ok: boolean; arguments?: unknown }[]; facts: string[]; anchor: Anchor | null };
+export type VisitorDeps = { model: LanguageModel; fetchImpl: typeof fetch; /** Unbudgeted fetch for the cached place list. */ placesFetch?: typeof fetch; now?: Date; timeoutMs?: number; /** Keys for the outside lookup; defaults to process.env. */ env?: FallbackEnv };
 
 /** Static first, so the provider can cache the prefix across turns. */
 export const VISITOR_RULES = `
@@ -51,6 +54,11 @@ How to answer:
 - Reply in the guest's language (English, Portuguese or French). Use the place names as the tools return them.
 - Never mention tools, ids, "the API", "the data", "listings data" or the background document. Say "I don't have that" naturally.
 `.trim();
+
+/** Added only when an outside lookup is configured; without keys the guide never hears of it. */
+export const FALLBACK_RULE = `
+# Beyond the listings
+Only when the listed places, place_details and find_business have nothing that fits (a dentist, yoga, a laundry, a hairdresser…), call search_beyond_listings once. Listed places always come first. Name what it finds with its source right after the name: "(Google Maps)" or "(source: <site>)". Opening hours and prices from it are unknown. If it finds nothing, say plainly you don't have it and suggest asking the stay or locals.`;
 
 const KIND_ALIASES: Record<string, PlaceKind[]> = {
   food: ["food"], eat: ["food"], restaurant: ["food"], lunch: ["food"], dinner: ["food"], breakfast: ["food"], bar: ["bar"], drinks: ["bar"], nightlife: ["bar"],
@@ -80,9 +88,15 @@ export function locationFromConversation(places: Place[], turns: VisitorTurn[], 
     const phrase = here?.[1] ?? null;
     if (phrase) {
       const anchor = resolveAnchor(places, phrase);
-      if (anchor) return anchor;
+      // "near Calheta" from a guest staying at Casa do Mar (Calheta) still measures from Casa do Mar.
+      if (anchor) return originFor(anchor, stayAnchor(places, context));
     }
   }
+  return stayAnchor(places, context);
+}
+
+/** The saved stay (or village) as an anchor, without reading the conversation. */
+function stayAnchor(places: Place[], context: VisitorContext): Anchor | null {
   if (context.stay?.lat !== undefined && context.stay?.lon !== undefined) {
     const zone = zoneFromText(context.stay.area ?? context.stay.name);
     return { name: context.stay.name, lat: context.stay.lat, lon: context.stay.lon, zone: zone?.name ?? context.stay.area ?? "", zoneId: zone?.id ?? "", source: "context" };
@@ -155,11 +169,11 @@ function card(place: Place | undefined, row: NearbyRow): PlaceCard {
 const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like (?:me|to know)|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
 
 /** An offer to go and do more, anywhere in a later sentence ("…I can check for monitoring programs, should I look?"). */
-const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|voulez-vous que je|je peux v[ée]rifier)\b/i;
+const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|posso procurar|voulez-vous que je|je peux v[ée]rifier)\b/i;
 
 /** Chat-sized: at most three sentences and about 60 words, no trailing offers. The first sentence always stays. */
 export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {
-  const flat = text.replace(/\*\*|__|^#+\s*/gm, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim();
+  const flat = text.replace(/[\u2010\u2011]/g, "-").replace(/\*\*|__|^#+\s*/gm, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim();
   const sentences = flat.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
   // "Windy day? Head into…": a short echo of the question is not an answer.
   if (sentences.length > 1 && /\?$/.test(sentences[0]) && sentences[0].split(/\s+/).length <= 4) sentences.shift();
@@ -251,6 +265,49 @@ export function withNoCarAccess(reply: string, cards: PlaceCard[], context: Pick
   return `${reply} ${NO_CAR_LINE[context.locale === "pt" || context.locale === "fr" ? context.locale : "en"]}`;
 }
 
+/**
+ * Where distances are measured from. A known stay wins over its own village: "near Calheta" from a guest staying
+ * at Casa do Mar (Calheta) is measured from Casa do Mar, so the minutes match every turn. A different place or
+ * village the guest asks about ("near Praia Real") is used as asked.
+ */
+export function originFor(asked: Anchor | null, known: Anchor | null): Anchor | null {
+  if (!asked) return known;
+  if (!known) return asked;
+  if (asked.source === "village" && known.source !== "village" && asked.zoneId && asked.zoneId === known.zoneId) return known;
+  if (fold(asked.name) === fold(known.name)) return known;
+  return asked;
+}
+
+const ISLAND_NAMES = /^(?:ilha do |island of |the )?(?:maio|maio island|ilha do maio|cabo verde|cape verde|cap vert|porto ingles|vila do maio)(?: island| cabo verde| cape verde)?$/;
+function isGeographyName(name: string): boolean {
+  const n = fold(name);
+  return ISLAND_NAMES.test(n) || ZONES.some((zone) => fold(zone.name) === n || zone.aliases.includes(n));
+}
+
+/** Outside results the reply actually used get a source label, a card (Google, with coordinates) or a citation. */
+export function labelOutsideSources(reply: string, hits: FallbackHit[]): { reply: string; cards: PlaceCard[]; sources: ReplySource[] } {
+  const text = fold(reply);
+  const cards: PlaceCard[] = [];
+  const sources: ReplySource[] = [];
+  let out = reply;
+  for (const [index, hit] of hits.entries()) {
+    // A page titled "Maio" or "Cape Verde" is not named by a reply that mentions the island.
+    const generic = isGeographyName(hit.name) || (hit.source === "web" && fold(hit.name).split(" ").length < 2);
+    const named = !generic && fold(hit.name).length >= 3 && text.includes(fold(hit.name));
+    const cited = hit.source === "web" && text.includes(fold(hit.sourceLabel));
+    if (!named && !cited) continue;
+    if (hit.source === "google") {
+      if (!/google maps/i.test(out)) out = `${out.replace(/\s+$/, "")} Source: Google Maps.`;
+      cards.push({ id: `google-${index}-${fold(hit.name).replace(/\s+/g, "-").slice(0, 40)}`, name: hit.name, kind: "shop", area: hit.area, km: hit.km, walkMin: hit.walkMin, driveMin: hit.driveMin, image: null, approxLocation: hit.km === null, lat: hit.lat, lon: hit.lon, source: "google", url: hit.url });
+      if (!sources.some((item) => item.kind === "google")) sources.push({ label: "Google Maps", url: hit.url, kind: "google" });
+    } else {
+      if (!fold(out).includes(fold(hit.sourceLabel))) out = `${out.replace(/\s+$/, "")} Source: ${hit.sourceLabel}.`;
+      if (!sources.some((item) => item.url === hit.url)) sources.push({ label: hit.sourceLabel, url: hit.url, kind: "web" });
+    }
+  }
+  return { reply: out, cards, sources };
+}
+
 export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorContext, deps: VisitorDeps): Promise<VisitorResult> {
   const now = deps.now ?? new Date();
   const today = maioClock(now).date;
@@ -260,6 +317,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   const events: VisitorResult["toolEvents"] = [];
   const facts: string[] = [];
   const offered = new Map<string, PlaceCard>();
+  const outside: FallbackHit[] = [];
   const locale = context.locale === "pt" ? "pt" : "en";
   const note = <T,>(name: string, args: unknown, ok: boolean, payload: T): T => {
     events.push({ name, ok, arguments: args });
@@ -267,7 +325,8 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     return payload;
   };
 
-  const tools = {
+  const outsideOn = (() => { const config = fallbackConfig(deps.env); return config.google || config.parallel; })();
+  const baseTools = {
     places_nearby: tool({
       description: "Listed places on Maio sorted by distance (computed) from a location. Use for anything near/around/in a village, and for 'where to eat/swim/stay/go'. Returns distance, walking and driving minutes. Categories: food, bar, beach, stay, experience, sight, nature, village, shop.",
       inputSchema: z.object({
@@ -278,7 +337,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       }),
       execute: async ({ categories, near, car, limit }) => {
         const asked = near ? resolveAnchor(places, near) : null;
-        const from = asked ?? anchor;
+        const from = originFor(asked, anchor);
         if (asked && !anchor) anchor = asked;
         const result = nearby(places, { kinds: kindsFrom(categories), anchor: from, car: car ?? context.car, limit: limit ?? 5, locale });
         for (const row of result.results) offered.set(row.id, card(byId.get(row.id), row));
@@ -330,8 +389,31 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       },
     }),
   };
+  const tools = outsideOn ? { ...baseTools, search_beyond_listings: tool({
+      description: "Last resort when listed places, place_details and find_business have nothing that fits. Checks the Maio listings once more, then Google Maps on Maio, then the web with citations. Results are NOT Maio listings and must be labelled with their source.",
+      inputSchema: z.object({ query: z.string().min(3).max(80).describe("What the guest needs, short: \"dentist\", \"yoga class\", \"SIM card\"") }),
+      execute: async ({ query }) => {
+        // The Maio API stays the source of truth: a listed match ends the search here.
+        const listed = findPlace(places, query);
+        const catalog = await loadBusinesses(deps.fetchImpl).catch(() => null);
+        const businesses = catalog ? searchBusinesses(catalog.records, query).slice(0, 4) : [];
+        if (listed || businesses.length) {
+          if (listed) {
+            const row = nearby([listed], { kinds: [], anchor, car: true, limit: 1, locale }).results[0];
+            if (row) offered.set(listed.id, card(listed, row));
+          }
+          return note("search_beyond_listings", { query }, true, { listed: true, places: listed ? [{ name: listed.name, area: listed.zone }] : [], businesses: businesses.map((row) => ({ name: row.name, phone: row.phone || null, location: row.location || null })), note: "These are in the Maio listings; use them and do not search further." });
+        }
+        const result = await searchBeyondListings(query, { fetchImpl: deps.fetchImpl, near: anchor, deadline: started + budget, env: deps.env });
+        outside.push(...result.hits);
+        return note("search_beyond_listings", { query }, result.hits.length > 0, {
+          listed: false, source: result.source, note: result.note,
+          results: result.hits.map((hit) => ({ name: hit.name, source: hit.sourceLabel, address: hit.address, area: hit.area, walkMin: hit.walkMin, driveMin: hit.driveMin, snippet: hit.snippet })),
+        });
+      },
+    }) } : baseTools;
 
-  const system = `${VISITOR_RULES}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}`;
+  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}`;
   const started = Date.now();
   const budget = deps.timeoutMs ?? 14_000;
   const ask = (extra: string, timeoutMs: number) => generateText({
@@ -365,6 +447,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       if (!again.away.some((item) => fold(again.reply).includes(fold(item.name)))) local = again;
     }
   }
-  const cards = local.cards.slice(0, 4);
-  return { reply: withNoCarAccess(local.reply, cards, context), cards, toolEvents: events, facts, anchor };
+  const labelled = labelOutsideSources(local.reply, outside);
+  const cards = [...local.cards, ...labelled.cards].slice(0, 4);
+  return { reply: withNoCarAccess(labelled.reply, cards, context), cards, sources: labelled.sources, toolEvents: events, facts, anchor };
 }
