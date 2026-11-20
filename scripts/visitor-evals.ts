@@ -73,6 +73,9 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
   return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], sources: Array.isArray(body.sources) ? body.sources as Source[] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: response.status };
 }
 
+const { MAIO_BACKGROUND } = await import("../lib/visitor/background.ts");
+const BACKGROUND_FOLDED = fold(MAIO_BACKGROUND);
+
 /** Island and travel geography that is not a listed venue. */
 const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|north-facing coasts?|north-facing|town square|main square|the square|west coast|south coast|north coast beaches|northern beaches|mercado|market|marche|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
 
@@ -110,9 +113,11 @@ const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
   const name = raw.replace(/[\u2010-\u2015]/g, "-").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/centro de sa[uú]de|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
+  if (/centro de sa[uú]de|centro interpretativo|business directory|directory|(?:vila|town|local|municipal|calheta|morro) market|^market$|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
+  // Named in the island background the guide is given (forts, churches, salt pans…): not an invention.
+  if (fold(name).length >= 5 && BACKGROUND_FOLDED.includes(fold(name))) return { place: null, geography: true };
   const n = fold(name);
   const alias = ZONES.some((zone) => zone.aliases.includes(n.replace(/^(?:the|village of|villages of|city of|town of|vila de)\s+/, "")) || fold(zone.name) === n);
   if (alias || GEOGRAPHY.test(n)) return { place: null, geography: true };
