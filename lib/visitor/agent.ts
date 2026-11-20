@@ -413,7 +413,9 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
         // The Maio API stays the source of truth: a listed match ends the search here.
         const listed = findPlace(places, query);
         const catalog = await loadBusinesses(deps.fetchImpl).catch(() => null);
-        const businesses = catalog ? searchBusinessesByNeed(catalog.records, query).slice(0, 4) : [];
+        // Car hire only counts when it is car hire ("Big Game Rental Quad" rents quads, not cars).
+        const carHire = /\b(car|cars|rent a car|car rental|car hire|aluguer de carro|alugar carro|location de voiture|voiture|carro|4x4|jeep)\b/i.test(query);
+        const businesses = catalog ? (carHire ? carRentalRecords(catalog.records) : searchBusinessesByNeed(catalog.records, query)).slice(0, 4) : [];
         if (listed || businesses.length) {
           if (listed) {
             const row = nearby([listed], { kinds: [], anchor, car: true, limit: 1, locale }).results[0];

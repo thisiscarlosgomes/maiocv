@@ -623,7 +623,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       || Boolean(classification.patch.diet || classification.patch.budget)
       || (isTravelLookup(lastUser) && !LONG_HAUL.test(spoken))
       || /\b(in the air|flight status|estado do voo|praia flight|is there a ferry|ha barco|y a-t-il un ferry|ferry timetable|horario do barco|horaire du ferry|next (?:ferry|boat|flight|sailing)|proximo (?:voo|barco|ferry)|prochain (?:vol|ferry|bateau))\b/.test(spoken)
-      || (isCarRentalQuestion(lastUser) && !/\b(?:what is|what s|o que e|qu est ce)\b/.test(spoken)) || isFourByFourQuestion(lastUser) || isSunsetClockQuestion(lastUser)
+      // Car rental goes to the guide: it checks the Maio directory first, then the outside fallback when keys are set.
+      || isFourByFourQuestion(lastUser) || isSunsetClockQuestion(lastUser)
       || /\b(?:surfboard|board rental|rent a board|aluguer de prancha|louer une planche|prancha|planche)\b/.test(spoken)
       || (isStayQuestion(lastUser) && !zoneFromText(lastUser) && !/\b(quiet|calm|best|better|kids|family|sossegad|calme|meilleur|eat|food|restaurant|lunch|dinner|breakfast|drink|swim|walk|comer|manger)\b/.test(spoken)) || (isStayDetailQuestion(lastUser, task.constraints.stay?.name) && !/\b(eat|food|restaurant|lunch|dinner|breakfast|drink|bar|beach|swim|walk|near|nearby|close|comer|praia|perto|manger|plage|pres)\b/.test(spoken))
       || Boolean(current && answerAboutPlan(current, lastUser)),
@@ -671,12 +672,15 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     } catch (error) {
       console.warn(`plan.visitor failed: ${error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown"}`);
       // A slow or failed guide turn still answers, without a second model wait, and keeps to the guest's village.
+      // Car hire falls through to the directory answer below.
+      if (!isCarRentalQuestion(lastUser)) {
       const local = villageBackup(lastUser, visitorContext, await loadPlaces(rootFetch).catch(() => []));
       if (local) return { ...finish(local.reply, current, [], task, undefined, true), cards: local.cards, sources: [], here: { name: local.anchor.name, lat: local.anchor.lat, lon: local.anchor.lon } };
       const listed = answerPlaceList(lastUser, task.locale);
       if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, undefined);
       const grounded = answerIslandQuestion(lastUser, task.locale);
       return finish(grounded ?? sideQuestionFallback(task.locale), current, [], task);
+      }
     }
   }
 
