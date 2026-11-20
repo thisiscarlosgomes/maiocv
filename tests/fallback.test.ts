@@ -195,3 +195,15 @@ test("offers to search further are dropped, the useful part stays", async () => 
   assert.equal(clampReply("No studio is listed. Ask your stay or Onda Azul Maio; sinon je peux chercher au-delà des listes."), "No studio is listed. Ask your stay or Onda Azul Maio.");
   assert.equal(clampReply("I don't have a dentist listed. Ask the health centre in Vila. Would you like the health centre phone number?"), "I don't have a dentist listed. Ask the health centre in Vila.");
 });
+
+test("a need matches Maio business categories before anything goes outside", async () => {
+  const { searchBusinessesByNeed } = await import("../lib/maio-catalog.ts");
+  const records = [
+    { id: "1", name: "Barbearia DAD", phone: "", location: "Vila do Maio", category: "hairdresser" },
+    { id: "2", name: "Casa Blanca Supermarket", phone: "", location: "Vila do Maio", category: "supermarket" },
+  ];
+  assert.deepEqual(searchBusinessesByNeed(records, "hairdresser").map((row) => row.name), ["Barbearia DAD"]);
+  assert.deepEqual(searchBusinessesByNeed(records, "cabeleireiro").map((row) => row.name), ["Barbearia DAD"]);
+  assert.deepEqual(searchBusinessesByNeed(records, "groceries").map((row) => row.name), ["Casa Blanca Supermarket"]);
+  assert.deepEqual(searchBusinessesByNeed(records, "dentist"), []);
+});

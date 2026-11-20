@@ -1,7 +1,7 @@
 import { generateText, stepCountIs, tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import { maioClock } from "../agora.ts";
-import { carRentalRecords, loadBusinesses, searchBusinesses } from "../maio-catalog.ts";
+import { carRentalRecords, loadBusinesses, searchBusinessesByNeed } from "../maio-catalog.ts";
 import { readWeather } from "../maio-chat-tools.ts";
 import { loadTimetable } from "../timetable.ts";
 import { scrubReply } from "./scrub.ts";
@@ -384,11 +384,11 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       },
     }),
     find_business: tool({
-      description: "Search the Maio business directory by name or need: car rental, pharmacy, supermarket, bank, a named business. Phones only as published.",
+      description: "Search the Maio business directory by name or need: car rental, pharmacy, supermarket, market, hairdresser/barber, tours, water sports, a named business. Phones only as published.",
       inputSchema: z.object({ query: z.string().min(3).max(60) }),
       execute: async ({ query }) => {
         const catalog = await loadBusinesses(deps.fetchImpl);
-        const rows = /\b(car|rent|rental|aluguer|alugar|location|voiture|carro)\b/i.test(query) ? carRentalRecords(catalog.records) : searchBusinesses(catalog.records, query);
+        const rows = /\b(car|rent|rental|aluguer|alugar|location|voiture|carro)\b/i.test(query) ? carRentalRecords(catalog.records) : searchBusinessesByNeed(catalog.records, query);
         return note("find_business", { query }, catalog.source === "api", { results: rows.slice(0, 6).map((row) => ({ name: row.name, phone: row.phone || null, location: row.location || null, category: row.category })) });
       },
     }),
@@ -400,7 +400,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
         // The Maio API stays the source of truth: a listed match ends the search here.
         const listed = findPlace(places, query);
         const catalog = await loadBusinesses(deps.fetchImpl).catch(() => null);
-        const businesses = catalog ? searchBusinesses(catalog.records, query).slice(0, 4) : [];
+        const businesses = catalog ? searchBusinessesByNeed(catalog.records, query).slice(0, 4) : [];
         if (listed || businesses.length) {
           if (listed) {
             const row = nearby([listed], { kinds: [], anchor, car: true, limit: 1, locale }).results[0];
