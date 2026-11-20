@@ -147,6 +147,8 @@ test("scrub drops a made-up tourist office, raw listing wording and borrowed sup
   assert.equal(scrubReply("Morro Beach is walkable. Note the listing says the sea there can make swimming unsafe."), "Morro Beach is walkable. Note the sea there can make swimming unsafe.");
   assert.equal(scrubReply("Restaurante Bar Anita — the local listing shows it as a Calheta restaurant."), "Restaurante Bar Anita — it is a Calheta restaurant.");
   assert.equal(scrubReply("Most visitors without a car also stay in Vila do Maio."), "You can also stay in Vila do Maio.");
+  assert.equal(scrubReply("Boats leave from the port in Vila — look for operators listed as Big Game Sport Fishing in the island listings."), "Boats leave from the port in Vila — look for Big Game Sport Fishing.");
+  assert.equal(scrubReply("There is no tourist office listed on Maio; book with J&Tour or Eco Tour."), "There is no tourist office listed on Maio; book with J&Tour or Eco Tour.");
   assert.equal(scrubReply("Ring them directly; the phone is not listed."), "Ring them directly; the phone is not listed.");
   assert.equal(scrubReply("Baxona Beach in Calheta has very calm water."), "Baxona Beach in Calheta has very calm water.");
 });

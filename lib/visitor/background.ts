@@ -83,6 +83,11 @@ Rule of thumb for "nearby": in Vila, nearby means walkable in town (under ~20 mi
 - Water: drink bottled or treated water (general advice).
 - Sun and sea: strong sun, few shaded beaches, some beaches with dangerous currents (see above).
 
+## Booking tours and activities
+- No tourist office or tourist information point is listed for Maio in the Maio API. Do not send guests to one.
+- Tours and activities are booked directly with the listed operators or through the guest's stay. Listed operators (Maio API experiences): J&Tour and Eco Tour (island and nature trips), Big Game Sport Fishing (sport fishing), Onda Azul Maio in Vila do Maio (sea experiences), Big Game Rental Quad (quads), Jet Ski. Their village and exact departure points are not in the API; say to confirm the meeting point with the operator.
+- The island's port and harbour is in Vila do Maio (Porto Inglês); that is the natural base for boat trips, but a specific operator's departure point is not listed.
+
 ## What a first-time guest usually loves (for "what's the best thing to do")
 1. A long, almost-empty beach day: Praia Real or Porto Cais in the north (shallow, calm), or Cadjetinha/Bitche Rotcha in Vila without a car.
 2. The Dunes of Morrinho and the north (Norte da Ilha do Maio Natural Park) — a 4×4 or guided tour is easiest.

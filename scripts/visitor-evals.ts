@@ -10,6 +10,7 @@ import { generateText, type LanguageModel } from "ai";
 import { writeFileSync } from "node:fs";
 import { languageModel } from "../lib/ai-model.ts";
 import { fold, haversineKm, ZONES } from "../lib/visitor/geo.ts";
+import { sendsToOffice } from "../lib/visitor/scrub.ts";
 import { findPlace, loadPlaces, type Place } from "../lib/visitor/places.ts";
 import { VISITOR_CASES, type VisitorCase } from "../tests/visitor-evals/questions.ts";
 
@@ -74,7 +75,7 @@ const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of
 
 /** Never in a reply: a made-up office, raw listing wording, superlatives pinned on "most visitors". Kept in step with lib/visitor/scrub.ts. */
 const LEAKS: [string, RegExp][] = [
-  ["tourist-office", /\btourist (?:office|information)|tourism office|posto de turismo|office de tourisme/i],
+  ["tourist-office", { test: (reply: string) => reply.split(/(?<=[.!?])\s+/).some(sendsToOffice) } as RegExp],
   ["raw-listing", /location not listed|\(listed\)|listed as an? ["“]|"[^"]*not listed[^"]*"|\blisting(?:s)? (?:say|says|show|shows|data)\b/i],
   ["unsupported-superlative", /\b(?:most|many|all) (?:visitors|people|travell?ers|tourists|guests|locals) (?:call|consider|say|rate|agree|think)|widely (?:considered|regarded)|everyone (?:says|calls|agrees)/i],
 ];
@@ -106,7 +107,7 @@ const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
   const name = raw.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital/i.test(name)) return { place: null, geography: true };
+  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|harbou?r|\bport\b|porto ingl|\bpier\b/i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
   const n = fold(name);
