@@ -8,6 +8,7 @@ import { scrubReply } from "./scrub.ts";
 import { MAIO_BACKGROUND } from "./background.ts";
 import { fold, zoneFromText, ZONES } from "./geo.ts";
 import { dropUnknownNames, knownText } from "./names.ts";
+import { citeWebFacts, webFacts, type WebFacts } from "./enrichment.ts";
 import { fallbackConfig, searchBeyondListings, type FallbackEnv, type FallbackHit } from "./fallback.ts";
 import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor, type NearbyRow, type Place, type PlaceKind } from "./places.ts";
 
@@ -41,7 +42,7 @@ How to answer:
 - Do not start a trip plan unless the guest asks for one (dates, "plan my days", "itinerary"). An open question such as "what's the best thing to do in Maio?" gets a thoughtful, opinionated answer with one or two highlights, not a plan and not a question back.
 - Never open with a question, and never start by repeating the guest's question back ("Windy day?"). Do not ask whether they have a car unless the answer truly depends on it, and then answer for both cases first. Ask at most ONE short follow-up, only when it changes the advice, as the last sentence. Never end with an offer ("Would you like…", "Do you want…", "I can check…"). A follow-up question is allowed only when you could not give a useful answer without it.
 - Nearby means the same village or area. Use places_nearby for anything "near", "close", "around", "in <village>", "where to eat/swim/stay". Recommend the nearest results first and give the distance exactly as places_nearby returns it ("3 min walk", not a made-up range) as walking minutes (no car / in town) or driving minutes (car). If nothing is listed close by, say so plainly and name the nearest with its distance. Never present a place in another village (e.g. Vila do Maio for someone in Calheta) as "nearby".
-- Name only places, restaurants, stays, operators and businesses from "Listed places" below, a tool result, or the background. If a name is not there, it does not exist for you. For open questions without a location, pick from the background highlights and the listed places. Never invent a venue, phone number, price, opening hour, menu or timetable. If a detail is not in the data, say it is not listed and suggest asking the place or locals.
+- Name only places, restaurants, stays, operators and businesses from "Listed places" below, a tool result, or the background. If a name is not there, it does not exist for you. For open questions without a location, pick from the background highlights and the listed places. Never invent a venue, phone number, price, opening hour, menu or timetable. If a detail is not in the data, say it is not listed and suggest asking the place or locals. A "fromWeb" value (or "per <site>" in the directory) comes from a public web page, not the Maio listings: give it with its source, e.g. "open 7:00–23:00 (per biggamemaio.com)".
 - Describe a place only with what its summary or the background says (do not call a beach calm, a restaurant cheap, good for breakfast, or a view stunning unless that is in the data).
 - Never mention a tourist office or tourist information point: none is listed. When asked about tours or a tourist office, say none is listed and name the listed tour operators to book with, or say to ask the stay.
 - Never quote listing wording or labels ("location not listed", "listed as", "(listed)"), and never say "the listing says/shows"; just state the fact. If a place's village is not given, just do not say where it is.
@@ -126,13 +127,16 @@ export function catalogBlock(places: Place[]): string {
 }
 
 /** Services from the Maio business directory that are not already listed places ("hairdresser: Barbearia DAD"). */
-export function directoryBlock(records: { name: string; category: string }[], places: Place[]): string {
+export function directoryBlock(records: { name: string; category: string; location?: string | null; phone?: string | null }[], places: Place[]): string {
   if (!records.length) return "";
   const known = new Set(places.map((place) => fold(place.name)));
   const byCategory = new Map<string, string[]>();
   for (const record of records) {
     if (known.has(fold(record.name)) || !record.category) continue;
-    byCategory.set(record.category.replace(/_/g, " "), [...(byCategory.get(record.category.replace(/_/g, " ")) ?? []), record.name]);
+    // The directory has no location for some (Barbearia DAD): a reviewed web source may, and is named.
+    const web = webFacts(record.name, { village: record.location, phone: record.phone });
+    const label = web?.village ? `${record.name} (near ${web.village.value}, per ${web.village.source})` : record.name;
+    byCategory.set(record.category.replace(/_/g, " "), [...(byCategory.get(record.category.replace(/_/g, " ")) ?? []), label]);
   }
   const lines = [...byCategory.entries()].map(([category, names]) => `${category}: ${names.join("; ")}`);
   const noCarHire = carRentalRecords(records as never).length === 0 ? "\nNo car hire company is listed (a quad rental is not car hire)." : "";
@@ -339,6 +343,13 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   const outside: FallbackHit[] = [];
   /** Reviewed secondary names (enrichment) the guard also accepts. */
   const extraKnownNames: string[] = [];
+  /** Web facts (secondary) shown to the model this turn, cited in the reply when used. */
+  const webShown = new Map<string, WebFacts>();
+  const withWeb = (name: string, maio: Parameters<typeof webFacts>[1]) => {
+    const facts = webFacts(name, maio);
+    if (facts) webShown.set(name, facts);
+    return facts ? { fromWeb: Object.fromEntries(Object.entries(facts).map(([field, fact]) => [field, { value: fact.value, source: fact.source }])), fromWebNote: "fromWeb is NOT Maio listing data: a public web page. Say the source with it (\"per <source>\") and that it may be out of date." } : {};
+  };
   const locale = context.locale === "pt" ? "pt" : "en";
   const note = <T,>(name: string, args: unknown, ok: boolean, payload: T): T => {
     events.push({ name, ok, arguments: args });
@@ -380,6 +391,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
           description: locale === "pt" ? place.descriptionPt || place.description : place.description,
           tips: place.tips, phone: place.phone || null, website: place.website || null, booking: place.booking || null,
           distanceFromGuest: row?.km ?? null, walkMin: row?.walkMin ?? null, driveMin: row?.driveMin ?? null,
+          ...withWeb(place.name, { hours: (place as { hours?: string }).hours, phone: place.phone, website: place.website, description: place.description, village: place.zone }),
         });
       },
     }),
@@ -406,7 +418,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       execute: async ({ query }) => {
         const catalog = await loadBusinesses(deps.fetchImpl);
         const rows = /\b(car|rent|rental|aluguer|alugar|location|voiture|carro)\b/i.test(query) ? carRentalRecords(catalog.records) : searchBusinessesByNeed(catalog.records, query);
-        return note("find_business", { query }, catalog.source === "api", { results: rows.slice(0, 6).map((row) => ({ name: row.name, phone: row.phone || null, location: row.location || null, category: row.category })) });
+        return note("find_business", { query }, catalog.source === "api", { results: rows.slice(0, 6).map((row) => ({ name: row.name, phone: row.phone || null, location: row.location || null, category: row.category, ...withWeb(row.name, { phone: row.phone, village: row.location }) })) });
       },
     }),
   };
@@ -484,6 +496,13 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   if (guarded.dropped.length) events.push({ name: "name_guard", ok: false, arguments: { dropped: guarded.dropped } });
   local = { ...local, reply: guarded.reply };
   const labelled = labelOutsideSources(local.reply, outside, places);
+  // Directory web villages are in the prompt without a tool call: cite those too when used.
+  for (const record of directory?.source === "api" ? directory.records : []) {
+    const facts = webFacts(record.name, { village: record.location, phone: record.phone });
+    if (facts && !webShown.has(record.name)) webShown.set(record.name, facts);
+  }
+  const cited = citeWebFacts(labelled.reply, [...webShown.entries()].map(([name, facts]) => ({ name, facts })));
+  const sources = [...labelled.sources, ...cited.sources.filter((item) => !labelled.sources.some((known) => known.url === item.url))];
   const cards = [...local.cards, ...labelled.cards].slice(0, 4);
-  return { reply: withNoCarAccess(labelled.reply, cards, context), cards, sources: labelled.sources, toolEvents: events, facts, anchor };
+  return { reply: withNoCarAccess(cited.reply, cards, context), cards, sources, toolEvents: events, facts, anchor };
 }
