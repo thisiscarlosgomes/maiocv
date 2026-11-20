@@ -6,7 +6,7 @@
  * Phrases are rewritten where the sentence still reads; otherwise the sentence goes.
  */
 
-const SENTENCE_LEAK = /\blistings? (?:says?|shows?|data)\b|location not listed|not listed as/i;
+const SENTENCE_LEAK = /location not listed|not listed as/i;
 const OFFICE = /\btourist (?:office|information)|tourism office|posto de turismo|office de tourisme/i;
 /** "No tourist office is listed" is the honest answer; only a sentence that sends the guest to one is a leak. */
 const NEGATED = /\b(?:no|not|isn't|isnt|there is no|there's no|without|nao|não|nenhum|pas de|aucun|n'y a pas)\b/i;
@@ -27,7 +27,7 @@ export function scrubReply(text: string): string {
     .replace(/\beveryone calls\b/gi, "I'd call")
     .replace(/\bwidely (?:considered|regarded)(?: as)?\b/gi, "arguably")
     // "most visitors without a car also stay in Vila" → "you can also stay in Vila".
-    .replace(/\b(?:most|many) (?:visitors|people|travell?ers|tourists|guests)(?: (?:without|with) an? \w+)? (?:also )?(stay|go|head)\b/gi, "you can also $1")
+    .replace(/\b(?:most|many) (?:visitors|people|travell?ers|tourists|guests)(?: (?:without|with) an? \w+)? (?:also )?(stay|go|head|look at|consider|choose|pick|book)\b/gi, "you can also $1")
     // "the local listing shows it as a Calheta restaurant" → "it is a Calheta restaurant".
     .replace(/\b(?:the |its )?(?:local )?listings? (?:shows?|lists?|has) (it|them) as\b/gi, (_m, who: string) => (who.toLowerCase() === "it" ? "it is" : "they are"))
     // "note the listing says the sea…" → "note the sea…".
@@ -38,6 +38,10 @@ export function scrubReply(text: string): string {
     .replace(/,?\s*(?:is |are )?listed as an? ["“][^"”]*["”](?:\s+\w+)?/gi, "")
     .replace(/\b(is|are) (?:also )?listed as\b/gi, "$1")
     .replace(/\s*(?:in|on|from) the (?:island |local |maio )?listings\b/gi, "")
+    // Any remaining "the listing says/shows/data" or bare "location not listed": cut the words, keep the sentence.
+    .replace(/,?\s*\b(?:according to |per |from )?(?:the |its |our )?(?:local |island |maio )?(?:listings?|the data)(?: (?:says?|shows?|notes?|mentions?|data|entry|record))?(?: (?:that|it is|it's))?\s*(?=[,.;:]|$)/gi, "")
+    .replace(/\b(?:the |its |our )?(?:local |island |maio )?listings? (?:says?|shows?|notes?|mentions?)(?: that)?\s+/gi, "")
+    .replace(/,?\s*\(?location not listed\)?,?/gi, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;!?])/g, "$1")
     .trim();

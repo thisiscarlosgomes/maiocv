@@ -152,6 +152,10 @@ test("scrub drops a made-up tourist office, raw listing wording and borrowed sup
   assert.equal(scrubReply("Morro Beach, Santo António and Santana are listed as dangerous for swimming."), "Morro Beach, Santo António and Santana are dangerous for swimming.");
   assert.equal(scrubReply("Cala Grande is listed as a bar in Calheta."), "Cala Grande is a bar in Calheta.");
   assert.equal(clampReply("Cala Grande is in Calheta. If you want a livelier bar try Cala Grande. Would you like me to check hours?"), "Cala Grande is in Calheta. If you want a livelier bar try Cala Grande.");
+  assert.equal(scrubReply("Morro Beach is wild, the listing notes. Swim at Bitche Rotcha."), "Morro Beach is wild. Swim at Bitche Rotcha.");
+  assert.equal(scrubReply("The Salinas are by Vila; Jet Ski, location not listed, runs rides."), "The Salinas are by Vila; Jet Ski runs rides.");
+  assert.equal(scrubReply("Yes, the Salinas are walkable from Vila; the listings say the centre explains salt-making."), "Yes, the Salinas are walkable from Vila; the centre explains salt-making.");
+  assert.equal(scrubReply("If you want more options, most guests also look at stays in Vila."), "If you want more options, you can also look at stays in Vila.");
   assert.equal(scrubReply("Ring them directly; the phone is not listed."), "Ring them directly; the phone is not listed.");
   assert.equal(scrubReply("Baxona Beach in Calheta has very calm water."), "Baxona Beach in Calheta has very calm water.");
 });
