@@ -207,3 +207,12 @@ test("a need matches Maio business categories before anything goes outside", asy
   assert.deepEqual(searchBusinessesByNeed(records, "groceries").map((row) => row.name), ["Casa Blanca Supermarket"]);
   assert.deepEqual(searchBusinessesByNeed(records, "dentist"), []);
 });
+
+test("directory services the places list lacks are spelled out, and everything else is marked not listed", async () => {
+  const { directoryBlock } = await import("../lib/visitor/agent.ts");
+  const block = directoryBlock([{ name: "Barbearia DAD", category: "hairdresser" }, { name: "Onda Azul Maio", category: "water_sports" }], [{ name: "Onda Azul Maio" } as never]);
+  assert.match(block, /hairdresser: Barbearia DAD/);
+  assert.doesNotMatch(block, /water sports/);
+  assert.match(block, /dentist.*NOT listed/);
+  assert.equal(directoryBlock([], []), "");
+});

@@ -124,6 +124,19 @@ export function catalogBlock(places: Place[]): string {
   return `Listed places by nearest village (use places_nearby for distances):\n${lines.join("\n")}`;
 }
 
+/** Services from the Maio business directory that are not already listed places ("hairdresser: Barbearia DAD"). */
+export function directoryBlock(records: { name: string; category: string }[], places: Place[]): string {
+  if (!records.length) return "";
+  const known = new Set(places.map((place) => fold(place.name)));
+  const byCategory = new Map<string, string[]>();
+  for (const record of records) {
+    if (known.has(fold(record.name)) || !record.category) continue;
+    byCategory.set(record.category.replace(/_/g, " "), [...(byCategory.get(record.category.replace(/_/g, " ")) ?? []), record.name]);
+  }
+  const lines = [...byCategory.entries()].map(([category, names]) => `${category}: ${names.join("; ")}`);
+  return `Business directory services (name them when asked; find_business has phones): ${lines.join(" | ")}.\nAny other service (dentist, gym, yoga, laundry, bank branch…) is NOT listed: say so, never make up a clinic, shop or person.`;
+}
+
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function partyLine(party: VisitorContext["party"]): string {
@@ -166,7 +179,7 @@ function card(place: Place | undefined, row: NearbyRow): PlaceCard {
 }
 
 /** Cards for the places the reply actually names, in the order it names them. */
-const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like\b|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
+const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like\b|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso|procuro)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
 
 /** An offer to go and do more, anywhere in a later sentence ("…I can check for monitoring programs, should I look?"). */
 const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring|search)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|posso procurar|voulez-vous que je|je peux v[ée]rifier)\b/i;
@@ -417,7 +430,8 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       },
     }) } : baseTools;
 
-  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}`;
+  const directory = await loadBusinesses(deps.placesFetch ?? deps.fetchImpl).catch(() => null);
+  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n${directoryBlock(directory?.source === "api" ? directory.records : [], places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}`;
   const started = Date.now();
   const budget = deps.timeoutMs ?? 14_000;
   const ask = (extra: string, timeoutMs: number) => generateText({
