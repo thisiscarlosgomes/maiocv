@@ -166,14 +166,16 @@ function card(place: Place | undefined, row: NearbyRow): PlaceCard {
 }
 
 /** Cards for the places the reply actually names, in the order it names them. */
-const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like (?:me|to know)|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
+const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like\b|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
 
 /** An offer to go and do more, anywhere in a later sentence ("…I can check for monitoring programs, should I look?"). */
 const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring|search)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|posso procurar|voulez-vous que je|je peux v[ée]rifier)\b/i;
 
 /** Chat-sized: at most three sentences and about 60 words, no trailing offers. The first sentence always stays. */
 export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {
-  const flat = text.replace(/[\u2010\u2011]/g, "-").replace(/\*\*|__|^#+\s*/gm, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim();
+  const flat = text.replace(/[\u2010\u2011]/g, "-")
+    // "…; otherwise I can search beyond…" / "sinon je peux chercher…": an offer tacked onto a useful sentence.
+    .replace(/[;,]\s*(?:(?:and |or |otherwise |sinon |ou |sen[aã]o |se n[aã]o )?(?:if you want,? )?)(?:i can|je peux|posso)\s+(?:also\s+)?(?:search|look|check|find|chercher|v[ée]rifier|regarder|procurar|pesquisar|verificar)[^.!?]*[.!?]?/gi, ".").replace(/\*\*|__|^#+\s*/gm, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim();
   const sentences = flat.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
   // "Windy day? Head into…": a short echo of the question is not an answer.
   if (sentences.length > 1 && /\?$/.test(sentences[0]) && sentences[0].split(/\s+/).length <= 4) sentences.shift();

@@ -189,3 +189,9 @@ test("an outside hit for a place Maio already lists is not labelled as outside",
   assert.deepEqual(result.sources, []);
   assert.doesNotMatch(result.reply, /kitesurfing/);
 });
+
+test("offers to search further are dropped, the useful part stays", async () => {
+  const { clampReply } = await import("../lib/visitor/agent.ts");
+  assert.equal(clampReply("No studio is listed. Ask your stay or Onda Azul Maio; sinon je peux chercher au-delà des listes."), "No studio is listed. Ask your stay or Onda Azul Maio.");
+  assert.equal(clampReply("I don't have a dentist listed. Ask the health centre in Vila. Would you like the health centre phone number?"), "I don't have a dentist listed. Ask the health centre in Vila.");
+});
