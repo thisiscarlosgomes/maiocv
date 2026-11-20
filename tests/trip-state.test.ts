@@ -85,3 +85,18 @@ test("no car: a far recommendation gets a way to get there, a walkable one does 
   assert.equal(withNoCarAccess("Praia Real is worth it.", far, { car: true, locale: "en" }), "Praia Real is worth it.");
   assert.equal(withNoCarAccess("Anita is close.", [card("Restaurante Bar Anita", "Calheta")], { car: false, locale: "en" }), "Anita is close.");
 });
+
+import { cardsForReply } from "../lib/visitor/agent.ts";
+
+test("a fifth place in another village is still caught, and 'Morro's' is the village, not Morro Beach", () => {
+  const offered = new Map([
+    ["belo", card("Belorizonte", "Calheta")], ["vanuza", card("Bar restaurante Vanuza", "Calheta")], ["cala", card("Cala Grande, Lda", "Calheta")],
+    ["morro-beach", card("Morro Beach", "Morro", "beach")], ["caminhada", card("A Caminhada", "Morro")],
+  ]);
+  const reply = "Closest in Calheta: Belorizonte - 2 min walk; Bar restaurante Vanuza - 8 min walk; Cala Grande, Lda - 8 min walk. If you want a larger menu drive 11 min to Morro's A Caminhada.";
+  const cards = cardsForReply(reply, offered, [], null, "en", 12);
+  assert.ok(!cards.some((item) => item.name === "Morro Beach"));
+  const out = keepToVillage(reply, cards, CALHETA);
+  assert.ok(!/Caminhada/.test(out.reply), out.reply);
+  assert.deepEqual(out.cards.map((item) => item.name), ["Belorizonte", "Bar restaurante Vanuza", "Cala Grande, Lda"]);
+});

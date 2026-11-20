@@ -6,7 +6,7 @@ import { readWeather } from "../maio-chat-tools.ts";
 import { loadTimetable } from "../timetable.ts";
 import { scrubReply } from "./scrub.ts";
 import { MAIO_BACKGROUND } from "./background.ts";
-import { fold, zoneFromText } from "./geo.ts";
+import { fold, zoneFromText, ZONES } from "./geo.ts";
 import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor, type NearbyRow, type Place, type PlaceKind } from "./places.ts";
 
 export type VisitorLocale = "en" | "pt" | "fr";
@@ -171,7 +171,7 @@ export function onlyQuestions(text: string): boolean {
   return sentences.length > 0 && sentences.every((sentence) => sentence.trim().endsWith("?"));
 }
 
-export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, places: Place[] = [], anchor: Anchor | null = null, locale: "en" | "pt" = "en"): PlaceCard[] {
+export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, places: Place[] = [], anchor: Anchor | null = null, locale: "en" | "pt" = "en", limit = 4): PlaceCard[] {
   // Places named from the catalogue without a tool call still get a card (distance from the guest, if known).
   for (const place of places) {
     if (offered.has(place.id) || place.kind === "village") continue;
@@ -187,7 +187,9 @@ export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, pl
     if (at < 0) {
       // "Baxona" for "Baxona Beach", "Vanuza" for "Bar restaurante Vanuza".
       const core = name.replace(/\b(beach|beaches|praia|bar|restaurante|restaurant|the|of|and|do|da|de|hotel|village|lda)\b/g, " ").replace(/\s+/g, " ").trim();
-      if (core.length >= 5) { at = text.indexOf(core); len = core.length; }
+      // "Morro" alone is the village, not Morro Beach.
+      const village = ZONES.some((zone) => fold(zone.name) === core || zone.aliases.includes(core));
+      if (core.length >= 5 && !village) { at = text.indexOf(core); len = core.length; }
     }
     if (at >= 0) hits.push({ at, len, card: item });
   }
@@ -200,7 +202,7 @@ export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, pl
   const kept = hits.filter((hit) => !hits.some((other) => other !== hit && other.len > hit.len && other.at <= hit.at && hit.at + hit.len <= other.at + other.len));
   kept.sort((a, b) => a.at - b.at);
   const seen = new Set<string>();
-  return kept.filter((hit) => !seen.has(hit.card.id) && seen.add(hit.card.id)).slice(0, 4).map((hit) => hit.card);
+  return kept.filter((hit) => !seen.has(hit.card.id) && seen.add(hit.card.id)).slice(0, limit).map((hit) => hit.card);
 }
 
 const NEAR_KINDS = new Set<PlaceKind>(["food", "bar", "beach", "shop"]);
@@ -341,7 +343,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     if (second && !onlyQuestions(second)) reply = second;
   }
   // The guest's own location is context, not a suggestion.
-  const cardsFor = (text: string) => cardsForReply(text, offered, places, anchor, locale).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
+  const cardsFor = (text: string) => cardsForReply(text, offered, places, anchor, locale, 12).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
   let local = keepToVillage(reply, cardsFor(reply), anchor);
   // The opening sentence itself sent the guest to another village while theirs has a fitting place: one rewrite if there is time.
   const left = budget - (Date.now() - started);
@@ -353,5 +355,6 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       if (!again.away.some((item) => fold(again.reply).includes(fold(item.name)))) local = again;
     }
   }
-  return { reply: withNoCarAccess(local.reply, local.cards, context), cards: local.cards, toolEvents: events, facts, anchor };
+  const cards = local.cards.slice(0, 4);
+  return { reply: withNoCarAccess(local.reply, cards, context), cards, toolEvents: events, facts, anchor };
 }

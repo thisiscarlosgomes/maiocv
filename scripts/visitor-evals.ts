@@ -109,7 +109,7 @@ const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
   const name = raw.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
+  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
   const n = fold(name);
