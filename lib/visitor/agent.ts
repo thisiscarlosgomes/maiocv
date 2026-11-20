@@ -169,7 +169,7 @@ function card(place: Place | undefined, row: NearbyRow): PlaceCard {
 const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like (?:me|to know)|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|quer que eu|quere(?:m|is) que eu|si vous voulez,? je|voulez-vous que)/i;
 
 /** An offer to go and do more, anywhere in a later sentence ("…I can check for monitoring programs, should I look?"). */
-const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|posso procurar|voulez-vous que je|je peux v[ée]rifier)\b/i;
+const OFFER_ANYWHERE = /\b(?:i can (?:also )?(?:check|look(?: up)?|find|fetch|send|share|call|book|ring|search)|should i (?:look|check|call)|shall i|want me to|quer que eu|posso verificar|posso procurar|voulez-vous que je|je peux v[ée]rifier)\b/i;
 
 /** Chat-sized: at most three sentences and about 60 words, no trailing offers. The first sentence always stays. */
 export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {
@@ -285,14 +285,16 @@ function isGeographyName(name: string): boolean {
 }
 
 /** Outside results the reply actually used get a source label, a card (Google, with coordinates) or a citation. */
-export function labelOutsideSources(reply: string, hits: FallbackHit[]): { reply: string; cards: PlaceCard[]; sources: ReplySource[] } {
+export function labelOutsideSources(reply: string, hits: FallbackHit[], listed: Place[] = []): { reply: string; cards: PlaceCard[]; sources: ReplySource[] } {
   const text = fold(reply);
   const cards: PlaceCard[] = [];
   const sources: ReplySource[] = [];
   let out = reply;
   for (const [index, hit] of hits.entries()) {
     // A page titled "Maio" or "Cape Verde" is not named by a reply that mentions the island.
-    const generic = isGeographyName(hit.name) || (hit.source === "web" && fold(hit.name).split(" ").length < 2);
+    // A page or pin for a place Maio already lists ("Onda Azul Maio") is the listing, not an outside source.
+    const isListed = listed.some((place) => fold(place.name) === fold(hit.name)) || Boolean(findPlace(listed, hit.name));
+    const generic = isListed || isGeographyName(hit.name) || (hit.source === "web" && fold(hit.name).split(" ").length < 2);
     const named = !generic && fold(hit.name).length >= 3 && text.includes(fold(hit.name));
     const cited = hit.source === "web" && text.includes(fold(hit.sourceLabel));
     if (!named && !cited) continue;
@@ -447,7 +449,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
       if (!again.away.some((item) => fold(again.reply).includes(fold(item.name)))) local = again;
     }
   }
-  const labelled = labelOutsideSources(local.reply, outside);
+  const labelled = labelOutsideSources(local.reply, outside, places);
   const cards = [...local.cards, ...labelled.cards].slice(0, 4);
   return { reply: withNoCarAccess(labelled.reply, cards, context), cards, sources: labelled.sources, toolEvents: events, facts, anchor };
 }

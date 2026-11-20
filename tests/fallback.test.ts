@@ -180,3 +180,12 @@ test("without keys the guide is never offered the outside lookup", async () => {
     setPlaceIndex(null);
   }
 });
+
+test("an outside hit for a place Maio already lists is not labelled as outside", () => {
+  const listed = buildIndex([]);
+  const onda: FallbackHit = { ...webHit, name: "Onda Azul Maio", sourceLabel: "kitesurfing.me", url: "https://www.kitesurfing.me/schools/onda-azul-maio" };
+  const place = { ...(listed[0] ?? {}), id: "onda", name: "Onda Azul Maio" } as never;
+  const result = labelOutsideSources("Ask Onda Azul Maio in Vila about classes.", [onda], [place]);
+  assert.deepEqual(result.sources, []);
+  assert.doesNotMatch(result.reply, /kitesurfing/);
+});
