@@ -45,3 +45,14 @@ test("the reviewed file: every value has a source URL and a quote, rejections ha
   for (const item of data.review.rejected) assert.ok(item.reason);
   assert.equal(data.filled, data.entries.reduce((sum: number, entry: { fields: object }) => sum + Object.keys(entry.fields).length, 0));
 });
+
+test("a reply that names the site counts as using the fact; Google Maps pages get that label", () => {
+  const maps = { entries: [{ name: "Onda Azul Maio", fields: { hours: { value: "Monday: 10 am–5 pm", sourceUrl: "https://www.google.com/maps/place?q=place_id:x" } } }] };
+  const facts = webFacts("Onda Azul Maio", {}, maps)!;
+  assert.equal(facts.hours?.source, "Google Maps");
+  const out = citeWebFacts("Open Monday to Saturday 10:00–17:00 (per Google Maps).", [{ name: "Onda Azul Maio", facts, asked: true }]);
+  assert.equal(out.reply, "Open Monday to Saturday 10:00–17:00 (per Google Maps).");
+  assert.equal(out.sources.length, 1);
+  // From the directory (not asked about): the place must be named.
+  assert.equal(citeWebFacts("Open 10:00 (per Google Maps).", [{ name: "Onda Azul Maio", facts }]).sources.length, 0);
+});

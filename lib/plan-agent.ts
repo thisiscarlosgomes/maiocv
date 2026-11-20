@@ -12,10 +12,11 @@ import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
 import { runVisitorAgent, type PlaceCard, type ReplySource, type VisitorContext } from "./visitor/agent.ts";
+import { webFacts } from "./visitor/enrichment.ts";
 import { villageBackup } from "./visitor/backup.ts";
 import { isVisitorQuestion } from "./visitor/route.ts";
 import { zoneFromText } from "./visitor/geo.ts";
-import { loadPlaces } from "./visitor/places.ts";
+import { findPlace, loadPlaces } from "./visitor/places.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searchBusinesses, type Stay } from "./maio-catalog.ts";
 import { formatCapeVerdePhone } from "./phone.ts";
@@ -863,12 +864,23 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
     }
     const name = lastUser.split(/\b(?:for|do|de|da|du|pour)\b/i).pop()?.replace(/\b(?:phone|number|numero|telefone|telephone|the|a|o|um|uma|le|la)\b/gi, " ").replace(/[?!.]/g, "").trim() ?? "";
-    const hit = searchBusinesses(catalog.records, name)[0];
+    // A listed place (not in the business directory) can be what they mean: its phone, or a reviewed web one.
+    const place = searchBusinesses(catalog.records, name)[0] ? null : findPlace(await loadPlaces(rootFetch).catch(() => []), name);
+    const hit = searchBusinesses(catalog.records, name)[0] ?? (place ? { id: place.id, name: place.name, phone: place.phone ?? "", location: place.zone ?? "", category: place.kind } : undefined);
     const reply = !hit
       ? say(task.locale, "I don't have that business on the Maio list, so I won't invent a number.", "Não tenho esse negócio na lista do Maio, por isso não invento um número.", "Je n'ai pas ce commerce dans la liste de Maio, donc je n'invente pas de numéro.")
       : hit.phone
         ? say(task.locale, `${hit.name}: ${formatCapeVerdePhone(hit.phone)}.`, `${hit.name}: ${formatCapeVerdePhone(hit.phone)}.`, `${hit.name} : ${formatCapeVerdePhone(hit.phone)}.`)
         : say(task.locale, `${hit.name} is listed. No phone number is published.`, `${hit.name} está na lista. Não há telefone publicado.`, `${hit.name} est dans la liste. Aucun numéro n'est publié.`);
+    // The Maio list has no phone: a reviewed web source may (secondary data, always with its site).
+    const web = hit && !hit.phone ? webFacts(hit.name, { phone: hit.phone })?.phone : undefined;
+    if (web) {
+      const withWeb = say(task.locale,
+        `${hit!.name} has no phone in the Maio list. A public web page gives ${web.value} (source: ${web.source}); it may be out of date.`,
+        `${hit!.name} não tem telefone na lista do Maio. Uma página pública indica ${web.value} (fonte: ${web.source}); pode estar desatualizado.`,
+        `${hit!.name} n'a pas de numéro dans la liste de Maio. Une page publique indique ${web.value} (source : ${web.source}) ; il peut être dépassé.`);
+      return { ...finish(withWeb, current, [{ name: "maio-businesses", ok: catalog.source === "api" }, { name: "enrichment", ok: true }]), sources: [{ label: web.source, url: web.url, kind: "web" as const }] };
+    }
     return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
   }
 

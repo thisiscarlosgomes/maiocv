@@ -14,7 +14,15 @@ export type WebFacts = Partial<Record<WebField, WebFact>>;
 type Entry = { name: string; fields: Partial<Record<WebField, { value: string; sourceUrl: string }>> };
 export type EnrichmentFile = { entries: Entry[] };
 
-const host = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
+const host = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const name = parsed.hostname.replace(/^www\./, "");
+    return /(^|\.)google\.[a-z.]+$/.test(name) && parsed.pathname.startsWith("/maps") ? "Google Maps" : name;
+  } catch { return url; }
+};
+const brand = (source: string) => fold(source.split(".")[0]);
+const mentions = (text: string, source: string) => fold(text).includes(fold(source)) || fold(text).includes(brand(source));
 
 /** Web facts for one place or business, only for fields the Maio data has empty. */
 export function webFacts(name: string, maio: Partial<Record<WebField, string | null | undefined>>, file: EnrichmentFile = data as EnrichmentFile): WebFacts | null {
@@ -33,9 +41,12 @@ const timeTokens = (text: string) => text.match(/\b\d{1,2}[:h.]\d{2}\b|\b\d{1,2}
 const digits = (text: string) => text.replace(/\D+/g, "");
 
 /** Did the reply use this web fact for this name? Phone by digits, hours by a time, others by the value. */
-export function usesFact(reply: string, name: string, field: WebField, value: string): boolean {
+export function usesFact(reply: string, name: string | null, field: WebField, value: string, source?: string): boolean {
   const text = fold(reply);
-  if (!text.includes(fold(name))) return false;
+  // name null: the fact came from a tool call this turn, so the reply is about that place.
+  if (name !== null && !text.includes(fold(name))) return false;
+  // The reply named the fact's own site ("per mapquest.com", "MapQuest").
+  if (source && mentions(reply, source)) return true;
   if (field === "phone") return digits(reply).includes(digits(value).slice(-7));
   if (field === "hours") return timeTokens(value).some((token) => text.includes(fold(token)));
   if (field === "website") return text.includes(host(value).toLowerCase());
@@ -44,14 +55,14 @@ export function usesFact(reply: string, name: string, field: WebField, value: st
 }
 
 /** Web facts the reply used get "Source: <site>." and a source link. */
-export function citeWebFacts(reply: string, facts: { name: string; facts: WebFacts }[]): { reply: string; sources: { label: string; url: string; kind: "web" }[] } {
+export function citeWebFacts(reply: string, facts: { name: string; facts: WebFacts; asked?: boolean }[]): { reply: string; sources: { label: string; url: string; kind: "web" }[] } {
   let out = reply;
   const sources: { label: string; url: string; kind: "web" }[] = [];
-  for (const { name, facts: byField } of facts) {
+  for (const { name, facts: byField, asked } of facts) {
     for (const field of WEB_FIELDS) {
       const fact = byField[field];
-      if (!fact || !usesFact(reply, name, field, fact.value)) continue;
-      if (!fold(out).includes(fold(fact.source))) out = `${out.replace(/\s+$/, "")} Source: ${fact.source}.`;
+      if (!fact || !usesFact(reply, asked ? null : name, field, fact.value, fact.source)) continue;
+      if (!mentions(out, fact.source)) out = `${out.replace(/\s+$/, "")} Source: ${fact.source}.`;
       if (!sources.some((item) => item.url === fact.url)) sources.push({ label: fact.source, url: fact.url, kind: "web" });
     }
   }

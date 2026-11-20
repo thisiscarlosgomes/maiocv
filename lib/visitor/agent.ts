@@ -42,7 +42,7 @@ How to answer:
 - Do not start a trip plan unless the guest asks for one (dates, "plan my days", "itinerary"). An open question such as "what's the best thing to do in Maio?" gets a thoughtful, opinionated answer with one or two highlights, not a plan and not a question back.
 - Never open with a question, and never start by repeating the guest's question back ("Windy day?"). Do not ask whether they have a car unless the answer truly depends on it, and then answer for both cases first. Ask at most ONE short follow-up, only when it changes the advice, as the last sentence. Never end with an offer ("Would you like…", "Do you want…", "I can check…"). A follow-up question is allowed only when you could not give a useful answer without it.
 - Nearby means the same village or area. Use places_nearby for anything "near", "close", "around", "in <village>", "where to eat/swim/stay". Recommend the nearest results first and give the distance exactly as places_nearby returns it ("3 min walk", not a made-up range) as walking minutes (no car / in town) or driving minutes (car). If nothing is listed close by, say so plainly and name the nearest with its distance. Never present a place in another village (e.g. Vila do Maio for someone in Calheta) as "nearby".
-- Name only places, restaurants, stays, operators and businesses from "Listed places" below, a tool result, or the background. If a name is not there, it does not exist for you. For open questions without a location, pick from the background highlights and the listed places. Never invent a venue, phone number, price, opening hour, menu or timetable. If a detail is not in the data, say it is not listed and suggest asking the place or locals. A "fromWeb" value (or "per <site>" in the directory) comes from a public web page, not the Maio listings: give it with its source, e.g. "open 7:00–23:00 (per biggamemaio.com)".
+- Name only places, restaurants, stays, operators and businesses from "Listed places" below, a tool result, or the background. If a name is not there, it does not exist for you. For open questions without a location, pick from the background highlights and the listed places. Never invent a venue, phone number, price, opening hour, menu or timetable. If a detail is not in the data, say it is not listed and suggest asking the place or locals. A "fromWeb" value (or "per <site>" in the directory) comes from a public web page, not the Maio listings: give it with its source, e.g. "open 7:00–23:00 (per biggamemaio.com)". Before saying hours, a phone or a website are not listed for a named place, call place_details: it may have a fromWeb value.
 - Describe a place only with what its summary or the background says (do not call a beach calm, a restaurant cheap, good for breakfast, or a view stunning unless that is in the data).
 - Never mention a tourist office or tourist information point: none is listed. When asked about tours or a tourist office, say none is listed and name the listed tour operators to book with, or say to ask the stay.
 - Never quote listing wording or labels ("location not listed", "listed as", "(listed)"), and never say "the listing says/shows"; just state the fact. If a place's village is not given, just do not say where it is.
@@ -345,10 +345,12 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   const extraKnownNames: string[] = [];
   /** Web facts (secondary) shown to the model this turn, cited in the reply when used. */
   const webShown = new Map<string, WebFacts>();
+  /** Names whose web facts a tool call returned this turn (the reply is about them even if it doesn't repeat the name). */
+  const webAsked = new Set<string>();
   const withWeb = (name: string, maio: Parameters<typeof webFacts>[1]) => {
     const facts = webFacts(name, maio);
-    if (facts) webShown.set(name, facts);
-    return facts ? { fromWeb: Object.fromEntries(Object.entries(facts).map(([field, fact]) => [field, { value: fact.value, source: fact.source }])), fromWebNote: "fromWeb is NOT Maio listing data: a public web page. Say the source with it (\"per <source>\") and that it may be out of date." } : {};
+    if (facts) { webShown.set(name, facts); webAsked.add(name); }
+    return facts ? { fromWeb: Object.fromEntries(Object.entries(facts).map(([field, fact]) => [field, { value: fact.value, source: fact.source }])), fromWebNote: "fromWeb is NOT Maio listing data but a public web page. Lead with the value and its source, e.g. \"Nha Terra opens 8:30–23:00, closed Wednesday (per mapquest.com; may be out of date).\" Name only that source, never another site." } : {};
   };
   const locale = context.locale === "pt" ? "pt" : "en";
   const note = <T,>(name: string, args: unknown, ok: boolean, payload: T): T => {
@@ -501,7 +503,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     const facts = webFacts(record.name, { village: record.location, phone: record.phone });
     if (facts && !webShown.has(record.name)) webShown.set(record.name, facts);
   }
-  const cited = citeWebFacts(labelled.reply, [...webShown.entries()].map(([name, facts]) => ({ name, facts })));
+  const cited = citeWebFacts(labelled.reply, [...webShown.entries()].map(([name, facts]) => ({ name, facts, asked: webAsked.has(name) && webAsked.size === 1 })));
   const sources = [...labelled.sources, ...cited.sources.filter((item) => !labelled.sources.some((known) => known.url === item.url))];
   const cards = [...local.cards, ...labelled.cards].slice(0, 4);
   return { reply: withNoCarAccess(cited.reply, cards, context), cards, sources, toolEvents: events, facts, anchor };
