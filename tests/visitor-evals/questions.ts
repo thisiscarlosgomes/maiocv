@@ -163,11 +163,13 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "fb-dentist", q: "Is there a dentist on Maio?", fallback: true },
   { id: "fb-yoga", q: "Where can I do a yoga class?", fallback: true },
   { id: "fb-laundry", q: "Where can I get laundry done?", fallback: true },
-  { id: "fb-hairdresser", q: "Is there a hairdresser in Vila?", fallback: true },
+
   { id: "fb-gym", q: "Is there a gym on the island?", fallback: true },
   { id: "fb-pt-dentista", q: "Há algum dentista no Maio?", locale: "pt", fallback: true },
   { id: "fb-fr-yoga", q: "Où peut-on faire du yoga à Maio ?", locale: "fr", fallback: true },
   // Listed things never go to an outside source.
   { id: "fb-listed-car", q: "Where can I rent a car?", mention: /rent|car|aluguer/i, forbid: /google maps|\bsource:/i },
+  // The Maio API lists a barber (category hairdresser): it must be found, not sent to Google.
+  { id: "fb-listed-hairdresser", q: "Is there a hairdresser on Maio?", mention: /barbearia dad/i, forbid: /google maps|\bsource:/i },
   { id: "fb-listed-fish", q: "Where can we eat fish in Calheta?", area: "calheta", mention: /vanuza|anita|belorizonte|cala grande/i, forbid: /google maps|\bsource:/i },
 ];

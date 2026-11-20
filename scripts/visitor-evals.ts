@@ -175,7 +175,8 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
     const hit = locate(places, name);
     // Names from a labelled outside source (Google Maps card, cited web page) are not inventions.
     const outside = !hit.place && (outsideNames.some((item) => item.includes(fold(name)) || fold(name).includes(item)) || cited);
-    if (!hit.place && !hit.geography && !outside) fails.push(`invented:${name}`);
+    const business = !hit.place && businessNames.some((item) => item === fold(name) || (fold(name).length >= 5 && item.includes(fold(name))));
+    if (!hit.place && !hit.geography && !outside && !business) fails.push(`invented:${name}`);
     // Two listings can share a name ("Cadjetinha Beach" in Vila and in Morrinho): any matching listing in the right area is fine.
     const candidates = hit.place ? places.filter((item) => item === hit.place || findPlace([item], name.replace(/\([^)]*\)/g, " ").trim())) : [];
     const inArea = !c.notArea?.length || candidates.some((item) => areaOk(item, c.notArea!) || !["food", "bar", "beach", "stay", "shop", "sight"].includes(item.kind));
@@ -188,6 +189,9 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
 
 const places = await loadPlaces(fetch);
 if (!places.length) throw new Error("Maio API places did not load");
+// The Maio business directory is listed data too (e.g. Barbearia DAD).
+const { loadBusinesses } = await import("../lib/maio-catalog.ts");
+const businessNames = (await loadBusinesses(fetch).catch(() => ({ records: [] as { name: string }[] }))).records.map((row) => fold(row.name));
 const cases = VISITOR_CASES.filter((c) => (!only || only.includes(c.id)) && (!grep || grep.test(c.id)));
 const rows: Row[] = [];
 let next = 0;
