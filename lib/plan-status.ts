@@ -319,6 +319,8 @@ export type PlanResultBody = {
   status?: unknown;
   steps?: unknown;
   cards?: unknown;
+  /** Where distances on the cards are measured from (the guest's stay or village). */
+  here?: unknown;
   error?: unknown;
 };
 

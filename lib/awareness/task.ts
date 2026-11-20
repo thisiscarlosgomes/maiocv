@@ -42,6 +42,13 @@ export const TaskConstraintsSchema = z.object({
     mode: z.enum(["ferry", "flight"]),
     time: clock.optional(),
   }).optional(),
+  /** The village the guest is based in ("we're staying in Morro"), when they name a village rather than a listed stay. */
+  base: z.object({
+    zoneId: z.string().min(1).max(40),
+    name: z.string().min(1).max(80),
+    lat: z.number(),
+    lon: z.number(),
+  }).optional(),
   /** A stay from the Maio API. Absent until the guest names one that is on the list. */
   stay: z.object({
     id: z.string().min(1).max(80),
@@ -140,6 +147,7 @@ export function mergeConstraints(base: TaskConstraints, patch: TaskConstraints):
   if (patch.arrival) next.arrival = patch.arrival;
   if (patch.departure) next.departure = patch.departure;
   if (patch.stay) next.stay = patch.stay;
+  if (patch.base) next.base = patch.base;
   return next;
 }
 

@@ -91,7 +91,8 @@ export function expandRunOn(text: string): string {
   let next = text.replace(/\s+(?=(?:#{1,3}\s*)?(?:day|dia|jour)\s+\d+\b\s*[—–-])/gi, "\n\n");
   next = next.replace(/\s+[-–—]\s+(?=\d{1,2}:\d{2}\b)/g, "\n- ");
   next = next.replace(/\s+(?=\d{1,2}:\d{2}\s+[—–-])/g, "\n");
-  if (!next.includes("\n") && (next.match(/\s+[-–—]\s+/g)?.length ?? 0) >= 3) {
+  // Plain prose like "Vanuza - 3 min walk, Anita - 2 min walk" keeps its dashes; only itinerary dumps become lists.
+  if (!next.includes("\n") && looksLikeItineraryDump(text) && (next.match(/\s+[-–—]\s+/g)?.length ?? 0) >= 3) {
     next = next.replace(/\s+[-–—]\s+/g, "\n- ");
   }
   return next;

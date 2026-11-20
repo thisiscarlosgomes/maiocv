@@ -140,4 +140,18 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "pt-seguro", q: "O Maio é seguro?", locale: "pt", mention: /segur/i },
   { id: "fr-saison", q: "Quelle est la meilleure saison pour venir ?", locale: "fr", mention: /oct|juin|saison|sec/i },
   { id: "today-weather", q: "How is the sea today?", mention: /wave|sea|wind|m\b/i },
+
+  // Step 2: trip state. What the guest said earlier (stay, village, party, dates, car, places shown) still holds turns later.
+  near("state-stay-food", "Where can we eat nearby?", "calheta", ["vila", "morro"], { history: ["We're staying at Casa do Mar."] }),
+  near("state-village-later", "Which beach can we walk to?", "morro", ["vila", "calheta"], { history: ["We're staying in Morro.", "What's the weather like this week?", "Is the water warm enough to swim?"], mention: /morro/i }),
+  near("state-stay-later", "Where should we have dinner tonight?", "calheta", ["vila", "morro"], { history: ["We booked Casa do Mar for the week.", "Is Maio safe?", "Do people speak English?", "Is there an ATM?"] }),
+  near("state-switch", "Where can we get dinner close by?", "calheta", ["vila"], { history: ["We're staying in Vila do Maio.", "Actually we moved to Calheta today."] }),
+  near("state-pt-stay", "Onde podemos jantar perto?", "calheta", ["vila"], { locale: "pt", history: ["Estamos hospedados em Calheta."] }),
+  { id: "state-nocar", q: "Which beach should we go to tomorrow?", history: ["We won't have a car on Maio."], mention: /walk|foot|taxi|aluguer|minutes?/i, forbid: /\b(?:will|do|would) you (?:have|rent|hire) a car\b/i },
+  { id: "state-nocar-far", q: "How do we get to Praia Real?", history: ["No car for us this trip.", "What's the best beach?"], mention: /taxi|aluguer|guide|tour|driver|transfer/i, forbid: /\b(?:will|do|would) you (?:have|rent|hire) a car\b|\bdrive (?:north|there|up)\b/i },
+  { id: "state-car-correction", q: "Is Praia Real worth the trip?", history: ["We'll have a car.", "Actually we decided not to rent a car."], mention: /taxi|aluguer|guide|tour|driver|without a car|no car/i, forbid: /\b(?:your|the) car\b|\byou can drive\b/i },
+  { id: "state-kids", q: "Which beach is best for us?", history: ["We're two adults and a 4-year-old."], mention: /calm|shallow|kid|child|little one|toddler|4-year|family/i, forbid: /who is coming|how old|how many (?:people|of you)/i },
+  { id: "state-dates-turtles", q: "Will we see turtles?", history: ["We arrive on 12 December for 5 days."], mention: /\b(?:june|july|august|september|october|jun|jul|aug|sep|oct)\b|outside (?:the )?(?:nesting )?season|not (?:in|during) december/i, forbid: /\bi can check\b|when (?:do|are) you (?:arrive|arriving|coming|visiting)|which dates|what dates/i },
+  { id: "state-dates-whales", q: "Any chance of whales while we're there?", history: ["We're coming in March for a week."], mention: /whale|humpback|season|march|spring|feb|apr|may/i, forbid: /when (?:do|are) you (?:arrive|arriving|coming|visiting)|which dates|what dates/i },
+  { id: "state-shown", q: "Which of those is closest to Baxona beach?", history: ["Where can I eat in Calheta?"], mention: /vanuza|anita|belorizonte|cala grande/i },
 ];
