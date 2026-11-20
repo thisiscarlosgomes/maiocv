@@ -41,6 +41,17 @@ Before release, check small phone/landscape layouts, menu keyboard focus, locale
 
 Set `MAIO_TASK_SECRET` to a long random string in every deployed environment (`NODE_ENV=production`, including Vercel preview and production). Do not commit a value. If the variable is unset in production, signing fails closed and `/api/plan` will not return a task. In local development only, an unset variable uses the built-in marker `dev-only-maio-task-secret-not-for-production`, which is not a secret.
 
+## Visitor guide (planner chat)
+
+Visitor questions in `/plan` (what to do, where to eat near X, beaches, getting here, no-car days) go to one agent in `lib/visitor/`. The planner's plan building, plan edits, the car question for a plan, ferry/flight timetable answers, stays lists, emergency numbers and business phones keep their scripted, data-built answers (`lib/visitor/route.ts` decides).
+
+- `background.ts`: hand-written Maio background, always first in the system prompt (cacheable prefix). Facts come from api.maio.cv or a named source; anything uncertain is marked "(unverified)".
+- `places.ts`: every place the guide may name, read from api.maio.cv (tourism + businesses collections; 10-minute cache, 1-hour stale fallback, nothing bundled). Each place gets a village from its coordinates, or from its location text when it has none (`approx`).
+- `geo.ts`: haversine distance, rough walking/driving minutes, village anchors from the API settlements.
+- `agent.ts`: one `generateText` loop with `places_nearby` (distance-ranked, radius 3 km without a car, 6 km unknown, island-wide with a car), `place_details`, `get_transport`, `get_maio_weather`, `find_business`. The reply comes back with `cards` for the listed places it names; `/plan` shows them above the text.
+
+Evals: `npm run eval:visitor` runs ~100 visitor questions in-process (needs `OPENAI_API_KEY`); `npm run eval:visitor:url -- https://<preview>` runs them against a deployment (`VERCEL_BYPASS_SECRET` for protected previews). Each case checks the reply answers the question (LLM judge), does not lead with a question or the car question, does not start a plan, names only places in the Maio API, and keeps nearby answers in the guest's area. `VISITOR_TURN_MS` (default 9000) bounds the guide turn; on timeout the planner's scripted answers reply.
+
 ## Chat and data
 
 `/api/maio-chat` answers Ask Maio in this app. It reads boats, flights, businesses, accommodation, and experiences from `https://api.maio.cv/api/v1`, and uses the Vercel AI Gateway model the planner uses for open questions. It does not call portal.maio.cv. Recent conversation remains in component memory. Follow-up buttons send the selected prompt with conversation context; answers can be saved as branded PDFs. Voice questions are transcribed by `/api/transcribe` through Vercel AI Gateway. API errors are displayed without invented fallback answers.

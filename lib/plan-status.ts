@@ -318,6 +318,7 @@ export type PlanResultBody = {
   intent?: unknown;
   status?: unknown;
   steps?: unknown;
+  cards?: unknown;
   error?: unknown;
 };
 

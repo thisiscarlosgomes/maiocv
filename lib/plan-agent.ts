@@ -11,6 +11,10 @@ import { addBoatTrip, addListedActivity, addListedStop, answerAboutPlan, busyDay
 import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.ts";
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
+import { runVisitorAgent, type PlaceCard } from "./visitor/agent.ts";
+import { isVisitorQuestion } from "./visitor/route.ts";
+import { zoneFromText } from "./visitor/geo.ts";
+import { loadPlaces } from "./visitor/places.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searchBusinesses, type Stay } from "./maio-catalog.ts";
 import { formatCapeVerdePhone } from "./phone.ts";
@@ -25,6 +29,12 @@ import { venueType } from "./plan-rules.ts";
 import { EXPERIENCES, FOOD, addDays, experience, food, localizedPlaceName, place, parseTripPlan, type TripPlan } from "./trip.ts";
 import { TripRequestSchema, buildPlan, isAdrenalineExperience, seaStatus, type TripRequest } from "./trip-planner.ts";
 
+/** The guide agent may take a tool step or two; past this the turn answers without it. */
+/** Getting to Cabo Verde from abroad is a guide question, not a Praia–Maio timetable lookup. */
+const LONG_HAUL = /\b(lisbon|lisboa|lisbonne|portugal|europe|europa|london|paris|madrid|amsterdam|brussels|frankfurt|boston|usa|uk|from abroad|internationa\w*|sal|boa vista|boavista|sao vicente|better|or fly|ou voar|ou avion|stay a night|overnight|need to stay|how long|quanto tempo|combien de temps|direct|how (?:do|can|should) (?:i|we) get (?:to|there)|easiest|como (?:chego|chegar|se chega)|comment (?:aller|venir|arriver))\b/;
+
+export const VISITOR_TURN_MS = Number(process.env.VISITOR_TURN_MS) || 9_000;
+
 export type ToolEvent = { name: string; ok: boolean; arguments?: unknown; dropped?: string[] };
 export type PlanAgentResult = {
   reply: string;
@@ -37,6 +47,8 @@ export type PlanAgentResult = {
   status: string;
   /** Loading lines actually emitted, in order. */
   steps: string[];
+  /** Listed places the reply names, shown as cards above the text. */
+  cards?: PlaceCard[];
 };
 /** Snapshot handed to the failure log after the reply is chosen. Does not affect the reply. */
 export type PlanReplyTurn = {
@@ -391,6 +403,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const toolFacts: string[] = [];
   const rootFetch = deps.fetchImpl;
   const budgeted = budgetFetch(rootFetch);
+  // The guide's place list is a large read; start it now on its own clock so it is warm when needed.
+  const guideFetch = budgetFetch(rootFetch, VISITOR_TURN_MS);
+  void loadPlaces(rootFetch).catch(() => {});
   // Suggestions come only from what api.maio.cv lists now. The read shares the reply's fetch budget.
   await syncLiveCatalog(budgeted);
   const observed = observeFetch(budgeted, toolFacts);
@@ -469,11 +484,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   };
   if (turn.steps[0]) note(turn.steps[0]);
 
+  /** The guide agent's reply is not a plan edit; the edit-claim rewrite does not apply. */
+  let guideTurn = false;
   const finish = (reply: string, plan: TripPlan | null, toolEvents: ToolEvent[] = [], next = task, chips?: string[], preservePlaces = false, keepPending = false, built = false, work?: TurnWork) => {
     const changed = Boolean(plan && !samePlanShape(plan, current));
     let text = reply;
     let showBlurb = built && changed;
-    if (!changed && (claimsUnappliedEdit(text) || /Tap the card|Toque no cartão|Touchez la carte/i.test(text))) {
+    if (!(guideTurn && !current) && !changed && (claimsUnappliedEdit(text) || /Tap the card|Toque no cartão|Touchez la carte/i.test(text))) {
       const edit = current ? parseEditIntent(lastUser, current, today) : null;
       const editing = edit && edit.kind !== "other" && edit.kind !== "greeting" && edit.kind !== "question";
       if (editing && current) {
@@ -579,9 +596,74 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(say(task.locale, "Okay. We'll leave that.", "Está bem. Deixamos isso.", "D'accord. On laisse ça."), current);
   }
 
+  // Visitor questions (what to do, where to eat near X, how to get here, beaches, no-car days) go to one
+  // agent with the Maio background and distance-ranked listings. Plan building and plan edits stay below.
+  const p = classification.patch;
+  // An interest or a car answer inside a question ("can I surf?", "no car, where to eat?") is not a plan request.
+  const asking = lastUser.includes("?") || /^(?:what|whats|where|which|how|is|are|can|could|should|do|does|any|o que|onde|qual|quais|como|ha|tem|pode|que|ou|quel|quelle|comment|est ce)\b/.test(spoken);
+  const planRequest = classification.planShaping && (!asking || Boolean(p.dates?.start || p.dates?.days || p.arrival || p.departure || p.pace));
+  if (isVisitorQuestion(lastUser, {
+    planShaping: planRequest,
+    intent: classification.intent,
+    research: classification.research,
+    carPending: isCarPending(task.pendingQuestion) || isCarPending(seeded.pendingQuestion),
+    hasPlan: Boolean(current),
+    planEdit: Boolean(current && looksLikePlanEdit(lastUser)),
+    businessLookup: isBusinessLookup(lastUser),
+    // These already have answers built from published data; the guide does not replace them.
+    scripted: Boolean(classification.reference.kind)
+      || Boolean(classification.patch.diet || classification.patch.budget)
+      || (isTravelLookup(lastUser) && !LONG_HAUL.test(spoken))
+      || /\b(in the air|flight status|estado do voo|praia flight|is there a ferry|ha barco|y a-t-il un ferry|ferry timetable|horario do barco|horaire du ferry|next (?:ferry|boat|flight|sailing)|proximo (?:voo|barco|ferry)|prochain (?:vol|ferry|bateau))\b/.test(spoken)
+      || (isCarRentalQuestion(lastUser) && !/\b(?:what is|what s|o que e|qu est ce)\b/.test(spoken)) || isFourByFourQuestion(lastUser) || isSunsetClockQuestion(lastUser)
+      || /\b(?:surfboard|board rental|rent a board|aluguer de prancha|louer une planche|prancha|planche)\b/.test(spoken)
+      || (isStayQuestion(lastUser) && !zoneFromText(lastUser) && !/\b(quiet|calm|best|better|kids|family|sossegad|calme|meilleur|eat|food|restaurant|lunch|dinner|breakfast|drink|swim|walk|comer|manger)\b/.test(spoken)) || (isStayDetailQuestion(lastUser, task.constraints.stay?.name) && !/\b(eat|food|restaurant|lunch|dinner|breakfast|drink|bar|beach|swim|walk|near|nearby|close|comer|praia|perto|manger|plage|pres)\b/.test(spoken))
+      || Boolean(current && answerAboutPlan(current, lastUser)),
+  })) {
+    const phrase = stayPhrase(lastUser);
+    if (phrase) {
+      try {
+        const catalog = await offerings();
+        const published = matchStay(phrase, catalog.stays);
+        if (published) {
+          task = refreshTask({ ...task, constraints: { ...task.constraints, stay: {
+            id: published.id, name: published.name,
+            ...(published.area ? { area: published.area } : {}),
+            ...(published.lat !== undefined && published.lon !== undefined ? { lat: published.lat, lon: published.lon } : {}),
+          } } });
+        }
+      } catch { /* the stay is still read from the words below */ }
+    }
+    try {
+      const v0 = Date.now();
+      const visitor = await failFast(runVisitorAgent(history.slice(-10), {
+        locale: task.locale,
+        car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
+        stay: task.constraints.stay ?? null,
+        lastPlaces: [...task.lastPlaces].reverse().map((item) => item.name),
+      }, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
+      modelMs += Date.now() - v0;
+      if (visitor.reply) {
+        toolFacts.push(...visitor.facts);
+        const shown = visitor.cards.map((item) => ({ id: item.id.replace(/^visit-maio-|^maio-guide-/, "").slice(0, 80), name: item.name.slice(0, 120), ...(item.area ? { area: item.area } : {}) }));
+        const next = shown.length ? refreshTask({ ...task, lastPlaces: shown }) : task;
+        guideTurn = true;
+        const out = finish(visitor.reply, current, visitor.toolEvents.map(({ name, ok }) => ({ name, ok })), next, undefined, shown.length > 0);
+        return { ...out, cards: visitor.cards };
+      }
+    } catch (error) {
+      console.warn(`plan.visitor failed: ${error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown"}`);
+      // A slow or failed guide turn still answers, without a second model wait.
+      const listed = answerPlaceList(lastUser, task.locale);
+      if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, undefined);
+      const grounded = answerIslandQuestion(lastUser, task.locale);
+      return finish(grounded ?? sideQuestionFallback(task.locale), current, [], task);
+    }
+  }
+
   const lodgingAsk = /\b(?:address|morada|adresse|phone|telefone|telephone|contacto|contato|contact)\b/.test(spoken)
     && /\b(?:stay|staying|hotel|airbnb|alojamento|estadia|hebergement|logement|pousada|villa|casa)\b/.test(spoken);
-  if (isStayQuestion(lastUser) || stayPhrase(lastUser) || isStayDetailQuestion(lastUser, task.constraints.stay?.name) || lodgingAsk) {
+  if (isStayQuestion(lastUser) || stayPhrase(lastUser) || (isStayDetailQuestion(lastUser, task.constraints.stay?.name) && !/\b(eat|food|restaurant|lunch|dinner|breakfast|drink|bar|beach|swim|walk|near|nearby|close|comer|praia|perto|manger|plage|pres)\b/.test(spoken)) || lodgingAsk) {
     const catalog = await offerings();
     if (isStayQuestion(lastUser)) {
       const listed = stayListReply(task.locale, catalog.stays, catalog.staysRead);

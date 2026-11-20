@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { emptyTask, refreshTask } from "../lib/awareness/task.ts";
-import { runPlanAgent, TURN_MODEL_MS } from "../lib/plan-agent.ts";
+import { runPlanAgent, TURN_MODEL_MS, VISITOR_TURN_MS } from "../lib/plan-agent.ts";
 import { buildPlan } from "../lib/trip-planner.ts";
 import { LIVE_BOATS, LIVE_FLIGHTS } from "./plan/live-window.ts";
 
@@ -364,7 +364,8 @@ test("oui on an open plan and a hospital lookup stay under the model budget", as
     { model: hang, fetchImpl: quietFetch(), now: TODAY },
   );
   const slowMs = Date.now() - slowStarted;
-  assert.ok(slowMs < 5_000, `${slowMs}ms`);
+  // Visitor questions go to the guide agent, which has its own (longer) budget for a tool step.
+  assert.ok(slowMs < VISITOR_TURN_MS + 1_000, `${slowMs}ms`);
   assert.ok(slowMs >= TURN_MODEL_MS - 500);
   assert.match(slow.reply, /listings|model/i);
 });
