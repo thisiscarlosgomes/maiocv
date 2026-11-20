@@ -74,7 +74,7 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
 }
 
 /** Island and travel geography that is not a listed venue. */
-const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|north-facing coasts?|north-facing|west coast|south coast|north coast beaches|northern beaches|mercado|market|marche|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
+const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|north-facing coasts?|north-facing|town square|main square|the square|west coast|south coast|north coast beaches|northern beaches|mercado|market|marche|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
 
 /** Never in a reply: a made-up office, raw listing wording, superlatives pinned on "most visitors". Kept in step with lib/visitor/scrub.ts. */
 const LEAKS: [string, RegExp][] = [
@@ -138,7 +138,7 @@ type Row = { id: string; q: string; reply: string; ms: number; pass: boolean; fa
 
 /** Outside answers must say where they came from; empty-handed ones must say so honestly. */
 const LABELLED = /google maps|\bsource:|\(source|fonte:|\(fonte/i;
-const HONEST = /\b(?:don['’]t have|do not have|don['’]t know|couldn['’]t find|could not find|not listed|isn['’]t listed|no .{0,30} listed|none listed|ask (?:your|the) (?:stay|host|hotel|guesthouse)|ask locals|ask a local|n[aã]o tenho|n[aã]o encontrei|n[aã]o h[aá] .{0,40}listad|pergunt\w* (?:na|no|ao|à|a) (?:sua |seu )?(?:alojamento|anfitri|estadia|acomoda)|je n['’]ai pas|n['’]y a pas|pas trouv[ée]|demandez)/i;
+const HONEST = /\b(?:there isn['’]t|there is no|there['’]s no|isn['’]t an? (?:listed|registered)|don['’]t have|do not have|don['’]t know|couldn['’]t find|could not find|not listed|isn['’]t listed|no .{0,30} listed|none listed|ask (?:your|the) (?:stay|host|hotel|guesthouse)|ask locals|ask a local|n[aã]o tenho|n[aã]o encontrei|n[aã]o h[aá] .{0,40}listad|pergunt\w* (?:na|no|ao|à|a) (?:sua |seu )?(?:alojamento|anfitri|estadia|acomoda)|je n['’]ai pas|n['’]y a pas|pas trouv[ée]|demandez)/i;
 
 async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   const locale = c.locale ?? "en";
