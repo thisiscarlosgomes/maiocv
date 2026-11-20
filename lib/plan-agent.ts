@@ -11,7 +11,7 @@ import { addBoatTrip, addListedActivity, addListedStop, answerAboutPlan, busyDay
 import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.ts";
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
-import { runVisitorAgent, type PlaceCard } from "./visitor/agent.ts";
+import { runVisitorAgent, type PlaceCard, type ReplySource } from "./visitor/agent.ts";
 import { isVisitorQuestion } from "./visitor/route.ts";
 import { zoneFromText } from "./visitor/geo.ts";
 import { loadPlaces } from "./visitor/places.ts";
@@ -51,6 +51,8 @@ export type PlanAgentResult = {
   cards?: PlaceCard[];
   /** Where the cards' distances are measured from. */
   here?: { name: string; lat: number; lon: number } | null;
+  /** Outside sources (Google Maps, web pages) the reply used; empty when it is all Maio listings. */
+  sources?: ReplySource[];
 };
 /** Snapshot handed to the failure log after the reply is chosen. Does not affect the reply. */
 export type PlanReplyTurn = {
@@ -662,7 +664,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const next = shown.length ? refreshTask({ ...task, lastPlaces: [...task.lastPlaces.filter((item) => !shown.some((row) => row.id === item.id)), ...shown].slice(-8) }) : task;
         guideTurn = true;
         const out = finish(visitor.reply, current, visitor.toolEvents.map(({ name, ok }) => ({ name, ok })), next, undefined, shown.length > 0);
-        return { ...out, cards: visitor.cards, here: visitor.anchor ? { name: visitor.anchor.name, lat: visitor.anchor.lat, lon: visitor.anchor.lon } : null };
+        return { ...out, cards: visitor.cards, sources: visitor.sources, here: visitor.anchor ? { name: visitor.anchor.name, lat: visitor.anchor.lat, lon: visitor.anchor.lon } : null };
       }
     } catch (error) {
       console.warn(`plan.visitor failed: ${error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown"}`);

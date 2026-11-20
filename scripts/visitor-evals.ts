@@ -28,7 +28,8 @@ const bypass = process.env.VERCEL_BYPASS_SECRET;
 const vercelScope = flag("--vercel-scope");
 
 type Turn = { role: "user" | "assistant"; content: string };
-type Answer = { reply: string; plan: unknown; cards: { name: string; area: string | null }[]; task?: string; ms: number; status: number };
+type Source = { label: string; url: string | null; kind: string };
+type Answer = { reply: string; plan: unknown; cards: { name: string; area: string | null; source?: string }[]; sources: Source[]; task?: string; ms: number; status: number };
 
 let runLocal: ((messages: Turn[], task: unknown) => Promise<Answer & { taskObj?: unknown }>) | null = null;
 if (local) {
@@ -40,7 +41,7 @@ if (local) {
     const t0 = Date.now();
     const locale = (task as { locale?: string } | null)?.locale;
     const result = await runPlanAgent(messages, null, { model, sideModel, fetchImpl: fetch }, (task as never) ?? emptyTask((locale as never) ?? "en"));
-    return { reply: result.reply, plan: result.plan, cards: result.cards ?? [], ms: Date.now() - t0, status: 200, taskObj: result.task };
+    return { reply: result.reply, plan: result.plan, cards: result.cards ?? [], sources: result.sources ?? [], ms: Date.now() - t0, status: 200, taskObj: result.task };
   };
 }
 
@@ -63,17 +64,17 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
       try { body = JSON.parse(text.slice(text.indexOf("{"), cut)); } catch { body = {}; }
       if (code === 200) break;
     }
-    return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: code || 502 };
+    return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], sources: Array.isArray(body.sources) ? body.sources as Source[] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: code || 502 };
   }
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (bypass) { headers["x-vercel-protection-bypass"] = bypass; headers["x-vercel-set-bypass-cookie"] = "true"; }
   const response = await fetch(`${base}/api/plan`, { method: "POST", headers, body: JSON.stringify({ messages, locale, ...(typeof task === "string" ? { task } : {}) }), signal: AbortSignal.timeout(60_000) });
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-  return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: response.status };
+  return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], sources: Array.isArray(body.sources) ? body.sources as Source[] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: response.status };
 }
 
 /** Island and travel geography that is not a listed venue. */
-const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|west coast|south coast|north coast beaches|northern beaches|mercado|market|marche|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
+const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|north-facing coasts?|north-facing|town square|main square|the square|west coast|south coast|north coast beaches|northern beaches|mercado|market|marche|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
 
 /** Never in a reply: a made-up office, raw listing wording, superlatives pinned on "most visitors". Kept in step with lib/visitor/scrub.ts. */
 const LEAKS: [string, RegExp][] = [
@@ -108,8 +109,8 @@ function firstSentence(text: string): string {
 const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i;
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
-  const name = raw.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
+  const name = raw.replace(/[\u2010-\u2015]/g, "-").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  if (/centro de sa[uú]de|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
   const n = fold(name);
@@ -133,7 +134,11 @@ function areaOk(place: Place, notArea: string[]): boolean {
   return true;
 }
 
-type Row = { id: string; q: string; reply: string; ms: number; pass: boolean; fails: string[]; places: string[]; cards: string[] };
+type Row = { id: string; q: string; reply: string; ms: number; pass: boolean; fails: string[]; places: string[]; cards: string[]; sources: string[] };
+
+/** Outside answers must say where they came from; empty-handed ones must say so honestly. */
+const LABELLED = /google maps|\bsource:|\(source|fonte:|\(fonte/i;
+const HONEST = /\b(?:there isn['’]t|there is no|there['’]s no|isn['’]t an? (?:listed|registered)|don['’]t have|do not have|don['’]t know|couldn['’]t find|could not find|not listed|isn['’]t listed|no .{0,30} listed|none listed|ask (?:your|the) (?:stay|host|hotel|guesthouse)|ask locals|ask a local|n[aã]o tenho|n[aã]o encontrei|n[aã]o h[aá] .{0,40}listad|pergunt\w* (?:na|no|ao|à|a) (?:sua |seu )?(?:alojamento|anfitri|estadia|acomoda)|je n['’]ai pas|je n['’]ai aucun|aucun\w* .{0,30}list|n['’]y a pas|pas trouv[ée]|demandez)/i;
 
 async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   const locale = c.locale ?? "en";
@@ -147,7 +152,7 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   }
   messages.push({ role: "user", content: c.q });
   let answer: Answer;
-  try { answer = await ask(messages, locale, task); } catch (error) { return { id: c.id, q: c.q, reply: `ERROR ${(error as Error).message}`, ms: 0, pass: false, fails: ["error"], places: [], cards: [] }; }
+  try { answer = await ask(messages, locale, task); } catch (error) { return { id: c.id, q: c.q, reply: `ERROR ${(error as Error).message}`, ms: 0, pass: false, fails: ["error"], places: [], cards: [], sources: [] }; }
   const fails: string[] = [];
   const reply = answer.reply.trim();
   if (answer.status !== 200) fails.push(`http-${answer.status}`);
@@ -161,9 +166,17 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   if (c.mention && !c.mention.test(fold(reply)) && !c.mention.test(reply)) fails.push(`missing:${c.mention.source}`);
   const graded = reply ? await grade(c, reply) : { answered: false, reason: "empty", places: [] };
   if (!graded.answered) fails.push(`not-answered(${graded.reason})`);
+  const outsideNames = answer.cards.filter((card) => card.source === "google").map((card) => fold(card.name));
+  const labelled = LABELLED.test(reply) || answer.sources.some((item) => fold(reply).includes(fold(item.label)));
+  const cited = answer.sources.length > 0 && labelled;
+  if (c.fallback && !labelled && !HONEST.test(reply)) fails.push("fallback-unlabelled");
+  if (answer.sources.length && !labelled) fails.push("source-not-in-reply");
   for (const name of graded.places) {
     const hit = locate(places, name);
-    if (!hit.place && !hit.geography) fails.push(`invented:${name}`);
+    // Names from a labelled outside source (Google Maps card, cited web page) are not inventions.
+    const outside = !hit.place && (outsideNames.some((item) => item.includes(fold(name)) || fold(name).includes(item)) || cited);
+    const business = !hit.place && businessNames.some((item) => item === fold(name) || (fold(name).length >= 5 && item.includes(fold(name))));
+    if (!hit.place && !hit.geography && !outside && !business) fails.push(`invented:${name}`);
     // Two listings can share a name ("Cadjetinha Beach" in Vila and in Morrinho): any matching listing in the right area is fine.
     const candidates = hit.place ? places.filter((item) => item === hit.place || findPlace([item], name.replace(/\([^)]*\)/g, " ").trim())) : [];
     const inArea = !c.notArea?.length || candidates.some((item) => areaOk(item, c.notArea!) || !["food", "bar", "beach", "stay", "shop", "sight"].includes(item.kind));
@@ -171,11 +184,14 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   }
   for (const [kind, pattern] of LEAKS) if (pattern.test(reply)) fails.push(`leak:${kind}`);
   if (c.forbid && c.forbid.test(reply)) fails.push(`forbidden:${c.forbid.source}`);
-  return { id: c.id, q: c.q, reply, ms: answer.ms, pass: fails.length === 0, fails, places: graded.places, cards: answer.cards.map((card) => `${card.name}${card.area ? ` (${card.area})` : ""}`) };
+  return { id: c.id, q: c.q, reply, ms: answer.ms, pass: fails.length === 0, fails, places: graded.places, cards: answer.cards.map((card) => `${card.name}${card.area ? ` (${card.area})` : ""}${card.source ? ` [${card.source}]` : ""}`), sources: answer.sources.map((item) => item.url ?? item.label) };
 }
 
 const places = await loadPlaces(fetch);
 if (!places.length) throw new Error("Maio API places did not load");
+// The Maio business directory is listed data too (e.g. Barbearia DAD).
+const { loadBusinesses } = await import("../lib/maio-catalog.ts");
+const businessNames = (await loadBusinesses(fetch).catch(() => ({ records: [] as { name: string }[] }))).records.map((row) => fold(row.name));
 const cases = VISITOR_CASES.filter((c) => (!only || only.includes(c.id)) && (!grep || grep.test(c.id)));
 const rows: Row[] = [];
 let next = 0;
@@ -184,7 +200,7 @@ await Promise.all(Array.from({ length: Math.max(1, concurrency) }, async () => {
     const c = cases[next++];
     const row = await runCase(c, places);
     rows.push(row);
-    console.log(`${row.pass ? "PASS" : "FAIL"} ${row.id} (${row.ms}ms)${row.pass ? "" : ` ${row.fails.join("; ")}`}\n   Q: ${row.q}\n   A: ${row.reply.replace(/\s+/g, " ").slice(0, 400)}${row.cards.length ? `\n   cards: ${row.cards.join(" | ")}` : ""}`);
+    console.log(`${row.pass ? "PASS" : "FAIL"} ${row.id} (${row.ms}ms)${row.pass ? "" : ` ${row.fails.join("; ")}`}\n   Q: ${row.q}\n   A: ${row.reply.replace(/\s+/g, " ").slice(0, 400)}${row.cards.length ? `\n   cards: ${row.cards.join(" | ")}` : ""}${row.sources.length ? `\n   sources: ${row.sources.join(" | ")}` : ""}`);
   }
 }));
 const passed = rows.filter((row) => row.pass).length;

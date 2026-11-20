@@ -123,6 +123,28 @@ export function searchBusinesses(records: BusinessRecord[], query: string): Busi
   return out;
 }
 
+/** What a guest asks for → Maio API business categories ("hairdresser" → Barbearia DAD). */
+const NEED_CATEGORIES: [RegExp, string[]][] = [
+  [/\b(?:hair\w*|barber\w*|barbearia|cabeleir\w*|salon|salao|coiff\w*|haircut)\b/, ["hairdresser"]],
+  [/\b(?:supermarket|supermercado|groceries|grocery|supermarche|epicerie)\b/, ["supermarket", "convenience"]],
+  [/\b(?:market|mercado|marche)\b/, ["marketplace"]],
+  [/\b(?:corner shop|mini ?market|mercearia|convenience)\b/, ["convenience", "supermarket"]],
+  [/\b(?:jet ?ski)\b/, ["other"]],
+  [/\b(?:quad|buggy)\b/, ["sports"]],
+  [/\b(?:fishing|pesca|peche)\b/, ["fishing"]],
+  [/\b(?:surf|kite|sup|paddle|windsurf|water ?sports?)\b/, ["water_sports"]],
+  [/\b(?:tour|tours|guide|guided|excursao|excursion)\b/, ["guided_tour"]],
+];
+
+/** Name matches first, then businesses whose category fits the need. Still only Maio API records. */
+export function searchBusinessesByNeed(records: BusinessRecord[], query: string): BusinessRecord[] {
+  const byName = searchBusinesses(records, query);
+  const need = norm(query).replace(/[^a-z0-9 ]+/g, " ");
+  const categories = new Set(NEED_CATEGORIES.flatMap(([pattern, cats]) => (pattern.test(need) ? cats : [])));
+  const byCategory = categories.size ? records.filter((record) => categories.has(record.category) && !byName.includes(record)) : [];
+  return [...byName, ...byCategory].slice(0, 6);
+}
+
 export function pharmacyRecords(records: BusinessRecord[]): BusinessRecord[] {
   return records.filter((record) => /pharmac|farmac/i.test(`${record.name} ${record.category}`)).slice(0, 3);
 }
