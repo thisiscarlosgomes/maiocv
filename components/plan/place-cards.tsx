@@ -3,7 +3,7 @@
 import type { Locale } from "../../lib/locale";
 import { SafeImg } from "../stop-photo";
 
-export type ChatPlaceCard = { id: string; name: string; kind: string; area: string | null; km: number | null; walkMin: number | null; driveMin: number | null; image: string | null; approxLocation?: boolean };
+export type ChatPlaceCard = { id: string; name: string; kind: string; area: string | null; km: number | null; walkMin: number | null; driveMin: number | null; image: string | null; approxLocation?: boolean; lat?: number | null; lon?: number | null };
 
 const WALK = { en: "min walk", pt: "min a pé", fr: "min à pied" } as const;
 const DRIVE = { en: "min drive", pt: "min de carro", fr: "min en voiture" } as const;

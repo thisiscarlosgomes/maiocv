@@ -49,6 +49,8 @@ export type PlanAgentResult = {
   steps: string[];
   /** Listed places the reply names, shown as cards above the text. */
   cards?: PlaceCard[];
+  /** Where the cards' distances are measured from. */
+  here?: { name: string; lat: number; lon: number } | null;
 };
 /** Snapshot handed to the failure log after the reply is chosen. Does not affect the reply. */
 export type PlanReplyTurn = {
@@ -660,7 +662,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         const next = shown.length ? refreshTask({ ...task, lastPlaces: [...task.lastPlaces.filter((item) => !shown.some((row) => row.id === item.id)), ...shown].slice(-8) }) : task;
         guideTurn = true;
         const out = finish(visitor.reply, current, visitor.toolEvents.map(({ name, ok }) => ({ name, ok })), next, undefined, shown.length > 0);
-        return { ...out, cards: visitor.cards };
+        return { ...out, cards: visitor.cards, here: visitor.anchor ? { name: visitor.anchor.name, lat: visitor.anchor.lat, lon: visitor.anchor.lon } : null };
       }
     } catch (error) {
       console.warn(`plan.visitor failed: ${error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown"}`);

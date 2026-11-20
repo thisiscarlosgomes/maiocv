@@ -1881,3 +1881,17 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 @media (max-width: 400px) { .maio-header .maio-header-actions > .maio-button { display: none; } }
 
 .lang-switch-menu div button { border: 0; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; }
+
+/* Map of the recommended places (OpenStreetMap tiles, no key). */
+.plan-map { margin: 0 0 12px; }
+.plan-map-canvas { position: relative; width: 100%; max-width: 480px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--maio-surface-data); }
+.plan-map-tile { position: absolute; height: auto; aspect-ratio: 1; max-width: none; user-select: none; pointer-events: none; }
+.plan-map-pin { position: absolute; transform: translate(-50%, -50%); min-width: 22px; height: 22px; padding: 0 6px; display: grid; place-items: center; border-radius: 999px; background: var(--maio-ink, #111); color: #fff; font-size: 12px; font-weight: 600; line-height: 1; box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); }
+.plan-map-pin-approx { opacity: 0.7; }
+.plan-map-pin-here { background: #0a84ff; font-size: 11px; }
+.plan-map-credit { position: absolute; right: 4px; bottom: 2px; padding: 0 4px; border-radius: 4px; background: rgb(255 255 255 / 0.8); color: #333; font-size: 10px; text-decoration: none; }
+.plan-map-list { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+.plan-map-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.plan-map-num { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: var(--maio-ink, #111); color: #fff; font-size: 11px; font-weight: 600; }
+.plan-map-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-map-meta { color: var(--muted, #666); white-space: nowrap; }

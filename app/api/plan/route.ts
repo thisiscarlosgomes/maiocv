@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     // Never send an empty bubble.
     if (!result.reply.trim()) result.reply = sideQuestionFallback(fallbackLocale);
     const signed = signTask(result.task);
-    return { reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps, cards: result.cards ?? [] };
+    return { reply: result.reply, plan: result.plan, toolEvents: result.toolEvents, task: signed, chips: result.chips, intent: result.intent, status: result.status, steps: result.steps, cards: result.cards ?? [], here: result.here ?? null };
   }
 
   function failureBody() {
