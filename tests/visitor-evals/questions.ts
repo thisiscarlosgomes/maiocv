@@ -14,6 +14,8 @@ export type VisitorCase = {
   mention?: RegExp;
   /** Open questions: must not start a plan or ask for trip details first. */
   open?: boolean;
+  /** Nothing in the Maio listings fits: the reply must label an outside source or say honestly it has nothing. */
+  fallback?: boolean;
   /** The reply must not match this (on top of the leak checks every case gets). */
   forbid?: RegExp;
 };
@@ -154,4 +156,18 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "state-dates-turtles", q: "Will we see turtles?", history: ["We arrive on 12 December for 5 days."], mention: /\b(?:june|july|august|september|october|jun|jul|aug|sep|oct)\b|outside (?:the )?(?:nesting )?season|not (?:in|during) december/i, forbid: /\bi can check\b|when (?:do|are) you (?:arrive|arriving|coming|visiting)|which dates|what dates/i },
   { id: "state-dates-whales", q: "Any chance of whales while we're there?", history: ["We're coming in March for a week."], mention: /whale|humpback|season|march|spring|feb|apr|may/i, forbid: /when (?:do|are) you (?:arrive|arriving|coming|visiting)|which dates|what dates/i },
   { id: "state-shown", q: "Which of those is closest to Baxona beach?", history: ["Where can I eat in Calheta?"], mention: /vanuza|anita|belorizonte|cala grande/i },
+  // Distances from the stay, not the centre of its village (Belorizonte is ~2 min from Casa do Mar, ~11 from Calheta's centre).
+  { id: "state-origin", q: "Any restaurant near Calheta?", history: ["We're staying at Casa do Mar."], mention: /belorizonte|vanuza|anita|cala grande/i, forbid: /belorizonte[^.;]{0,40}\b1[01]\s*(?:min|-minute)/i },
+
+  // Step 3: nothing in the Maio listings fits. The guide may look further (Google Maps, then the web) and must label it, or say honestly it has nothing.
+  { id: "fb-dentist", q: "Is there a dentist on Maio?", fallback: true },
+  { id: "fb-yoga", q: "Where can I do a yoga class?", fallback: true },
+  { id: "fb-laundry", q: "Where can I get laundry done?", fallback: true },
+  { id: "fb-hairdresser", q: "Is there a hairdresser in Vila?", fallback: true },
+  { id: "fb-gym", q: "Is there a gym on the island?", fallback: true },
+  { id: "fb-pt-dentista", q: "Há algum dentista no Maio?", locale: "pt", fallback: true },
+  { id: "fb-fr-yoga", q: "Où peut-on faire du yoga à Maio ?", locale: "fr", fallback: true },
+  // Listed things never go to an outside source.
+  { id: "fb-listed-car", q: "Where can I rent a car?", mention: /rent|car|aluguer/i, forbid: /google maps|\bsource:/i },
+  { id: "fb-listed-fish", q: "Where can we eat fish in Calheta?", area: "calheta", mention: /vanuza|anita|belorizonte|cala grande/i, forbid: /google maps|\bsource:/i },
 ];
