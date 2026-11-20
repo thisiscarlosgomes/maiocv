@@ -1,6 +1,6 @@
 import { analyticsAuthorized } from "./lib/analytics-auth";
 import { NextResponse, type NextRequest } from "next/server";
-import { essentialsPath, essentialsSlug, LANG_COOKIE, DEFAULT_LOCALE, localize, localeFromPath, routeAlias, stripLocale } from "./lib/locale";
+import { essentialsPath, essentialsSlug, LANG_COOKIE, localize, preferredLocale, localeFromPath, routeAlias, stripLocale } from "./lib/locale";
 
 const essentialsPages = new Set(Object.values(essentialsSlug));
 
@@ -52,9 +52,11 @@ export function proxy(request: NextRequest) {
   if (/^\/t\/[0-9A-Za-z]{6,8}\/?$/.test(pathname)) return NextResponse.next();
 
   const destination = request.nextUrl.clone();
-  const locale = DEFAULT_LOCALE;
+  // An English browser lands on /en, not the Portuguese default; a language the guest picked before still wins.
+  const locale = preferredLocale(request.cookies.get(LANG_COOKIE)?.value, request.headers.get("accept-language"));
   destination.pathname = pathname === "/" ? localize(locale, "/") : localize(locale, pathname);
   const response = NextResponse.redirect(destination, 307);
+  response.headers.set("Vary", "Accept-Language, Cookie");
   return response;
 }
 

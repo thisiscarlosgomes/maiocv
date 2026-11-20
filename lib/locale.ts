@@ -24,6 +24,21 @@ export function localeHreflang(locale: Locale): string {
 
 export const DEFAULT_LOCALE: Locale = "pt";
 
+/**
+ * Language for a bare URL: the saved choice first, then the browser's Accept-Language
+ * (first of pt/en/fr by q-weight), then Portuguese.
+ */
+export function preferredLocale(cookie: string | null | undefined, acceptLanguage: string | null | undefined): Locale {
+  if (isLocale(cookie)) return cookie;
+  const ranked = (acceptLanguage ?? "").split(",").map((part, index) => {
+    const [tag, ...params] = part.trim().toLowerCase().split(";");
+    const q = Number(params.find((item) => item.trim().startsWith("q="))?.trim().slice(2) ?? "1");
+    return { lang: tag.split("-")[0], q: Number.isFinite(q) ? q : 0, index };
+  }).filter((item) => item.lang && item.q > 0).sort((a, b) => b.q - a.q || a.index - b.index);
+  for (const item of ranked) if (isLocale(item.lang)) return item.lang;
+  return DEFAULT_LOCALE;
+}
+
 export function localeFromPath(pathname: string): Locale | null {
   const segment = pathname.split("/").filter(Boolean)[0];
   return isLocale(segment) ? segment : null;
