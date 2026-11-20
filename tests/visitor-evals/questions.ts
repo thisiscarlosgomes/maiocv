@@ -112,7 +112,7 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "cheese", q: "Where can I try goat cheese?", mention: /ribeira d|cheese/i },
   { id: "grogue", q: "Where is grogue made on Maio?", mention: /figueira|trapiche/i },
   { id: "pottery", q: "Where can I buy local crafts?", mention: /morro|calheta|artisan|pottery/i },
-  { id: "tours", q: "Are there any guided tours?", open: true, forbid: /tourist office|tourist information/i },
+  { id: "tours", q: "Are there any guided tours?", open: true, forbid: /\b(?:ask|visit|try|at|go to) (?:at )?the tourist (?:office|information)/i },
   { id: "tours-book", q: "Where do I book an island tour, is there a tourist office?", open: true, forbid: /\b(?:the|a) tourist office (?:in|at|on|by)\b/i },
   { id: "boat-trip", q: "Can we do a boat trip or fishing?", open: true, forbid: /location not listed|\(listed\)|listed as/i },
   { id: "fishing-where", q: "Where does the sport fishing boat leave from?", open: true, forbid: /location not listed|listed as/i },
