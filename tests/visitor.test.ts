@@ -5,7 +5,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import type { LanguageModel } from "ai";
 import { driveMinutes, haversineKm, nearestZone, walkMinutes, zoneFromText } from "../lib/visitor/geo.ts";
 import { buildIndex, findPlace, nearby, resolveAnchor, setPlaceIndex } from "../lib/visitor/places.ts";
-import { cardsForReply, clampReply, locationFromConversation, runVisitorAgent } from "../lib/visitor/agent.ts";
+import { cardsForReply, clampReply, onlyQuestions, locationFromConversation, runVisitorAgent } from "../lib/visitor/agent.ts";
 import { isVisitorQuestion } from "../lib/visitor/route.ts";
 import { scrubReply } from "../lib/visitor/scrub.ts";
 import { MAIO_BACKGROUND } from "../lib/visitor/background.ts";
@@ -144,5 +144,15 @@ test("scrub drops a made-up tourist office, raw listing wording and borrowed sup
   assert.equal(scrubReply("Praia Real is widely considered the best beach."), "Praia Real is arguably the best beach.");
   assert.equal(scrubReply("Visit the tourist office. Bitche Rotcha is by the pier."), "Bitche Rotcha is by the pier.");
   assert.equal(scrubReply("Ask at the tourist office."), "");
+  assert.equal(scrubReply("Morro Beach is walkable. Note the listing says the sea there can make swimming unsafe."), "Morro Beach is walkable. Note the sea there can make swimming unsafe.");
+  assert.equal(scrubReply("Restaurante Bar Anita — the local listing shows it as a Calheta restaurant."), "Restaurante Bar Anita — it is a Calheta restaurant.");
+  assert.equal(scrubReply("Most visitors without a car also stay in Vila do Maio."), "You can also stay in Vila do Maio.");
+  assert.equal(scrubReply("Ring them directly; the phone is not listed."), "Ring them directly; the phone is not listed.");
   assert.equal(scrubReply("Baxona Beach in Calheta has very calm water."), "Baxona Beach in Calheta has very calm water.");
+});
+
+test("a reply that only asks a question back is detected", () => {
+  assert.equal(onlyQuestions("Which village are you staying in?"), true);
+  assert.equal(onlyQuestions("J&Tour runs island tours. Which village are you in?"), false);
+  assert.equal(onlyQuestions(""), false);
 });

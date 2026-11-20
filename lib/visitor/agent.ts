@@ -35,8 +35,8 @@ How to answer:
 - Nearby means the same village or area. Use places_nearby for anything "near", "close", "around", "in <village>", "where to eat/swim/stay". Recommend the nearest results first and give the distance as walking minutes (no car / in town) or driving minutes (car). If nothing is listed close by, say so plainly and name the nearest with its distance. Never present a place in another village (e.g. Vila do Maio for someone in Calheta) as "nearby".
 - Name only places, restaurants, stays, operators and businesses from "Listed places" below, a tool result, or the background. If a name is not there, it does not exist for you. For open questions without a location, pick from the background highlights and the listed places. Never invent a venue, phone number, price, opening hour, menu or timetable. If a detail is not in the data, say it is not listed and suggest asking the place or locals.
 - Describe a place only with what its summary or the background says (do not call a beach calm, a restaurant cheap, good for breakfast, or a view stunning unless that is in the data).
-- Never mention a tourist office or tourist information point: none is listed. To book tours, name the listed operator or say to ask the stay.
-- Never quote listing wording or labels ("location not listed", "listed as", "(listed)"). If a place's village is not given, just do not say where it is.
+- Never mention a tourist office or tourist information point: none is listed. When asked about tours or a tourist office, say none is listed and name the listed tour operators to book with, or say to ask the stay.
+- Never quote listing wording or labels ("location not listed", "listed as", "(listed)"), and never say "the listing says/shows"; just state the fact. If a place's village is not given, just do not say where it is.
 - No superlatives you cannot back: do not say "most visitors", "everyone says", "widely considered" or "the best/most beautiful" as a fact. Give your own pick as an opinion ("I'd pick …") with the reason from its summary.
 - Listings have no opening hours, menus, prices or diet flags.
 - Transport times only from get_transport. Weather and sea only from get_maio_weather.
@@ -135,6 +135,12 @@ export function clampReply(text: string, maxWords = 60, maxSentences = 3): strin
     words += count;
   }
   return kept.join(" ");
+}
+
+/** Every sentence is a question: nothing was answered. */
+export function onlyQuestions(text: string): boolean {
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+  return sentences.length > 0 && sentences.every((sentence) => sentence.trim().endsWith("?"));
 }
 
 export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, places: Place[] = [], anchor: Anchor | null = null, locale: "en" | "pt" = "en"): PlaceCard[] {
@@ -250,16 +256,26 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   };
 
   const system = `${VISITOR_RULES}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}`;
-  const generated = await generateText({
+  const started = Date.now();
+  const budget = deps.timeoutMs ?? 14_000;
+  const ask = (extra: string, timeoutMs: number) => generateText({
     model: deps.model,
-    system,
+    system: system + extra,
     messages: turns.slice(-10),
     tools,
     stopWhen: stepCountIs(4),
     maxRetries: 0,
-    abortSignal: AbortSignal.timeout(deps.timeoutMs ?? 14_000),
+    abortSignal: AbortSignal.timeout(timeoutMs),
   });
-  const reply = clampReply(scrubReply(generated.text));
+  const generated = await ask("", budget);
+  let reply = clampReply(scrubReply(generated.text));
+  // A reply that is only a question back is a dodge. One re-ask if there is time; otherwise keep it.
+  const remaining = budget - (Date.now() - started);
+  if (onlyQuestions(reply) && remaining > 3_000) {
+    const retry = await ask(`\n\n# Correction\nYour last draft only asked the guest a question ("${reply.slice(0, 160)}"). Answer now with what you know: give the useful answer first, then at most one short follow-up.`, remaining - 500).catch(() => null);
+    const second = retry ? clampReply(scrubReply(retry.text)) : "";
+    if (second && !onlyQuestions(second)) reply = second;
+  }
   // The guest's own location is context, not a suggestion.
   const cards = cardsForReply(reply, offered, places, anchor, locale).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
   return { reply, cards, toolEvents: events, facts, anchor };

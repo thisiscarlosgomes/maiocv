@@ -6,7 +6,7 @@
  * Phrases are rewritten where the sentence still reads; otherwise the sentence goes.
  */
 
-const SENTENCE_LEAK = /\btourist (?:office|information)|tourism office|posto de turismo|office de tourisme|location not listed|not listed as|listed as an? ["“]/i;
+const SENTENCE_LEAK = /\blistings? (?:says?|shows?|data)\b|\btourist (?:office|information)|tourism office|posto de turismo|office de tourisme|location not listed|not listed as|listed as an? ["“]/i;
 
 export function scrubReply(text: string): string {
   let out = text
@@ -20,6 +20,12 @@ export function scrubReply(text: string): string {
     .replace(/\beveryone (?:says|agrees)\b(?: that)?/gi, "I'd say")
     .replace(/\beveryone calls\b/gi, "I'd call")
     .replace(/\bwidely (?:considered|regarded)(?: as)?\b/gi, "arguably")
+    // "most visitors without a car also stay in Vila" → "you can also stay in Vila".
+    .replace(/\b(?:most|many) (?:visitors|people|travell?ers|tourists|guests)(?: (?:without|with) an? \w+)? (?:also )?(stay|go|head)\b/gi, "you can also $1")
+    // "the local listing shows it as a Calheta restaurant" → "it is a Calheta restaurant".
+    .replace(/\b(?:the |its )?(?:local )?listings? (?:shows?|lists?|has) (it|them) as\b/gi, (_m, who: string) => (who.toLowerCase() === "it" ? "it is" : "they are"))
+    // "note the listing says the sea…" → "note the sea…".
+    .replace(/\b(?:the |its )?(?:local )?listings? (?:says?|notes?|mentions?|describes? it as)(?: that)?\s+/gi, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;!?])/g, "$1")
     .trim();
