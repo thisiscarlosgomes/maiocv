@@ -21,6 +21,8 @@ const only = flag("--only")?.split(",");
 const concurrency = Number(flag("--concurrency") ?? 4);
 const out = flag("--out");
 const bypass = process.env.VERCEL_BYPASS_SECRET;
+/** --vercel-scope <team>: reach a protected preview through `vercel curl` with the CLI's own login. */
+const vercelScope = flag("--vercel-scope");
 
 type Turn = { role: "user" | "assistant"; content: string };
 type Answer = { reply: string; plan: unknown; cards: { name: string; area: string | null }[]; task?: string; ms: number; status: number };
@@ -45,6 +47,14 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
     return runLocal(messages, task ?? emptyTask(locale as never));
   }
   const t0 = Date.now();
+  const payload = JSON.stringify({ messages, locale, ...(typeof task === "string" ? { task } : {}) });
+  if (vercelScope) {
+    const { execFile } = await import("node:child_process");
+    const text = await new Promise<string>((resolve, reject) => execFile("vercel", ["curl", `${base}/api/plan`, "--scope", vercelScope, "--", "--silent", "--max-time", "60", "--request", "POST", "--header", "Content-Type: application/json", "--data", payload], { maxBuffer: 4_000_000, timeout: 90_000 }, (error, stdout) => (error && !stdout ? reject(error) : resolve(stdout))));
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(text.slice(text.indexOf("{"))); } catch { /* not JSON */ }
+    return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: body.reply ? 200 : 502 };
+  }
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (bypass) { headers["x-vercel-protection-bypass"] = bypass; headers["x-vercel-set-bypass-cookie"] = "true"; }
   const response = await fetch(`${base}/api/plan`, { method: "POST", headers, body: JSON.stringify({ messages, locale, ...(typeof task === "string" ? { task } : {}) }), signal: AbortSignal.timeout(60_000) });

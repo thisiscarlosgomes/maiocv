@@ -21,7 +21,7 @@ export type VisitorContext = {
   lastPlaces?: string[];
 };
 export type VisitorResult = { reply: string; cards: PlaceCard[]; toolEvents: { name: string; ok: boolean; arguments?: unknown }[]; facts: string[]; anchor: Anchor | null };
-export type VisitorDeps = { model: LanguageModel; fetchImpl: typeof fetch; now?: Date; timeoutMs?: number };
+export type VisitorDeps = { model: LanguageModel; fetchImpl: typeof fetch; /** Unbudgeted fetch for the cached place list. */ placesFetch?: typeof fetch; now?: Date; timeoutMs?: number };
 
 /** Static first, so the provider can cache the prefix across turns. */
 export const VISITOR_RULES = `
@@ -148,7 +148,7 @@ export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, pl
 export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorContext, deps: VisitorDeps): Promise<VisitorResult> {
   const now = deps.now ?? new Date();
   const today = maioClock(now).date;
-  const places = await loadPlaces(deps.fetchImpl);
+  const places = await loadPlaces(deps.placesFetch ?? deps.fetchImpl);
   const byId = new Map(places.map((place) => [place.id, place]));
   let anchor = locationFromConversation(places, turns, context);
   const events: VisitorResult["toolEvents"] = [];
@@ -177,7 +177,8 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
         const result = nearby(places, { kinds: kindsFrom(categories), anchor: from, car: car ?? context.car, limit: limit ?? 5, locale });
         for (const row of result.results) offered.set(row.id, card(byId.get(row.id), row));
         const unknownNear = near && !asked ? `"${near}" is not a place I can locate on Maio; distances use ${from ? from.name : "no location"}.` : "";
-        return note("places_nearby", { categories, near, car }, places.length > 0, { ...result, note: [unknownNear, result.note].filter(Boolean).join(" "), listed: places.length > 0 });
+        if (!places.length) return note("places_nearby", { categories, near, car }, false, { listed: false, results: [], note: "The place list could not be loaded right now. Do not say a village has no restaurants, beaches or stays; say you can't load the list just now and give general advice from the background." });
+        return note("places_nearby", { categories, near, car }, true, { ...result, note: [unknownNear, result.note].filter(Boolean).join(" "), listed: true });
       },
     }),
     place_details: tool({

@@ -14,6 +14,7 @@ import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.
 import { runVisitorAgent, type PlaceCard } from "./visitor/agent.ts";
 import { isVisitorQuestion } from "./visitor/route.ts";
 import { zoneFromText } from "./visitor/geo.ts";
+import { loadPlaces } from "./visitor/places.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searchBusinesses, type Stay } from "./maio-catalog.ts";
 import { formatCapeVerdePhone } from "./phone.ts";
@@ -402,6 +403,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   const toolFacts: string[] = [];
   const rootFetch = deps.fetchImpl;
   const budgeted = budgetFetch(rootFetch);
+  // The guide's place list is a large read; start it now on its own clock so it is warm when needed.
+  const guideFetch = budgetFetch(rootFetch, VISITOR_TURN_MS);
+  void loadPlaces(rootFetch).catch(() => {});
   // Suggestions come only from what api.maio.cv lists now. The read shares the reply's fetch budget.
   await syncLiveCatalog(budgeted);
   const observed = observeFetch(budgeted, toolFacts);
@@ -637,7 +641,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
         stay: task.constraints.stay ?? null,
         lastPlaces: [...task.lastPlaces].reverse().map((item) => item.name),
-      }, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: deps.fetchImpl, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
+      }, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
       modelMs += Date.now() - v0;
       if (visitor.reply) {
         toolFacts.push(...visitor.facts);

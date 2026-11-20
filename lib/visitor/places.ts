@@ -34,7 +34,7 @@ export type Place = {
 
 const TTL_MS = 10 * 60 * 1000;
 const STALE_MS = 60 * 60 * 1000;
-const READ_MS = 4_000;
+const READ_MS = 6_000;
 
 type Rec = Record<string, unknown>;
 const rec = (value: unknown): Rec => (value && typeof value === "object" ? value as Rec : {});
