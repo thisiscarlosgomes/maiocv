@@ -11,7 +11,8 @@ import { addBoatTrip, addListedActivity, addListedStop, answerAboutPlan, busyDay
 import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.ts";
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
-import { runVisitorAgent, type PlaceCard, type ReplySource } from "./visitor/agent.ts";
+import { runVisitorAgent, type PlaceCard, type ReplySource, type VisitorContext } from "./visitor/agent.ts";
+import { villageBackup } from "./visitor/backup.ts";
 import { isVisitorQuestion } from "./visitor/route.ts";
 import { zoneFromText } from "./visitor/geo.ts";
 import { loadPlaces } from "./visitor/places.ts";
@@ -641,17 +642,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         }
       } catch { /* the stay is still read from the words below */ }
     }
+    const visitorContext: VisitorContext = {
+      locale: task.locale,
+      car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
+      stay: task.constraints.stay ?? null,
+      lastPlaces: [...task.lastPlaces].reverse().map((item) => (item.area ? `${item.name} (${item.area})` : item.name)),
+      base: task.constraints.base ?? null,
+      party: task.constraints.party ?? null,
+      dates: task.constraints.dates ?? null,
+    };
     try {
       const v0 = Date.now();
-      const visitor = await failFast(runVisitorAgent(history.slice(-10), {
-        locale: task.locale,
-        car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
-        stay: task.constraints.stay ?? null,
-        lastPlaces: [...task.lastPlaces].reverse().map((item) => (item.area ? `${item.name} (${item.area})` : item.name)),
-        base: task.constraints.base ?? null,
-        party: task.constraints.party ?? null,
-        dates: task.constraints.dates ?? null,
-      }, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
+      const visitor = await failFast(runVisitorAgent(history.slice(-10), visitorContext, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
       modelMs += Date.now() - v0;
       if (visitor.reply) {
         toolFacts.push(...visitor.facts);
@@ -668,7 +670,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       }
     } catch (error) {
       console.warn(`plan.visitor failed: ${error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown"}`);
-      // A slow or failed guide turn still answers, without a second model wait.
+      // A slow or failed guide turn still answers, without a second model wait, and keeps to the guest's village.
+      const local = villageBackup(lastUser, visitorContext, await loadPlaces(rootFetch).catch(() => []));
+      if (local) return { ...finish(local.reply, current, [], task, undefined, true), cards: local.cards, sources: [], here: { name: local.anchor.name, lat: local.anchor.lat, lon: local.anchor.lon } };
       const listed = answerPlaceList(lastUser, task.locale);
       if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, undefined);
       const grounded = answerIslandQuestion(lastUser, task.locale);
