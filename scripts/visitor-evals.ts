@@ -63,7 +63,7 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
 }
 
 /** Island and travel geography that is not a listed venue. */
-const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|mercado|market|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
+const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|west coast|south coast|mercado|market|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
 
 let judge: LanguageModel | null = null;
 async function grade(c: VisitorCase, reply: string): Promise<{ answered: boolean; reason: string; places: string[] }> {
@@ -92,7 +92,7 @@ const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
   const name = raw.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront/i.test(name)) return { place: null, geography: true };
+  if (/fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital/i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
   const n = fold(name);
@@ -146,7 +146,9 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   for (const name of graded.places) {
     const hit = locate(places, name);
     if (!hit.place && !hit.geography) fails.push(`invented:${name}`);
-    if (hit.place && c.notArea?.length && !areaOk(hit.place, c.notArea) && ["food", "bar", "beach", "stay", "shop", "sight"].includes(hit.place.kind)) fails.push(`wrong-area:${name}@${hit.place.zone}`);
+    // Two listings can share a name (Cadjetinha Beach in Vila and Morrinho); any in-area twin is fine.
+    const twinOk = hit.place && c.notArea?.length && places.some((other) => other !== hit.place && fold(other.name) === fold(hit.place!.name) && areaOk(other, c.notArea!));
+    if (hit.place && !twinOk && c.notArea?.length && !areaOk(hit.place, c.notArea) && ["food", "bar", "beach", "stay", "shop", "sight"].includes(hit.place.kind)) fails.push(`wrong-area:${name}@${hit.place.zone}`);
   }
   return { id: c.id, q: c.q, reply, ms: answer.ms, pass: fails.length === 0, fails, places: graded.places, cards: answer.cards.map((card) => `${card.name}${card.area ? ` (${card.area})` : ""}`) };
 }

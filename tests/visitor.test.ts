@@ -5,7 +5,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import type { LanguageModel } from "ai";
 import { driveMinutes, haversineKm, nearestZone, walkMinutes, zoneFromText } from "../lib/visitor/geo.ts";
 import { buildIndex, findPlace, nearby, resolveAnchor, setPlaceIndex } from "../lib/visitor/places.ts";
-import { cardsForReply, locationFromConversation, runVisitorAgent } from "../lib/visitor/agent.ts";
+import { cardsForReply, clampReply, locationFromConversation, runVisitorAgent } from "../lib/visitor/agent.ts";
 import { isVisitorQuestion } from "../lib/visitor/route.ts";
 import { MAIO_BACKGROUND } from "../lib/visitor/background.ts";
 
@@ -124,4 +124,12 @@ test("the agent sorts by distance in the tool and returns cards for what it name
   } finally {
     setPlaceIndex(null);
   }
+});
+
+test("replies are clamped to chat size and drop trailing offers", () => {
+  assert.equal(clampReply("The sea is calm today. If you’d like, I can fetch the 7-day forecast."), "The sea is calm today.");
+  assert.equal(clampReply("One. Two is 2.5 km away. Three? Four."), "One. Two is 2.5 km away. Three?");
+  const long = Array.from({ length: 5 }, (_, i) => `Sentence ${i} has exactly some twenty words in it to push the total count well past the sixty word limit ok.`).join(" ");
+  assert.ok(clampReply(long).split(/\s+/).length <= 60);
+  assert.ok(clampReply("**Best:** Baxona Beach.\n- calm water").startsWith("Best: Baxona Beach."));
 });

@@ -113,6 +113,24 @@ function card(place: Place | undefined, row: NearbyRow): PlaceCard {
 }
 
 /** Cards for the places the reply actually names, in the order it names them. */
+const OFFER = /^(?:if you(?:'|’)?d like|if you want|would you like|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser|queres que|si vous voulez|voulez-vous)/i;
+
+/** Chat-sized: at most three sentences and about 60 words, no trailing offers. The first sentence always stays. */
+export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {
+  const flat = text.replace(/\*\*|__|^#+\s*/gm, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim();
+  const sentences = flat.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
+  const kept: string[] = [];
+  let words = 0;
+  for (const sentence of sentences) {
+    if (kept.length && OFFER.test(sentence)) continue;
+    const count = sentence.split(/\s+/).length;
+    if (kept.length && (kept.length >= maxSentences || words + count > maxWords)) break;
+    kept.push(sentence);
+    words += count;
+  }
+  return kept.join(" ");
+}
+
 export function cardsForReply(reply: string, offered: Map<string, PlaceCard>, places: Place[] = [], anchor: Anchor | null = null, locale: "en" | "pt" = "en"): PlaceCard[] {
   // Places named from the catalogue without a tool call still get a card (distance from the guest, if known).
   for (const place of places) {
@@ -235,7 +253,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     maxRetries: 0,
     abortSignal: AbortSignal.timeout(deps.timeoutMs ?? 14_000),
   });
-  const reply = generated.text.trim();
+  const reply = clampReply(generated.text);
   // The guest's own location is context, not a suggestion.
   const cards = cardsForReply(reply, offered, places, anchor, locale).filter((item) => !anchor || anchor.source === "village" || fold(item.name) !== fold(anchor.name));
   return { reply, cards, toolEvents: events, facts, anchor };
