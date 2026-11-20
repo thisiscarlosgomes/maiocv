@@ -34,3 +34,14 @@ test("an unknown name in every sentence leaves only the honest line", () => {
   const out = dropUnknownNames("Try Yoga Studio Maio in Vila.", known, "pt");
   assert.equal(out.reply, "Não tenho isso listado para o Maio; pergunte na sua estadia ou aos locais.");
 });
+
+test("a capitalised sentence opener is not part of a listed name", () => {
+  const known = knownText(["Praça Restaurante", "Nha Terra"]);
+  assert.deepEqual(unknownNames("Try Praça Restaurante (2 min walk) or Nha Terra.", known), []);
+  assert.deepEqual(unknownNames("Try Restaurante Barra Azul tonight.", known), ["Try Restaurante Barra Azul"]);
+});
+
+test("a venue word in front of a listed name's start is that listing", () => {
+  const known = knownText(["Cala Grande, Lda", "Calheta"]);
+  assert.deepEqual(unknownNames("Bar Cala Grande, Lda is in Calheta.", known), []);
+});

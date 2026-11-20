@@ -54,6 +54,14 @@ function isKnown(phrase: string, known: string): boolean {
   return known.includes(` ${n} `) || known.includes(` ${n} |`) || known.includes(`| ${n} `);
 }
 
+function knownRun(text: string, known: string): boolean {
+  if (isKnown(text, known)) return true;
+  // "Restaurante Nha Terra" / "Bar Cala Grande" (listed "Cala Grande, Lda"): a venue word in front of a whole listed name is still that listing.
+  const words = fold(text).split(" ");
+  const rest = words.filter((word) => !VENUE.test(word)).join(" ").replace(/^(?:(?:de|do|da|dos|das|du|des|of|the|e|la|le|el) )+/, "");
+  return words.some((word) => VENUE.test(word)) && Boolean(rest) && !ALWAYS_OK.has(rest) && (known.includes(`| ${rest} |`) || (rest.includes(" ") && known.includes(`| ${rest} `)));
+}
+
 /** Unknown venue names in one sentence. */
 export function unknownNames(sentence: string, known: string): string[] {
   const bad: string[] = [];
@@ -62,10 +70,12 @@ export function unknownNames(sentence: string, known: string): string[] {
     const venue = words.some((word) => VENUE.test(word));
     const sentTo = words.length === 1 && LOCATIVE.test(run.before.split(" ").pop() ?? "") && !run.first;
     if (!venue && !sentTo) continue;
-    if (isKnown(run.text, known)) continue;
-    // "Restaurante Nha Terra": a venue word in front of a whole listed name is still that listing.
-    const rest = words.filter((word) => !VENUE.test(word)).join(" ").replace(/^(?:(?:de|do|da|dos|das|du|des|of|the|e|la|le|el) )+/, "");
-    if (venue && rest && !ALWAYS_OK.has(rest) && known.includes(`| ${rest} |`)) continue;
+    if (knownRun(run.text, known)) continue;
+    // The sentence's first word is capitalised by grammar ("Try Praça Restaurante"): judge the name without it.
+    if (run.first && words.length > 1) {
+      const tail = run.text.split(" ").slice(1).join(" ");
+      if (!fold(tail).split(" ").some((word) => VENUE.test(word)) || knownRun(tail, known)) continue;
+    }
     bad.push(run.text);
   }
   return bad;
