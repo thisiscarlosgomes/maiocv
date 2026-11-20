@@ -107,3 +107,9 @@ test("slow pace does not pack breakfast against the next stop or repeat a restau
     }
   }
 });
+
+test("prose with walking-time dashes is not turned into a list", () => {
+  const text = "Closest options in Calheta: Bar restaurante Vanuza - 3 min walk, Restaurante Bar Anita - 2 min walk, and Belorizonte - 11 min walk.";
+  assert.equal(expandRunOn(text), text);
+  assert.equal(publicPlanReply(text, "en", plan("en")), text);
+});
