@@ -22,7 +22,8 @@ const host = (url: string) => {
   } catch { return url; }
 };
 const brand = (source: string) => fold(source.split(".")[0]);
-const mentions = (text: string, source: string) => fold(text).includes(fold(source)) || fold(text).includes(brand(source));
+/** The text names the site: "mapquest.com" or "MapQuest". A site named after the place ("casa-evora.com") only counts in full. */
+const mentions = (text: string, source: string, name = "") => fold(text).includes(fold(source)) || (brand(source).length >= 4 && !fold(name).includes(brand(source)) && fold(text).includes(brand(source)));
 
 /** Web facts for one place or business, only for fields the Maio data has empty. */
 export function webFacts(name: string, maio: Partial<Record<WebField, string | null | undefined>>, file: EnrichmentFile = data as EnrichmentFile): WebFacts | null {
@@ -46,7 +47,7 @@ export function usesFact(reply: string, name: string | null, field: WebField, va
   // name null: the fact came from a tool call this turn, so the reply is about that place.
   if (name !== null && !text.includes(fold(name))) return false;
   // The reply named the fact's own site ("per mapquest.com", "MapQuest").
-  if (source && mentions(reply, source)) return true;
+  if (source && mentions(reply, source, name ?? "")) return true;
   if (field === "phone") return digits(reply).includes(digits(value).slice(-7));
   if (field === "hours") return timeTokens(value).some((token) => text.includes(fold(token)));
   if (field === "website") return text.includes(host(value).toLowerCase());

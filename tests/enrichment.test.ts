@@ -56,3 +56,10 @@ test("a reply that names the site counts as using the fact; Google Maps pages ge
   // From the directory (not asked about): the place must be named.
   assert.equal(citeWebFacts("Open 10:00 (per Google Maps).", [{ name: "Onda Azul Maio", facts }]).sources.length, 0);
 });
+
+test("a site named after the place is not cited just because the place is named", () => {
+  const own = { entries: [{ name: "Casa Evora", fields: { phone: { value: "+238 995.57.01", sourceUrl: "https://casa-evora.com/?lang=en" } } }] };
+  const facts = webFacts("Casa Evora", {}, own)!;
+  assert.equal(citeWebFacts("Casa Evora in Vila is calm.", [{ name: "Casa Evora", facts }]).sources.length, 0);
+  assert.equal(citeWebFacts("Call Casa Evora on 995 57 01.", [{ name: "Casa Evora", facts }]).sources.length, 1);
+});
