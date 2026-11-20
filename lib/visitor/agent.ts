@@ -117,7 +117,7 @@ function card(place: Place | undefined, row: NearbyRow): PlaceCard {
 }
 
 /** Cards for the places the reply actually names, in the order it names them. */
-const OFFER = /^(?:if you(?:'|’)?d like|if you want|would you like|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser|queres que|si vous voulez|voulez-vous)/i;
+const OFFER = /^(?:if you(?:'|’)?d like,? (?:i|me)\b|if you want,? (?:i|me)\b|if you want me to|if you tell me\b.*\bi(?:'|’)ll|would you like (?:me|to know)|do you want me to|want me to|i can (?:also )?(?:check|fetch|look|share|send)|let me know|se quiser,? (?:eu|posso)|queres que|si vous voulez,? je|voulez-vous que)/i;
 
 /** Chat-sized: at most three sentences and about 60 words, no trailing offers. The first sentence always stays. */
 export function clampReply(text: string, maxWords = 60, maxSentences = 3): string {

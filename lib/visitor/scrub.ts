@@ -6,7 +6,7 @@
  * Phrases are rewritten where the sentence still reads; otherwise the sentence goes.
  */
 
-const SENTENCE_LEAK = /\blistings? (?:says?|shows?|data)\b|location not listed|not listed as|\blisted as\b/i;
+const SENTENCE_LEAK = /\blistings? (?:says?|shows?|data)\b|location not listed|not listed as/i;
 const OFFICE = /\btourist (?:office|information)|tourism office|posto de turismo|office de tourisme/i;
 /** "No tourist office is listed" is the honest answer; only a sentence that sends the guest to one is a leak. */
 const NEGATED = /\b(?:no|not|isn't|isnt|there is no|there's no|without|nao|não|nenhum|pas de|aucun|n'y a pas)\b/i;
@@ -34,6 +34,9 @@ export function scrubReply(text: string): string {
     .replace(/\b(?:the |its )?(?:local )?listings? (?:says?|notes?|mentions?|describes? it as)(?: that)?\s+/gi, "")
     // "look for operators listed as Big Game…" → "look for Big Game…"; "in the island listings" → "".
     .replace(/\b(?:operators?|places?|businesses|business) listed as\s+/gi, "")
+    // 'listed as a "location not listed" experience' → ''; "are listed as dangerous" → "are dangerous".
+    .replace(/,?\s*(?:is |are )?listed as an? ["“][^"”]*["”](?:\s+\w+)?/gi, "")
+    .replace(/\b(is|are) (?:also )?listed as\b/gi, "$1")
     .replace(/\s*(?:in|on|from) the (?:island |local |maio )?listings\b/gi, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;!?])/g, "$1")
