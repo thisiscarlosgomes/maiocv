@@ -146,6 +146,8 @@ export function verify(field: Field, raw: { value?: string; url?: string; quote?
   }
   if (field === "description" && (value.length > 180 || value.length < 15)) return "description length";
   if (!fold(page.text + " " + page.title).includes(fold(name).split(" ")[0])) return "page does not name it";
+  // Same-name venues exist on other islands (a "Jet Ski" page on Sal): the page must be about Maio.
+  if (!/\bmaio\b/.test(fold(page.text + " " + page.title + " " + page.url))) return "page is not about Maio";
   return null;
 }
 
@@ -156,6 +158,7 @@ const todo = entities(places, businesses.records).filter((item) => !only || only
 console.log(`${todo.length} entities with empty fields`);
 const previous = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : null;
 const entries: { id: string; name: string; from: string; fields: Partial<Record<Field, Value>>; rejected: Record<string, string> }[] = [];
+const reviewRejected = new Set<string>((previous?.review?.rejected ?? []).map((item: { name: string; field: string; value: string }) => `${fold(item.name)}|${item.field}|${item.value}`));
 let next = 0;
 await Promise.all(Array.from({ length: 4 }, async () => {
   while (next < todo.length) {
@@ -171,6 +174,8 @@ await Promise.all(Array.from({ length: 4 }, async () => {
         if (!raw) continue;
         const why = verify(field, raw, pages, entity.name);
         if (why) { rejected[field] = why; continue; }
+        // A reviewer's rejection sticks across re-runs.
+        if (reviewRejected.has(`${fold(entity.name)}|${field}|${raw.value!.trim()}`)) { rejected[field] = "rejected in review"; continue; }
         fields[field] = { value: raw.value!.trim(), sourceUrl: raw.url!, quote: raw.quote!.trim(), retrievedAt: new Date().toISOString().slice(0, 10) };
       }
       entries.push({ id: entity.id, name: entity.name, from: entity.from, fields, rejected });
