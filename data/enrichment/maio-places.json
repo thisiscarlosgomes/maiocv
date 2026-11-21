@@ -1,0 +1,250 @@
+{
+  "note": "Secondary data from the public web for EMPTY Maio API fields only. The Maio API always wins; nothing here was written to the Maio API.",
+  "generatedAt": "2026-11-20T23:09:00.878Z",
+  "method": "Parallel Search + Extract, model extraction, code re-check that each quote is on the cited page and contains the value.",
+  "review": {
+    "status": "agent-reviewed",
+    "reviewedAt": "2026-11-21",
+    "by": "Grok Bot (read every value against its quote and page); Carlos still to approve before anything goes near the Maio API",
+    "notes": [
+      "Hotel Big Game Maio hours: reworded from the quote ('Hotel Hours (not explicitly times) / Restaurant Hours: Everyday 7:00 / 23:00')",
+      "Mercado Municipal hours: reworded from the quote ('Every day7 am–6 pm')",
+      "Mercearia Bar - Lucineno(Moreia Quente) description: reworded from the quote ('Convenience / grocery store (mercearia) listed in OpenStreetMap as Mercearia Bar - Lucineno(Moreia Quente) near Calheta.')",
+      "Villa Maris Eco Village hours: reworded from the quote ('Check-in 3 PM -5PM; Check-out 9AM -11 AM')",
+      "Villa Maris Eco Village description: reworded from the quote ('A peaceful eco-friendly accommodation by the sea, Maio’s first sustainable ecolodge located on the beach of Boca do Morro.')"
+    ],
+    "rejected": [
+      {
+        "name": "Casa Blanca Supermarket",
+        "field": "phone",
+        "value": "+238 956 4149",
+        "reason": "same number on two different venues' pages on maiocapeverde.com; looks like the site's contact line"
+      },
+      {
+        "name": "Casa Blanca Supermarket",
+        "field": "website",
+        "value": "https://www.maiocapeverde.com/casablanca-mercado-morro",
+        "reason": "a maiocapeverde.com listing page, not the shop's own site"
+      },
+      {
+        "name": "Casa Evora",
+        "field": "hours",
+        "value": "Lundi à Samedi : 7h30 à 10h  –  Dimanche 8h à 12h30",
+        "reason": "7h30–10h is the breakfast service of a guest house, not opening hours"
+      },
+      {
+        "name": "Eco Tour",
+        "field": "village",
+        "value": "Vila do Maio",
+        "reason": "Facebook page \"Turismo em Cabo Verde\" may not be the same Eco Tour"
+      },
+      {
+        "name": "Jet Ski",
+        "field": "phone",
+        "value": "+2385844426",
+        "reason": "atlanticstar.cv is a jet-ski centre in Santa Maria, Sal, not Maio"
+      },
+      {
+        "name": "Jet Ski",
+        "field": "website",
+        "value": "https://www.atlanticstar.cv/jetski/",
+        "reason": "atlanticstar.cv is a jet-ski centre in Santa Maria, Sal, not Maio"
+      },
+      {
+        "name": "Mariama in Morro - Loja Bert Restaurante",
+        "field": "phone",
+        "value": "+238 956 4149",
+        "reason": "same number as Casa Blanca on maiocapeverde.com; looks like the site's contact line"
+      },
+      {
+        "name": "Villa Azul",
+        "field": "hours",
+        "value": "Horario de la alberca · 8:00 a. m. a 7:00 p. m.",
+        "reason": "pool hours on an Airbnb listing, not the venue's hours"
+      }
+    ]
+  },
+  "checked": 32,
+  "filled": 17,
+  "entries": [
+    {
+      "id": "osm-node-11560303773",
+      "name": "Barbearia DAD",
+      "from": "business",
+      "fields": {
+        "village": {
+          "value": "Calheta",
+          "sourceUrl": "https://cv.geoview.info/barbearia_dad,11560303773n",
+          "quote": "near Calheta",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "osm-node-5254702077",
+      "name": "Casa Blanca Supermarket",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "06:00 - 00:00",
+          "sourceUrl": "https://www.maiocapeverde.com/casablanca-mercado-morro",
+          "quote": "06:00 - 00:00",
+          "retrievedAt": "2026-11-20"
+        },
+        "description": {
+          "value": "Casablanca Mini-Mercado in Morro is a local supermarket offering a good selection of food, wine and beer and local help and advice.",
+          "sourceUrl": "https://www.maiocapeverde.com/casablanca-mercado-morro",
+          "quote": "Casablanca Mini-Mercado in Morro has been keeping the shelves well-stocked with products",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "maio-guide-stay-casa-evora",
+      "name": "Casa Evora",
+      "from": "place",
+      "fields": {
+        "phone": {
+          "value": "+238 995.57.01",
+          "sourceUrl": "https://casa-evora.com/?lang=en",
+          "quote": "+238 995.57.01",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "maio-guide-stay-big-game-maio",
+      "name": "Hotel Big Game Maio",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "Restaurant: every day 7:00–23:00",
+          "sourceUrl": "https://biggamemaio.com/en",
+          "quote": "Restaurant Hours\n\nEveryday 7:00 / 23:00",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "osm-node-11560852423",
+      "name": "Mariama in Morro - Loja Bert Restaurante",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "07:00 - 00:00",
+          "sourceUrl": "https://www.maiocapeverde.com/loja-bert-restaurante-morro",
+          "quote": "07:00 - 00:00",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "osm-node-7369686731",
+      "name": "Mercado Municipal",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "Every day 7:00–18:00",
+          "sourceUrl": "https://evendo.com/locations/cabo-verde/vila-do-maio/shop/mercado-municipal",
+          "quote": "Opening hours\n\n* Every day7 am–6 pm",
+          "retrievedAt": "2026-11-20"
+        },
+        "phone": {
+          "value": "+2389526212",
+          "sourceUrl": "https://evendo.com/locations/cabo-verde/vila-do-maio/shop/mercado-municipal",
+          "quote": "\"telephone\":\"+2389526212\"",
+          "retrievedAt": "2026-11-20"
+        },
+        "description": {
+          "value": "The Mercado Municipal in Vila do Maio is a bustling market offering local produce, crafts and Cape Verdean hospitality.",
+          "sourceUrl": "https://evendo.com/locations/cabo-verde/vila-do-maio/shop/mercado-municipal",
+          "quote": "The Mercado Municipal in Vila do Maio is a bustling market that offers a vibrant slice of local life, filled with colorful stalls, fresh produce, and the warm hospitality of the Cape Verdean people.",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "osm-node-11560303775",
+      "name": "Mercearia Bar - Lucineno(Moreia Quente)",
+      "from": "place",
+      "fields": {
+        "description": {
+          "value": "Small grocery and bar near Calheta (OpenStreetMap listing).",
+          "sourceUrl": "https://cv.geoview.info/mercearia_bar_lucinenomoreia_quente,11560303775n",
+          "quote": "Mercearia Bar - Lucineno(Moreia Quente) is a convenience near Calheta (CV).",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "maio-guide-food-005",
+      "name": "Nha Terra",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "Sun 8:30 am - 11 pm; Mon 8:30 am - 11 pm; Tue 9 am - 11 pm; Wed Closed; Thu 8:30 am - 11 pm; Fri 8:30 am - 11 pm; Sat 8:30 am - 11 pm",
+          "sourceUrl": "https://www.mapquest.com/cv/nha-terra-525990203",
+          "quote": "Sun\n8:30 am - 11 pm\nMon\n8:30 am - 11 pm\nTue\n9 am - 11 pm\nWed\nClosed\nThu\n8:30 am - 11 pm\nFri\n8:30 am - 11 pm\nSat\n8:30 am - 11 pm",
+          "retrievedAt": "2026-11-20"
+        },
+        "phone": {
+          "value": "+238 928 60 85",
+          "sourceUrl": "https://www.facebook.com/nhaterracafemaio/",
+          "quote": "+238 928 60 85",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "maio-guide-blue-ondaazul-maio",
+      "name": "Onda Azul Maio",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "Monday: 10 am–5 pm; Tuesday: 10 am–5 pm; Wednesday: 10 am–5 pm; Thursday: 10 am–5 pm; Friday: 10 am–5 pm; Saturday: 10 am–5 pm; Sunday: Closed",
+          "sourceUrl": "https://www.google.com/maps/place?q=place_id:ChIJ31yBEyw8YqkR4OmC9GB72ys",
+          "quote": "Monday: 10 am–5 pm Tuesday: 10 am–5 pm Wednesday: 10 am–5 pm Thursday: 10 am–5 pm Friday: 10 am–5 pm Saturday: 10 am–5 pm Sunday: Closed",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "maio-guide-food-001",
+      "name": "Sete Sois Sete Luas",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "Tue 8 AM–3 PM, 6:30–10 PM; Wed 8 AM–3 PM, 6:30–10 PM; Thu 8 AM–3 PM, 6:30–10 PM; Fri 8 AM–3 PM, 6:30–10 PM; Sat 8 AM–3 PM, 6:30–10 PM; Sun 8 AM–3 PM, 6:30–11 PM; Mon Closed",
+          "sourceUrl": "https://www.google.com/maps/place?q=place_id:ChIJ55cPsfN7NQkRBE9bYCiV_vM",
+          "quote": "Monday: Closed Tuesday: 8 AM–3 PM 6:30–10 PM Wednesday: 8 AM–3 PM 6:30–10 PM Thursday: 8 AM–3 PM 6:30–10 PM Friday: 8 AM–3 PM 6:30–10 PM Saturday: 8 AM–3 PM 6:30–10 PM Sunday: 8 AM–3 PM 6:30–11 PM",
+          "retrievedAt": "2026-11-20"
+        },
+        "phone": {
+          "value": "+238 932 83 42",
+          "sourceUrl": "https://mindtrip.ai/restaurant/vila-do-maio-cape-verde/centrum-sete-sois-sete-luas/re-2PFh8yCg",
+          "quote": "[Phone +238 932 83 42](tel:+238 932 83 42)",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    },
+    {
+      "id": "osm-node-5241625614",
+      "name": "Villa Maris Eco Village",
+      "from": "place",
+      "fields": {
+        "hours": {
+          "value": "Check-in 15:00–17:00, check-out 09:00–11:00",
+          "sourceUrl": "https://villamariscv.com/services",
+          "quote": "Check-in\n3 PM -5PM\n\nCheck-out\n9AM -11 AM",
+          "retrievedAt": "2026-11-20"
+        },
+        "description": {
+          "value": "Eco-lodge on the beach at Boca do Morro, billed as Maio's first sustainable lodge.",
+          "sourceUrl": "https://villamariscv.com/villa-maris-ecolodge",
+          "quote": "A peaceful eco-friendly accommodation by the sea located.\nVilla Maris Ecolodge is a true haven of peace and sustainability in the heart of the island of Maio",
+          "retrievedAt": "2026-11-20"
+        }
+      }
+    }
+  ]
+}

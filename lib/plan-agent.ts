@@ -11,10 +11,12 @@ import { addBoatTrip, addListedActivity, addListedStop, answerAboutPlan, busyDay
 import { boardRentalReply, suggestionChips, yesChangeOffer } from "./plan-chips.ts";
 import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, parseEditIntent, partyEditReply, resolveDayRef, shiftFromIntent, whichDayQuestion, type EditIntent } from "./plan-intent.ts";
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
-import { runVisitorAgent, type PlaceCard, type ReplySource } from "./visitor/agent.ts";
+import { runVisitorAgent, type PlaceCard, type ReplySource, type VisitorContext } from "./visitor/agent.ts";
+import { webFacts } from "./visitor/enrichment.ts";
+import { villageBackup } from "./visitor/backup.ts";
 import { isVisitorQuestion } from "./visitor/route.ts";
 import { zoneFromText } from "./visitor/geo.ts";
-import { loadPlaces } from "./visitor/places.ts";
+import { findPlace, loadPlaces } from "./visitor/places.ts";
 import { annotateMissingTravel, answerTravelQuestion, attachPublishedTravel, citedTransport, landingClock, loadTimetable } from "./timetable.ts";
 import { carRentalRecords, loadBusinesses, loadOfferings, pharmacyRecords, searchBusinesses, type Stay } from "./maio-catalog.ts";
 import { formatCapeVerdePhone } from "./phone.ts";
@@ -622,7 +624,8 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       || Boolean(classification.patch.diet || classification.patch.budget)
       || (isTravelLookup(lastUser) && !LONG_HAUL.test(spoken))
       || /\b(in the air|flight status|estado do voo|praia flight|is there a ferry|ha barco|y a-t-il un ferry|ferry timetable|horario do barco|horaire du ferry|next (?:ferry|boat|flight|sailing)|proximo (?:voo|barco|ferry)|prochain (?:vol|ferry|bateau))\b/.test(spoken)
-      || (isCarRentalQuestion(lastUser) && !/\b(?:what is|what s|o que e|qu est ce)\b/.test(spoken)) || isFourByFourQuestion(lastUser) || isSunsetClockQuestion(lastUser)
+      // Car rental goes to the guide: it checks the Maio directory first, then the outside fallback when keys are set.
+      || isFourByFourQuestion(lastUser) || isSunsetClockQuestion(lastUser)
       || /\b(?:surfboard|board rental|rent a board|aluguer de prancha|louer une planche|prancha|planche)\b/.test(spoken)
       || (isStayQuestion(lastUser) && !zoneFromText(lastUser) && !/\b(quiet|calm|best|better|kids|family|sossegad|calme|meilleur|eat|food|restaurant|lunch|dinner|breakfast|drink|swim|walk|comer|manger)\b/.test(spoken)) || (isStayDetailQuestion(lastUser, task.constraints.stay?.name) && !/\b(eat|food|restaurant|lunch|dinner|breakfast|drink|bar|beach|swim|walk|near|nearby|close|comer|praia|perto|manger|plage|pres)\b/.test(spoken))
       || Boolean(current && answerAboutPlan(current, lastUser)),
@@ -641,17 +644,18 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
         }
       } catch { /* the stay is still read from the words below */ }
     }
+    const visitorContext: VisitorContext = {
+      locale: task.locale,
+      car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
+      stay: task.constraints.stay ?? null,
+      lastPlaces: [...task.lastPlaces].reverse().map((item) => (item.area ? `${item.name} (${item.area})` : item.name)),
+      base: task.constraints.base ?? null,
+      party: task.constraints.party ?? null,
+      dates: task.constraints.dates ?? null,
+    };
     try {
       const v0 = Date.now();
-      const visitor = await failFast(runVisitorAgent(history.slice(-10), {
-        locale: task.locale,
-        car: typeof task.constraints.car === "boolean" ? task.constraints.car : null,
-        stay: task.constraints.stay ?? null,
-        lastPlaces: [...task.lastPlaces].reverse().map((item) => (item.area ? `${item.name} (${item.area})` : item.name)),
-        base: task.constraints.base ?? null,
-        party: task.constraints.party ?? null,
-        dates: task.constraints.dates ?? null,
-      }, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
+      const visitor = await failFast(runVisitorAgent(history.slice(-10), visitorContext, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
       modelMs += Date.now() - v0;
       if (visitor.reply) {
         toolFacts.push(...visitor.facts);
@@ -668,11 +672,16 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       }
     } catch (error) {
       console.warn(`plan.visitor failed: ${error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown"}`);
-      // A slow or failed guide turn still answers, without a second model wait.
+      // A slow or failed guide turn still answers, without a second model wait, and keeps to the guest's village.
+      // Car hire falls through to the directory answer below.
+      if (!isCarRentalQuestion(lastUser)) {
+      const local = villageBackup(lastUser, visitorContext, await loadPlaces(rootFetch).catch(() => []));
+      if (local) return { ...finish(local.reply, current, [], task, undefined, true), cards: local.cards, sources: [], here: { name: local.anchor.name, lat: local.anchor.lat, lon: local.anchor.lon } };
       const listed = answerPlaceList(lastUser, task.locale);
       if (listed) return finish(listed.reply, current, [], { ...task, lastPlaces: listed.places }, undefined);
       const grounded = answerIslandQuestion(lastUser, task.locale);
       return finish(grounded ?? sideQuestionFallback(task.locale), current, [], task);
+      }
     }
   }
 
@@ -855,12 +864,23 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
       return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
     }
     const name = lastUser.split(/\b(?:for|do|de|da|du|pour)\b/i).pop()?.replace(/\b(?:phone|number|numero|telefone|telephone|the|a|o|um|uma|le|la)\b/gi, " ").replace(/[?!.]/g, "").trim() ?? "";
-    const hit = searchBusinesses(catalog.records, name)[0];
+    // A listed place (not in the business directory) can be what they mean: its phone, or a reviewed web one.
+    const place = searchBusinesses(catalog.records, name)[0] ? null : findPlace(await loadPlaces(rootFetch).catch(() => []), name);
+    const hit = searchBusinesses(catalog.records, name)[0] ?? (place ? { id: place.id, name: place.name, phone: place.phone ?? "", location: place.zone ?? "", category: place.kind } : undefined);
     const reply = !hit
       ? say(task.locale, "I don't have that business on the Maio list, so I won't invent a number.", "Não tenho esse negócio na lista do Maio, por isso não invento um número.", "Je n'ai pas ce commerce dans la liste de Maio, donc je n'invente pas de numéro.")
       : hit.phone
         ? say(task.locale, `${hit.name}: ${formatCapeVerdePhone(hit.phone)}.`, `${hit.name}: ${formatCapeVerdePhone(hit.phone)}.`, `${hit.name} : ${formatCapeVerdePhone(hit.phone)}.`)
         : say(task.locale, `${hit.name} is listed. No phone number is published.`, `${hit.name} está na lista. Não há telefone publicado.`, `${hit.name} est dans la liste. Aucun numéro n'est publié.`);
+    // The Maio list has no phone: a reviewed web source may (secondary data, always with its site).
+    const web = hit && !hit.phone ? webFacts(hit.name, { phone: hit.phone })?.phone : undefined;
+    if (web) {
+      const withWeb = say(task.locale,
+        `${hit!.name} has no phone in the Maio list. A public web page gives ${web.value} (source: ${web.source}); it may be out of date.`,
+        `${hit!.name} não tem telefone na lista do Maio. Uma página pública indica ${web.value} (fonte: ${web.source}); pode estar desatualizado.`,
+        `${hit!.name} n'a pas de numéro dans la liste de Maio. Une page publique indique ${web.value} (source : ${web.source}) ; il peut être dépassé.`);
+      return { ...finish(withWeb, current, [{ name: "maio-businesses", ok: catalog.source === "api" }, { name: "enrichment", ok: true }]), sources: [{ label: web.source, url: web.url, kind: "web" as const }] };
+    }
     return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }]);
   }
 

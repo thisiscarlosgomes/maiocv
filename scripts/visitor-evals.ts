@@ -73,6 +73,9 @@ async function ask(messages: Turn[], locale: string, task: unknown): Promise<Ans
   return { reply: String(body.reply ?? ""), plan: body.plan ?? null, cards: Array.isArray(body.cards) ? body.cards as Answer["cards"] : [], sources: Array.isArray(body.sources) ? body.sources as Source[] : [], task: typeof body.task === "string" ? body.task : undefined, ms: Date.now() - t0, status: response.status };
 }
 
+const { MAIO_BACKGROUND } = await import("../lib/visitor/background.ts");
+const BACKGROUND_FOLDED = fold(MAIO_BACKGROUND);
+
 /** Island and travel geography that is not a listed venue. */
 const GEOGRAPHY = /^(?:the |village of |villages of |city of |town of |island of |ilha do |vila de )?(maio|cabo verde|cape verde|praia|santiago|sal|boa vista|boavista|sao vicente|santo antao|fogo|brava|sao nicolau|lisbon|lisboa|lisbonne|portugal|london|paris|europe|france|uk|mindelo|cvsky|cv interilhas|interilhas|kriola|tap|cabo verde airlines|binter|bestfly|fmb|fundacao maio biodiversidade|maio biodiversity foundation|unesco|nelson mandela|amilcar cabral|aeroporto|airport|aerodromo|norte|north|south|west|east|north coast|east coast|north-facing coasts?|north-facing|town square|main square|the square|west coast|south coast|north coast beaches|northern beaches|mercado|market|marche|salinas?|salt pans?|dunes?|calheta|morro|morrinho|vila|porto ingles|the town|town|vila do maio|cidade do porto ingles|upper calheta|lower calheta|calheta de baixo|calheta de cima|ribeira d joao|ribeira dom joao)(?: island| town| village| area| harbour| harbor| port| pier)?$/;
 
@@ -109,10 +112,15 @@ function firstSentence(text: string): string {
 const CAR = /\b(car|cars|carro|voiture|4x4|drive|driving|rent|alug|location)\b/i;
 
 function locate(places: Place[], raw: string): { place: Place | null; geography: boolean } {
-  const name = raw.replace(/[\u2010-\u2015]/g, "-").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  if (/centro de sa[uú]de|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
+  // "praia Cadjetinha em Vila do Maio" is the place plus its village.
+  const name = raw.replace(/[\u2010-\u2015]/g, "-").replace(/\([^)]*\)/g, " ").replace(/\s+(?:em|in|à|a|no|na|near)\s+(?:vila do maio|vila|calheta|morro|morrinho|cascabulho|pedro vaz|santo antonio|ribeira dom joão|figueira|barreiro)\b.*$/i, "").replace(/\s+/g, " ").trim();
+  // Emergency services and island coasts are not venues.
+  if (/^(?:pol[ií]cia|police|bombeiros|firefighters|pompiers|protec[cç][aã]o civil)$|^(?:c[oô]te|costa|coast)\s+(?:nord|norte|north|sud|sul|south|est|leste|east|ouest|oeste|west)/i.test(name)) return { place: null, geography: true };
+  if (/centro de sa[uú]de|centro interpretativo|business directory|directory|(?:vila|town|local|municipal|calheta|morro) market|^market$|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
+  // Named in the island background the guide is given (forts, churches, salt pans…): not an invention.
+  if (fold(name).length >= 5 && BACKGROUND_FOLDED.includes(fold(name))) return { place: null, geography: true };
   const n = fold(name);
   const alias = ZONES.some((zone) => zone.aliases.includes(n.replace(/^(?:the|village of|villages of|city of|town of|vila de)\s+/, "")) || fold(zone.name) === n);
   if (alias || GEOGRAPHY.test(n)) return { place: null, geography: true };
@@ -163,11 +171,18 @@ async function runCase(c: VisitorCase, places: Place[]): Promise<Row> {
   if (CAR.test(lead) && lead.includes("?")) fails.push("car-question-first");
   if (answer.plan) fails.push("started-plan");
   if (c.open && /\b(how many days|quantos dias|combien de jours|which dates|que datas|quelles dates|when do you arrive)\b/i.test(reply)) fails.push("asks-trip-details");
-  if (c.mention && !c.mention.test(fold(reply)) && !c.mention.test(reply)) fails.push(`missing:${c.mention.source}`);
+  if (c.replyLang) {
+    const words = (re: RegExp) => new Set(fold(reply).match(re) ?? []).size;
+    const en = words(/\b(the|and|you|is|are|with|for|to|of|in|it|can|there)\b/g);
+    const pt = words(/\b(o|os|as|e|um|uma|com|para|de|do|da|em|no|na|pode|tem|voce)\b/g);
+    if ((c.replyLang === "en" ? en <= pt : pt <= en)) fails.push(`wrong-language(${c.replyLang})`);
+  }
+    if (c.mention && !c.mention.test(fold(reply)) && !c.mention.test(reply)) fails.push(`missing:${c.mention.source}`);
   const graded = reply ? await grade(c, reply) : { answered: false, reason: "empty", places: [] };
   if (!graded.answered) fails.push(`not-answered(${graded.reason})`);
   const outsideNames = answer.cards.filter((card) => card.source === "google").map((card) => fold(card.name));
-  const labelled = LABELLED.test(reply) || answer.sources.some((item) => fold(reply).includes(fold(item.label)));
+  // "per MapQuest" names the source mapquest.com.
+  const labelled = LABELLED.test(reply) || answer.sources.some((item) => fold(reply).includes(fold(item.label)) || (fold(item.label.split(".")[0]).length >= 4 && fold(reply).includes(fold(item.label.split(".")[0]))));
   const cited = answer.sources.length > 0 && labelled;
   if (c.fallback && !labelled && !HONEST.test(reply)) fails.push("fallback-unlabelled");
   if (answer.sources.length && !labelled) fails.push("source-not-in-reply");

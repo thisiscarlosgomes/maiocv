@@ -75,6 +75,18 @@ function clockOf(text: string): string | undefined {
   return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
+const EN_WORDS = /\b(?:the|we|our|us|where|what|which|how|when|is|are|there|can|could|should|would|any|nearby|near|for|with|from|this|that|it|you|your|i|my|me|eat|beach|beaches|tomorrow|today|tonight|best|good|get|go|find|have|has|will)\b/g;
+const PT_WORDS = /\b(?:os|as|de|da|dos|das|em|na|nas|nos|para|que|uma|um|e|ha|tem|onde|quero|podemos|estamos|como|qual|mais|com|praias)\b/g;
+const FR_WORDS = /\b(?:le|la|les|des|une|est|ou|nous|pour|avec|quel|quelle|peut|faire|dans|il|y)\b/g;
+
+/** A clearly English sentence: several English function words and almost no Portuguese or French ones. */
+export function looksEnglish(n: string): boolean {
+  const en = new Set(n.match(EN_WORDS) ?? []).size;
+  const pt = (n.match(PT_WORDS) ?? []).length;
+  const fr = (n.match(FR_WORDS) ?? []).length;
+  return en >= 3 && pt <= 1 && fr <= 1;
+}
+
 export function detectLocale(text: string): TaskLocale | undefined {
   const n = normalizeUtterance(text);
   if (/\b(?:answer in english|in english|em ingles|en anglais)\b/.test(n)) return "en";
@@ -439,7 +451,9 @@ function newObjectiveCue(text: string): boolean {
  */
 export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyContext): Classification {
   const n = bare(text);
-  const locale = detectLocale(text);
+  const explicitLocale = detectLocale(text);
+  // A plainly English message on the Portuguese page switches replies to English; it does not end the turn early.
+  const locale = explicitLocale ?? (looksEnglish(normalizeUtterance(text)) ? "en" : undefined);
   const reference = resolveReference(text, task.lastPlaces);
   const research = isResearchQuestion(text);
   const patch = extractConstraints(text, ctx.today);
@@ -506,7 +520,7 @@ export function classify(text: string, task: Task = emptyTask(), ctx: ClassifyCo
     }
     return { ...base, intent: "new_objective", objective: clipObjective(text) };
   }
-  if (locale && !planShaping && !dietOnly && !research && !isQuestion(n)) {
+  if (explicitLocale && !planShaping && !dietOnly && !research && !isQuestion(n)) {
     return { ...base, intent: "continuation", planShaping: false };
   }
   const datesMoved = Boolean(
