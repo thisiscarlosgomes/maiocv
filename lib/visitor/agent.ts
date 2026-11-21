@@ -332,6 +332,15 @@ export function labelOutsideSources(reply: string, hits: FallbackHit[], listed: 
   return { reply: out, cards, sources };
 }
 
+/** Same place: equal names, or one name contains the other's whole (2+ word) name ("Onda Azul Maio Kite School"). */
+export function sameListing(a: string, b: string): boolean {
+  const x = fold(a), y = fold(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.split(" ").length >= 2 && ` ${long} `.includes(` ${short} `);
+}
+
 /** Maio records that already cover a need (the Maio API wins: no outside search then). */
 export function listedForNeed(need: OutsideNeed, records: BusinessRecord[], places: Place[]): string[] {
   if (need.id === "car") return carRentalRecords(records).map((record) => record.name);
@@ -369,7 +378,8 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   /** Reviewed secondary names (enrichment) the guard also accepts. */
   const extraKnownNames: string[] = [];
   /** A name the Maio data already has: never shown as an outside (Google/web) result. */
-  const isListedName = (name: string) => Boolean(findPlace(places, name)) || places.some((place) => fold(place.name) === fold(name) || fold(place.namePt ?? "") === fold(name)) || isDirectoryName(name);
+  // Strict on purpose: the fuzzy findPlace maps "Maio Car, Lda" to Onda Azul Maio, which would hide a real outside result.
+  const isListedName = (name: string) => places.some((place) => sameListing(name, place.name) || sameListing(name, place.namePt ?? "")) || isDirectoryName(name);
   let isDirectoryName = (_name: string) => false;
   /** Web facts (secondary) shown to the model this turn, cited in the reply when used. */
   const webShown = new Map<string, WebFacts>();
@@ -480,7 +490,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     }) } : baseTools;
 
   const directory = await loadBusinesses(deps.placesFetch ?? deps.fetchImpl).catch(() => null);
-  isDirectoryName = (name: string) => (directory?.records ?? []).some((record) => fold(record.name) === fold(name));
+  isDirectoryName = (name: string) => (directory?.records ?? []).some((record) => sameListing(name, record.name));
   // Hours, phone or website asked for a named listed place: give its reviewed web facts up front (no tool call needed).
   const asked = fold(turns.filter((turn) => turn.role === "user").at(-1)?.content ?? "");
   const askedWeb = /\b(?:hours?|open|opens|opening|close|closes|phone|number|call|website|site|horario|abre|fecha|telefone|numero|heures|ouvert|ouvre|ferme|telephone)\b/.test(asked)

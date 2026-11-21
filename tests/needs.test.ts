@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { cleanOutsideHits, outsideNeed } from "../lib/visitor/needs.ts";
-import { listedForNeed, outsideReply } from "../lib/visitor/agent.ts";
+import { listedForNeed, outsideReply, sameListing } from "../lib/visitor/agent.ts";
 import type { FallbackHit } from "../lib/visitor/fallback.ts";
 
 const hit = (name: string, extra: Partial<FallbackHit> = {}): FallbackHit => ({ name, source: "google", sourceLabel: "Google Maps", url: "https://maps.google.com/?cid=1", address: null, lat: 15.138, lon: -23.209, area: "Vila do Maio", km: 0.2, walkMin: 3, driveMin: 2, snippet: null, ...extra });
@@ -45,4 +45,12 @@ test("the code-built reply names the hits with their source", () => {
   const reply = outsideReply(car, [hit("Auto Evaristo"), hit("Maio Car, Lda")], "en");
   assert.match(reply, /Auto Evaristo \(Google Maps, Vila do Maio\) and Maio Car, Lda \(Google Maps/);
   assert.match(outsideReply(car, [hit("Auto Evaristo")], "pt"), /^Não há aluguer de carro nas listas do Maio/);
+});
+
+test("dedupe is strict: a real outside place is not hidden by a loose name match", () => {
+  assert.equal(sameListing("Maio Car, Lda", "Onda Azul Maio"), false);
+  assert.equal(sameListing("Casa Djarmai", "Casa do Mar"), false);
+  assert.equal(sameListing("Onda Azul Maio", "Onda Azul Maio"), true);
+  assert.equal(sameListing("Onda Azul Maio Kite School", "Onda Azul Maio"), true);
+  assert.equal(sameListing("A Caminhada", "a caminhada"), true);
 });
