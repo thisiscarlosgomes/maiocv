@@ -100,3 +100,23 @@ export function dropUnknownNames(reply: string, known: string, locale: "en" | "p
   const lostOpening = unknownNames(sentences[0], known).length > 0;
   return { reply: `${lostOpening ? `${HONEST[locale]} ` : ""}${kept.join(" ")}`.trim(), dropped };
 }
+
+/** Proper-name candidates in a reply (venue-word runs and multi-word capitalised names), for the eval's offline judge. */
+export function candidateNames(reply: string): string[] {
+  const out: string[] = [];
+  for (const sentence of reply.split(/(?<=[.!?])\s+/)) {
+    for (const run of runs(sentence)) {
+      let words = run.text.split(" ");
+      if (run.first && words.length > 1 && !VENUE.test(fold(words[0]))) words = words.slice(1);
+      const text = words.join(" ");
+      const folded = fold(text);
+      if (!folded || ALWAYS_OK.has(folded)) continue;
+      // "Bar" alone (from "Bar restaurante Vanuza") is a word, not a name.
+      if (folded.split(" ").every((word) => VENUE.test(word) || CONNECTOR.test(word))) continue;
+      const venue = folded.split(" ").some((word) => VENUE.test(word));
+      const capitals = words.filter((word) => /^\p{Lu}/u.test(word)).length;
+      if (venue || capitals >= 2) out.push(text);
+    }
+  }
+  return [...new Set(out)];
+}

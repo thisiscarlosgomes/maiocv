@@ -172,6 +172,18 @@ export const VISITOR_CASES: VisitorCase[] = [
   // Listed things never go to an outside source.
   // No car hire is in the Maio directory: the guide answers (not a canned line), labelled if it found one outside.
   { id: "fb-car-rental", q: "Where can I rent a car?", fallback: true, mention: /rent|car|hire|aluguer|4x4/i, forbid: /business list has no car-rental listing/i },
+  // Forced outside search (Google Places, then Parallel) when the Maio data has no match. Carlos's exact car question, EN/PT/FR:
+  // the reply names the Google Maps hits with their source; a quad rental may be an extra, never the answer.
+  { id: "fb-car-we", q: "where can we rent a car", fallback: true, mention: /auto evaristo|maio car/i, forbid: /^(?![\s\S]*google maps)/i },
+  { id: "fb-car-pt", q: "Onde podemos alugar um carro?", locale: "pt", fallback: true, mention: /auto evaristo|maio car/i, forbid: /^(?![\s\S]*google maps)/i },
+  { id: "fb-car-fr", q: "Où peut-on louer une voiture ?", locale: "fr", fallback: true, mention: /auto evaristo|maio car/i, forbid: /^(?![\s\S]*google maps)/i },
+  { id: "fb-dentist-google", q: "Is there a dentist on Maio?", fallback: true, mention: /smile up|google maps|source:/i },
+  { id: "fb-pt-dentista-google", q: "Há algum dentista no Maio?", locale: "pt", fallback: true, mention: /smile up|google maps|fonte|source/i },
+  { id: "fb-gym-search", q: "Is there a gym on the island?", fallback: true },
+  { id: "fb-pharmacy", q: "Where can I find a pharmacy?", fallback: true, mention: /255 ?11 ?30|google maps|source:/i },
+  // Already-listed places are never presented as Google Maps finds; generic place names are not results.
+  { id: "fb-yoga-dedupe", q: "Where can I do a yoga class?", fallback: true, forbid: /(?:onda azul maio|wave maze|a caminhada)\s*\(google maps/i },
+  { id: "fb-laundry-clean", q: "Where can I get laundry done?", fallback: true, forbid: /maio cabo verde|a caminhada\s*\(google maps/i },
   // The Maio API lists a barber (category hairdresser): it must be found, not sent to Google.
   { id: "fb-listed-hairdresser", q: "Is there a hairdresser on Maio?", mention: /barbearia dad/i, forbid: /google maps/i },
   // Step 4: the directory has no location for Barbearia DAD; the reviewed web enrichment does, with its source.

@@ -9,6 +9,7 @@
 import { generateText, type LanguageModel } from "ai";
 import { writeFileSync } from "node:fs";
 import { languageModel } from "../lib/ai-model.ts";
+import { candidateNames } from "../lib/visitor/names.ts";
 import { fold, haversineKm, ZONES } from "../lib/visitor/geo.ts";
 import { sendsToOffice } from "../lib/visitor/scrub.ts";
 import { findPlace, loadPlaces, type Place } from "../lib/visitor/places.ts";
@@ -87,6 +88,7 @@ const LEAKS: [string, RegExp][] = [
 ];
 
 let judge: LanguageModel | null = null;
+let judgeDown = false;
 async function grade(c: VisitorCase, reply: string): Promise<{ answered: boolean; reason: string; places: string[] }> {
   judge ??= languageModel(process.env.EVAL_JUDGE_MODEL ?? "openai/gpt-5-mini");
   const prompt = `A visitor asked a travel guide for the island of Maio (Cabo Verde): "${c.q}"${c.history ? ` (earlier they said: ${c.history.join(" / ")})` : ""}.
@@ -94,15 +96,36 @@ The guide replied: """${reply}"""
 Return JSON only: {"answered": true|false, "reason": "<short>", "places": ["..."]}
 - answered: true if the reply directly answers or substantively addresses what was asked (a recommendation, the fact, or an honest "not listed" plus the closest useful info). false if it dodges, only asks questions back, starts planning a trip instead, or answers a different question.
 - places: every PROPER NAME of a specific venue, restaurant, bar, hotel/stay, shop, business, tour operator, beach, monument, natural site or village named in the reply, exactly as written. Exclude islands, countries, cities outside Maio, airlines, ferry companies, organisations and generic descriptions (e.g. "main square", "the road", "small bars"). Drop parenthetical notes.`;
+  let judgeError = "unknown";
+  if (judgeDown) return offlineGrade(reply, judgeError);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const result = await generateText({ model: judge, prompt, maxRetries: 1, abortSignal: AbortSignal.timeout(40_000) });
       const json = JSON.parse(result.text.slice(result.text.indexOf("{"), result.text.lastIndexOf("}") + 1));
       return { answered: Boolean(json.answered), reason: String(json.reason ?? ""), places: Array.isArray(json.places) ? json.places.map(String) : [] };
-    } catch { /* retry once */ }
+    } catch (error) {
+      const status = (error as { statusCode?: number }).statusCode;
+      judgeError = `${status ?? ""} ${String((error as Error).message ?? error)}`.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 160);
+      // A region block or bad credentials will not pass on retry: stop calling the judge for this run.
+      if (status === 401 || status === 403) { judgeDown = true; break; }
+    }
   }
-  return { answered: false, reason: "judge failed", places: [] };
+  return offlineGrade(reply, judgeError);
 }
+
+/**
+ * The model judge can be unreachable (the box's OpenAI calls answer 403 "Country, region, or territory not supported").
+ * Then the reply is still scored, by rules: an answer is a non-empty reply that is not only questions back, and the
+ * names it uses are the capitalised venue names in it, checked against the Maio data like the model's list.
+ */
+function offlineGrade(reply: string, error: string): { answered: boolean; reason: string; places: string[]; judge: "offline" } {
+  const sentences = reply.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const onlyQuestions = sentences.length > 0 && sentences.every((sentence) => sentence.trim().endsWith("?"));
+  const answered = reply.trim().length >= 20 && !onlyQuestions;
+  if (!judgeWarned) { judgeWarned = true; console.error(`judge unavailable, scoring offline: ${error}`); }
+  return { answered, reason: answered ? "offline: substantive reply" : "offline: empty or only questions", places: candidateNames(reply), judge: "offline" };
+}
+let judgeWarned = false;
 
 function firstSentence(text: string): string {
   const match = text.trim().match(/^[\s\S]*?[.!?](?:\s|$)/);
