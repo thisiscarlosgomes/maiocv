@@ -612,6 +612,10 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
   // An interest or a car answer inside a question ("can I surf?", "no car, where to eat?") is not a plan request.
   const asking = lastUser.includes("?") || /^(?:what|whats|where|which|how|is|are|can|could|should|do|does|any|o que|onde|qual|quais|como|ha|tem|pode|que|ou|quel|quelle|comment|est ce)\b/.test(spoken);
   const planRequest = classification.planShaping && (!asking || Boolean(p.dates?.start || p.dates?.days || p.arrival || p.departure || p.pace));
+  // No pharmacy in the Maio list and an outside search is configured: the guide searches Google/web for it.
+  const pharmacyAsked = /\b(?:pharmacy|pharmacies|farmacia|farmacias|pharmacie|pharmacies|chemist)\b/.test(spoken);
+  const pharmacyOutside = pharmacyAsked && isBusinessLookup(lastUser) && (() => { const config = fallbackConfig(); return config.google || config.parallel; })()
+    && !pharmacyRecords((await listedBusinesses()).records).length;
   if (isVisitorQuestion(lastUser, {
     planShaping: planRequest,
     intent: classification.intent,
@@ -620,7 +624,7 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     carPending: (isCarPending(task.pendingQuestion) || isCarPending(seeded.pendingQuestion)) && !(asking && classification.carStance === null),
     hasPlan: Boolean(current),
     planEdit: Boolean(current && looksLikePlanEdit(lastUser)),
-    businessLookup: isBusinessLookup(lastUser),
+    businessLookup: isBusinessLookup(lastUser) && !pharmacyOutside,
     // These already have answers built from published data; the guide does not replace them.
     scripted: Boolean(classification.reference.kind)
       || Boolean(classification.patch.diet || classification.patch.budget)
@@ -853,10 +857,6 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }], next);
   }
 
-  // No pharmacy in the Maio list and an outside search is configured: the guide searches Google/web for it.
-  const pharmacyAsked = /\b(?:pharmacy|pharmacies|farmacia|farmacias|pharmacie|pharmacies|chemist)\b/.test(spoken);
-  const pharmacyOutside = pharmacyAsked && isBusinessLookup(lastUser) && (() => { const config = fallbackConfig(); return config.google || config.parallel; })()
-    && !pharmacyRecords((await listedBusinesses()).records).length;
   if (isBusinessLookup(lastUser) && !classification.planShaping && !pharmacyOutside) {
     const catalog = await listedBusinesses();
     const pharmacy = pharmacyAsked;
