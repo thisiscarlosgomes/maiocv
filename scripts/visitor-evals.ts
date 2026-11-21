@@ -138,7 +138,7 @@ function locate(places: Place[], raw: string): { place: Place | null; geography:
   // "praia Cadjetinha em Vila do Maio" is the place plus its village.
   const name = raw.replace(/[\u2010-\u2015]/g, "-").replace(/\([^)]*\)/g, " ").replace(/\s+(?:em|in|à|a|no|na|near)\s+(?:vila do maio|vila|calheta|morro|morrinho|cascabulho|pedro vaz|santo antonio|ribeira dom joão|figueira|barreiro)\b.*$/i, "").replace(/\s+/g, " ").trim();
   // Emergency services and island coasts are not venues.
-  if (/^(?:pol[ií]cia|police|bombeiros|firefighters|pompiers|protec[cç][aã]o civil)$|^(?:c[oô]te|costa|coast)\s+(?:nord|norte|north|sud|sul|south|est|leste|east|ouest|oeste|west)/i.test(name)) return { place: null, geography: true };
+  if (/\batms?\b|^(?:pol[ií]cia|police|bombeiros|firefighters|pompiers|protec[cç][aã]o civil)$|^(?:c[oô]te|costa|coast)\s+(?:nord|norte|north|sud|sul|south|est|leste|east|ouest|oeste|west)/i.test(name)) return { place: null, geography: true };
   if (/centro de sa[uú]de|centro interpretativo|business directory|directory|(?:vila|town|local|municipal|calheta|morro) market|^market$|fmb|biodiversi|unesco|nelson mandela|amilcar cabral|praia airport|international airport|sotavento|seafront|waterfront|health cent|hospital|interpretive cent|interilhas|cvsky|kriola|harbou?r|\bport\b|porto ingl|\bpier\b|turtle|bird|wildlife|saltworks|salt ?pans?|^ferry$|airport taxi|^pizzeria in /i.test(name)) return { place: null, geography: true };
   const place = findPlace(places, name);
   if (place) return { place, geography: false };
