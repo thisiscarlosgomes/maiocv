@@ -20,6 +20,8 @@ export type FallbackHit = {
   walkMin: number | null;
   driveMin: number | null;
   snippet: string | null;
+  /** Google place types (e.g. "dentist", "gym"), used to drop off-category hits. */
+  types?: string[];
 };
 export type FallbackResult = { source: FallbackSource | "none"; hits: FallbackHit[]; tried: string[]; note: string };
 export type FallbackEnv = { GOOGLE_PLACES_API_KEY?: string; PARALLEL_API_KEY?: string };
@@ -64,7 +66,7 @@ export async function googlePlaces(query: string, options: FallbackOptions): Pro
       headers: {
         "content-type": "application/json",
         "x-goog-api-key": key,
-        "x-goog-fieldmask": "places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.businessStatus",
+        "x-goog-fieldmask": "places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.businessStatus,places.types,places.primaryType",
       },
       body: JSON.stringify({
         textQuery: `${query}, Maio, Cabo Verde`,
@@ -74,14 +76,14 @@ export async function googlePlaces(query: string, options: FallbackOptions): Pro
       signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) return null;
-    const body = await response.json() as { places?: { id?: string; displayName?: { text?: string }; formattedAddress?: string; location?: { latitude?: number; longitude?: number }; googleMapsUri?: string; businessStatus?: string }[] };
+    const body = await response.json() as { places?: { id?: string; displayName?: { text?: string }; formattedAddress?: string; location?: { latitude?: number; longitude?: number }; googleMapsUri?: string; businessStatus?: string; types?: string[]; primaryType?: string }[] };
     const hits: FallbackHit[] = [];
     for (const row of body.places ?? []) {
       const name = row.displayName?.text?.trim();
       const lat = row.location?.latitude, lon = row.location?.longitude;
       if (!name || typeof lat !== "number" || typeof lon !== "number" || !onMaio({ lat, lon })) continue;
       if (row.businessStatus && row.businessStatus !== "OPERATIONAL") continue;
-      hits.push({ name: name.slice(0, 120), source: "google", sourceLabel: "Google Maps", url: row.googleMapsUri ?? null, address: row.formattedAddress?.slice(0, 160) ?? null, lat, lon, snippet: null, ...distances({ lat, lon }, options.near) });
+      hits.push({ name: name.slice(0, 120), source: "google", sourceLabel: "Google Maps", url: row.googleMapsUri ?? null, address: row.formattedAddress?.slice(0, 160) ?? null, lat, lon, snippet: null, types: [...new Set([row.primaryType, ...(row.types ?? [])].filter((type): type is string => Boolean(type)))], ...distances({ lat, lon }, options.near) });
     }
     return hits.slice(0, 4);
   } catch {

@@ -1,7 +1,7 @@
 import { generateText, stepCountIs, tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import { maioClock } from "../agora.ts";
-import { carRentalRecords, loadBusinesses, searchBusinessesByNeed } from "../maio-catalog.ts";
+import { carRentalRecords, loadBusinesses, pharmacyRecords, searchBusinessesByNeed, type BusinessRecord } from "../maio-catalog.ts";
 import { readWeather } from "../maio-chat-tools.ts";
 import { loadTimetable } from "../timetable.ts";
 import { scrubReply } from "./scrub.ts";
@@ -9,6 +9,7 @@ import { MAIO_BACKGROUND } from "./background.ts";
 import { fold, zoneFromText, ZONES } from "./geo.ts";
 import { dropUnknownNames, knownText } from "./names.ts";
 import { citeWebFacts, webFacts, type WebFacts } from "./enrichment.ts";
+import { cleanOutsideHits, outsideNeed, type OutsideNeed } from "./needs.ts";
 import { fallbackConfig, searchBeyondListings, type FallbackEnv, type FallbackHit } from "./fallback.ts";
 import { findPlace, loadPlaces, nearby, resolveAnchor, PLACE_KINDS, type Anchor, type NearbyRow, type Place, type PlaceKind } from "./places.ts";
 
@@ -331,6 +332,30 @@ export function labelOutsideSources(reply: string, hits: FallbackHit[], listed: 
   return { reply: out, cards, sources };
 }
 
+/** Maio records that already cover a need (the Maio API wins: no outside search then). */
+export function listedForNeed(need: OutsideNeed, records: BusinessRecord[], places: Place[]): string[] {
+  if (need.id === "car") return carRentalRecords(records).map((record) => record.name);
+  if (need.id === "pharmacy") return pharmacyRecords(records).map((record) => record.name);
+  return [
+    ...records.filter((record) => need.listed.test(fold(`${record.name} ${record.category.replace(/_/g, " ")}`))).map((record) => record.name),
+    ...places.filter((place) => need.listed.test(fold(place.name))).map((place) => place.name),
+  ];
+}
+
+function hospitalLine(locale: string): string {
+  return locale === "pt" ? "Para urgências, Hospital do Maio (Vila do Maio): +238 255 11 30." : locale === "fr" ? "En cas d'urgence, Hôpital do Maio (Vila do Maio) : +238 255 11 30." : "For urgent care, Hospital do Maio (Vila do Maio) is +238 255 11 30.";
+}
+
+/** Deterministic reply from outside results, when the model's draft did not use them. */
+export function outsideReply(need: OutsideNeed, hits: FallbackHit[], locale: string): string {
+  const top = hits.slice(0, 2).map((hit) => `${hit.name} (${hit.sourceLabel}${hit.area ? `, ${hit.area}` : ""})`);
+  const names = top.join(locale === "pt" ? " e " : locale === "fr" ? " et " : " and ");
+  const label = locale === "pt" ? need.label.pt : locale === "fr" ? need.label.fr : need.label.en;
+  if (locale === "pt") return `Não há ${label} nas listas do Maio. Fora das listas encontrei ${names}. Horário e preços não são conhecidos; confirme antes de ir.`;
+  if (locale === "fr") return `Pas de ${label} dans les listes de Maio. Hors des listes, j'ai trouvé ${names}. Horaires et prix inconnus ; vérifiez avant d'y aller.`;
+  return `Maio's listings have no ${label}. Outside the listings I found ${names}. Hours and prices are not known, so check before you go.`;
+}
+
 export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorContext, deps: VisitorDeps): Promise<VisitorResult> {
   const now = deps.now ?? new Date();
   const today = maioClock(now).date;
@@ -343,6 +368,9 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   const outside: FallbackHit[] = [];
   /** Reviewed secondary names (enrichment) the guard also accepts. */
   const extraKnownNames: string[] = [];
+  /** A name the Maio data already has: never shown as an outside (Google/web) result. */
+  const isListedName = (name: string) => Boolean(findPlace(places, name)) || places.some((place) => fold(place.name) === fold(name) || fold(place.namePt ?? "") === fold(name)) || isDirectoryName(name);
+  let isDirectoryName = (_name: string) => false;
   /** Web facts (secondary) shown to the model this turn, cited in the reply when used. */
   const webShown = new Map<string, WebFacts>();
   /** Names whose web facts a tool call returned this turn (the reply is about them even if it doesn't repeat the name). */
@@ -441,8 +469,9 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
           }
           return note("search_beyond_listings", { query }, true, { listed: true, places: listed ? [{ name: listed.name, area: listed.zone }] : [], businesses: businesses.map((row) => ({ name: row.name, phone: row.phone || null, location: row.location || null })), note: "These are in the Maio listings; use them and do not search further." });
         }
-        const result = await searchBeyondListings(query, { fetchImpl: deps.fetchImpl, near: anchor, deadline: started + budget, env: deps.env });
-        outside.push(...result.hits);
+        const raw = await searchBeyondListings(query, { fetchImpl: deps.fetchImpl, near: anchor, deadline: started + budget, env: deps.env });
+        const result = { ...raw, hits: cleanOutsideHits(raw.hits, outsideNeed(query), isListedName) };
+        outside.push(...result.hits.filter((hit) => !outside.some((known) => fold(known.name) === fold(hit.name))));
         return note("search_beyond_listings", { query }, result.hits.length > 0, {
           listed: false, source: result.source, note: result.note,
           results: result.hits.map((hit) => ({ name: hit.name, source: hit.sourceLabel, address: hit.address, area: hit.area, walkMin: hit.walkMin, driveMin: hit.driveMin, snippet: hit.snippet })),
@@ -451,6 +480,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     }) } : baseTools;
 
   const directory = await loadBusinesses(deps.placesFetch ?? deps.fetchImpl).catch(() => null);
+  isDirectoryName = (name: string) => (directory?.records ?? []).some((record) => fold(record.name) === fold(name));
   // Hours, phone or website asked for a named listed place: give its reviewed web facts up front (no tool call needed).
   const asked = fold(turns.filter((turn) => turn.role === "user").at(-1)?.content ?? "");
   const askedWeb = /\b(?:hours?|open|opens|opening|close|closes|phone|number|call|website|site|horario|abre|fecha|telefone|numero|heures|ouvert|ouvre|ferme|telephone)\b/.test(asked)
@@ -462,9 +492,25 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     return [`${place.name}: ${Object.entries(facts).filter(([field]) => field !== "description").map(([field, fact]) => `${field} ${fact!.value} (per ${fact!.source})`).join("; ")}`];
   });
   const webBlock = askedLines.length ? `\n\n# Web facts for the place asked about (NOT Maio listing data; give each with its source, may be out of date)\n${askedLines.join("\n")}` : "";
-  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n${directoryBlock(directory?.source === "api" ? directory.records : [], places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}${webBlock}`;
   const started = Date.now();
   const budget = deps.timeoutMs ?? 14_000;
+  // A service Maio rarely lists (gym, dentist, pharmacy…) with no Maio match: search outside in code, every time.
+  const need = outsideOn ? outsideNeed(turns.filter((turn) => turn.role === "user").at(-1)?.content ?? "") : null;
+  const maioMatch = need ? listedForNeed(need, directory?.source === "api" ? directory.records : [], places) : [];
+  let outsideBlock = "";
+  let searchedFor: OutsideNeed | null = null;
+  if (need && !maioMatch.length) {
+    searchedFor = need;
+    const raw = await searchBeyondListings(need.query, { fetchImpl: deps.fetchImpl, near: anchor, deadline: started + Math.min(8_000, budget - 3_500), env: deps.env });
+    const hits = cleanOutsideHits(raw.hits, need, isListedName);
+    outside.push(...hits);
+    events.push({ name: "search_beyond_listings", ok: hits.length > 0, arguments: { query: need.query, auto: true } });
+    facts.push(JSON.stringify({ need: need.id, source: raw.source, hits: hits.map((hit) => hit.name) }).slice(0, 3000));
+    outsideBlock = hits.length
+      ? `\n\n# Already searched outside the Maio listings for "${need.query}" (do not call search_beyond_listings again)\nThe Maio listings have none. These are NOT Maio listings; name one or two with their source right after the name, and say hours and prices are not known:\n${hits.map((hit) => `- ${hit.name} (${hit.sourceLabel})${hit.area ? `, ${hit.area}` : ""}${hit.walkMin !== null && hit.walkMin <= 25 ? `, ${hit.walkMin} min walk` : hit.driveMin !== null ? `, ${hit.driveMin} min drive` : ""}${hit.snippet ? `: ${hit.snippet.slice(0, 200)}` : ""}`).join("\n")}${need.extra ? `\n${need.extra}` : ""}`
+      : `\n\n# Already searched outside the Maio listings for "${need.query}"\nNothing on Google Maps or the web either. Say plainly the Maio listings don't have it and suggest asking the stay or locals. Do not name any place for it.${need.extra ? `\n${need.extra}` : ""}`;
+  }
+  const system = `${VISITOR_RULES}${outsideOn ? `\n${FALLBACK_RULE}` : ""}\n\n${MAIO_BACKGROUND}\n\n# Listed places\n${catalogBlock(places)}\n${directoryBlock(directory?.source === "api" ? directory.records : [], places)}\n\n# This conversation\n${contextBlock(today, context, anchor)}${webBlock}${outsideBlock}`;
   const ask = (extra: string, timeoutMs: number) => generateText({
     model: deps.model,
     system: system + extra,
@@ -474,7 +520,7 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
     maxRetries: 0,
     abortSignal: AbortSignal.timeout(timeoutMs),
   });
-  const generated = await ask("", budget);
+  const generated = await ask("", Math.max(2_500, budget - (Date.now() - started)));
   let reply = clampReply(scrubReply(generated.text));
   // A reply that is only a question back is a dodge. One re-ask if there is time; otherwise keep it.
   const remaining = budget - (Date.now() - started);
@@ -508,6 +554,14 @@ export async function runVisitorAgent(turns: VisitorTurn[], context: VisitorCont
   const guarded = dropUnknownNames(local.reply, known, context.locale);
   if (guarded.dropped.length) events.push({ name: "name_guard", ok: false, arguments: { dropped: guarded.dropped } });
   local = { ...local, reply: guarded.reply };
+  // The search ran in code and found something, but the draft ignored it: say it plainly, with the source.
+  if (searchedFor && outside.length && !outside.some((hit) => fold(local.reply).includes(fold(hit.name)))) {
+    local = { ...local, reply: outsideReply(searchedFor, outside, context.locale) };
+  }
+  if (searchedFor?.extra && !/255\s?11\s?30/.test(local.reply)) {
+    const sentences = local.reply.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (sentences.length < 3) local = { ...local, reply: `${local.reply.replace(/\s+$/, "")} ${hospitalLine(context.locale)}` };
+  }
   const labelled = labelOutsideSources(local.reply, outside, places);
   // Directory web villages are in the prompt without a tool call: cite those too when used.
   for (const record of directory?.source === "api" ? directory.records : []) {

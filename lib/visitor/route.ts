@@ -31,7 +31,8 @@ export function isVisitorQuestion(text: string, signals: VisitorSignals): boolea
   if (signals.research && /\b(how many|quantos|quantas|combien|number of|numero de|statistic\w*|estatistic\w*|count|figures?|20\d\d)\b/.test(n)) return false;
   if (EMERGENCY.test(n)) return false;
   // Phones, contacts and named-business lookups keep the directory answer, which quotes published numbers only.
-  if (signals.businessLookup || /\b(phone|telefone|telephone|numero|number|contact|contacto|contato|whatsapp|email|pharmacy|farmacia|pharmacie)\b/.test(n)) return false;
+  // A pharmacy ask is a business lookup unless the caller cleared it for the guide's outside search.
+  if (signals.businessLookup || /\b(phone|telefone|telephone|numero|number|contact|contacto|contato|whatsapp|email)\b/.test(n)) return false;
   if (PLAN_WORDS.test(n)) return false;
   if (/\b(sunset time|por do sol (?:e |as )?que horas|heure du coucher)\b/.test(n)) return false;
   // With a plan on screen, only clear questions go to the guide; short replies are plan follow-ups.
