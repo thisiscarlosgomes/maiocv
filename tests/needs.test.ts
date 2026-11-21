@@ -28,7 +28,7 @@ test("already-listed places, generic names and off-category hits are dropped", (
   const kept = cleanOutsideHits([hit("Onda Azul Maio", { types: ["gym"] }), hit("Wave Maze"), hit("Casa Djarmai Yoga", { types: ["yoga_studio"] })], yoga, listed);
   assert.deepEqual(kept.map((item) => item.name), ["Casa Djarmai Yoga"]);
   const laundry = outsideNeed("laundry")!;
-  assert.deepEqual(cleanOutsideHits([hit("Maio Cabo Verde"), hit("A Caminhada"), hit("Lavandaria Sol", { types: ["laundry"] }), hit("Bar Tropical", { types: ["bar"] })], laundry, listed).map((item) => item.name), ["Lavandaria Sol"]);
+  assert.deepEqual(cleanOutsideHits([hit("Maio Cabo Verde"), hit("A Caminhada"), hit("Lavandaria Sol", { types: ["laundry"] }), hit("Bar Tropical", { types: ["bar"] }), hit("LAVAGEM ND AUTO", { types: ["car_wash"] })], laundry, listed).map((item) => item.name), ["Lavandaria Sol"]);
   const car = outsideNeed("rent a car")!;
   assert.deepEqual(cleanOutsideHits([hit("Auto Evaristo", { types: ["car_rental"] }), hit("Maio Car, Lda"), hit("Big Game Rental Quad")], car, (name) => name === "Big Game Rental Quad").map((item) => item.name), ["Auto Evaristo", "Maio Car, Lda"]);
 });
