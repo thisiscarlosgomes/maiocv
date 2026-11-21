@@ -180,10 +180,10 @@ export const VISITOR_CASES: VisitorCase[] = [
   { id: "fb-dentist-google", q: "Is there a dentist on Maio?", fallback: true, mention: /smile up|google maps|source:/i },
   { id: "fb-pt-dentista-google", q: "Há algum dentista no Maio?", locale: "pt", fallback: true, mention: /smile up|google maps|fonte|source/i },
   { id: "fb-gym-search", q: "Is there a gym on the island?", fallback: true },
-  { id: "fb-pharmacy", q: "Where can I find a pharmacy?", fallback: true, mention: /255 ?11 ?30|google maps|source:/i },
+  { id: "fb-pharmacy", q: "Where can I find a pharmacy?", fallback: true, mention: /255 ?11 ?30|google maps|source:/i, forbid: /visit maio listings, so i won't invent/i },
   // Already-listed places are never presented as Google Maps finds; generic place names are not results.
   { id: "fb-yoga-dedupe", q: "Where can I do a yoga class?", fallback: true, forbid: /(?:onda azul maio|wave maze|a caminhada)\s*\(google maps/i },
-  { id: "fb-laundry-clean", q: "Where can I get laundry done?", fallback: true, forbid: /maio cabo verde|a caminhada\s*\(google maps/i },
+  { id: "fb-laundry-clean", q: "Where can I get laundry done?", fallback: true, forbid: /maio cabo verde|lavagem|a caminhada\s*\(google maps/i },
   // The Maio API lists a barber (category hairdresser): it must be found, not sent to Google.
   { id: "fb-listed-hairdresser", q: "Is there a hairdresser on Maio?", mention: /barbearia dad/i, forbid: /google maps/i },
   // Step 4: the directory has no location for Barbearia DAD; the reviewed web enrichment does, with its source.
