@@ -315,9 +315,12 @@ export function labelOutsideSources(reply: string, hits: FallbackHit[], listed: 
   for (const [index, hit] of hits.entries()) {
     // A page titled "Maio" or "Cape Verde" is not named by a reply that mentions the island.
     // A page or pin for a place Maio already lists ("Onda Azul Maio") is the listing, not an outside source.
-    const isListed = listed.some((place) => fold(place.name) === fold(hit.name)) || Boolean(findPlace(listed, hit.name));
+    // Strict: the fuzzy findPlace matched "Maio Car, Lda" and "Rent Car Maio" to Onda Azul Maio and dropped their source.
+    const isListed = listed.some((place) => sameListing(hit.name, place.name) || sameListing(hit.name, place.namePt ?? ""));
     const generic = isListed || isGeographyName(hit.name) || (hit.source === "web" && fold(hit.name).split(" ").length < 2);
-    const named = !generic && fold(hit.name).length >= 3 && text.includes(fold(hit.name));
+    // "Auto Evaristo" in the reply is the hit "Auto Evaristo car rental": its first two words count.
+    const short = fold(hit.name).split(" ").length >= 3 ? fold(hit.name).split(" ").slice(0, 2).join(" ") : "";
+    const named = !generic && fold(hit.name).length >= 3 && (text.includes(fold(hit.name)) || (short.length >= 6 && !isGeographyName(short) && ` ${text} `.includes(` ${short} `)));
     const cited = hit.source === "web" && text.includes(fold(hit.sourceLabel));
     if (!named && !cited) continue;
     if (hit.source === "google") {
