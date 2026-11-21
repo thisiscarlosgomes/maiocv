@@ -13,6 +13,8 @@ import { alreadyPartyReply, gatewayReady, intentFromModel, localEditIntent, pars
 import { planTurn, stepText, type PlanStep, type TurnWork } from "./plan-status.ts";
 import { runVisitorAgent, type PlaceCard, type ReplySource, type VisitorContext } from "./visitor/agent.ts";
 import { webFacts } from "./visitor/enrichment.ts";
+import { fallbackConfig } from "./visitor/fallback.ts";
+import { outsideNeed } from "./visitor/needs.ts";
 import { villageBackup } from "./visitor/backup.ts";
 import { isVisitorQuestion } from "./visitor/route.ts";
 import { zoneFromText } from "./visitor/geo.ts";
@@ -655,7 +657,9 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     };
     try {
       const v0 = Date.now();
-      const visitor = await failFast(runVisitorAgent(history.slice(-10), visitorContext, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS }), VISITOR_TURN_MS + 300);
+      // A gym/dentist/pharmacy question searches Google/web in code first: give that turn time for the search too.
+      const outsideExtra = outsideNeed(lastUser) && (() => { const config = fallbackConfig(); return config.google || config.parallel; })() ? 5_500 : 0;
+      const visitor = await failFast(runVisitorAgent(history.slice(-10), visitorContext, { model: deps.sideModel && process.env.VISITOR_MODEL === "side" ? deps.sideModel : deps.model, fetchImpl: guideFetch, placesFetch: rootFetch, now, timeoutMs: VISITOR_TURN_MS + outsideExtra }), VISITOR_TURN_MS + outsideExtra + 300);
       modelMs += Date.now() - v0;
       if (visitor.reply) {
         toolFacts.push(...visitor.facts);
@@ -849,9 +853,13 @@ export async function runPlanAgent(messages: ModelMessage[], current: TripPlan |
     return finish(reply, current, [{ name: "maio-businesses", ok: catalog.source === "api" }], next);
   }
 
-  if (isBusinessLookup(lastUser) && !classification.planShaping) {
+  // No pharmacy in the Maio list and an outside search is configured: the guide searches Google/web for it.
+  const pharmacyAsked = /\b(?:pharmacy|pharmacies|farmacia|farmacias|pharmacie|pharmacies|chemist)\b/.test(spoken);
+  const pharmacyOutside = pharmacyAsked && isBusinessLookup(lastUser) && (() => { const config = fallbackConfig(); return config.google || config.parallel; })()
+    && !pharmacyRecords((await listedBusinesses()).records).length;
+  if (isBusinessLookup(lastUser) && !classification.planShaping && !pharmacyOutside) {
     const catalog = await listedBusinesses();
-    const pharmacy = /\b(?:pharmacy|pharmacies|farmacia|pharmacie)\b/.test(spoken);
+    const pharmacy = pharmacyAsked;
     if (pharmacy) {
       const found = pharmacyRecords(catalog.records);
       const listed = found.map((item) => item.phone ? `${item.name}, ${formatCapeVerdePhone(item.phone)}` : item.name).join("; ");
